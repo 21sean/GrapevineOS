@@ -1,0 +1,14 @@
+{
+  "name": "grapevine",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Grapevine — real-time map of the local events actually worth going to",
+  "scripts": {
+    "dev": "concurrently -n api,web -c yellow,cyan \"npm --prefix server run dev\" \"npm --prefix web run dev\"",
+    "build": "npm --prefix web run build",
+    "typecheck": "npm --prefix web run typecheck && npm --prefix server run typecheck"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

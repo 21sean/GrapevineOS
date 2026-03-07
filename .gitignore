@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+.wrangler/
+server/data/geocache.json
+server/data/users.json
+server/data/sessions.json
+.playwright-mcp/
+*.jpeg
+*.png
