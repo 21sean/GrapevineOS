@@ -1,0 +1,7 @@
+{
+  "city": "San Diego, CA",
+  "center": [-117.1611, 32.7157],
+  "tz": "America/Los_Angeles",
+  "model": "qwen3.6:35b-a3b-q4_K_M",
+  "ollamaUrl": ""
+}

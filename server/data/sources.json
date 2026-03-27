@@ -1,0 +1,66 @@
+[
+  {
+    "id": "sdtoday",
+    "name": "SDtoday (6AM City)",
+    "address": "sdtoday@sean.ventures",
+    "kind": "daily digest",
+    "note": "Written to be skimmed — parses cleanly, great hyperlocal picks",
+    "active": true
+  },
+  {
+    "id": "axios-sandiego",
+    "name": "Axios San Diego",
+    "address": "axios-sandiego@sean.ventures",
+    "kind": "daily newsletter",
+    "note": "Weekend picks section is a reliable events block",
+    "active": true
+  },
+  {
+    "id": "sdreader",
+    "name": "San Diego Reader",
+    "address": "sdreader@sean.ventures",
+    "kind": "alt-weekly",
+    "note": "Deepest raw events calendar in the county",
+    "active": true
+  },
+  {
+    "id": "voiceofsandiego",
+    "name": "Voice of San Diego",
+    "address": "voiceofsandiego@sean.ventures",
+    "kind": "local news",
+    "note": "Culture Report surfaces neighborhood one-offs",
+    "active": true
+  },
+  {
+    "id": "pacificsd",
+    "name": "PACIFIC Magazine",
+    "address": "pacificsd@sean.ventures",
+    "kind": "culture mag",
+    "note": "Nightlife, food, and music openings",
+    "active": true
+  },
+  {
+    "id": "sdparksrec",
+    "name": "SD Parks & Rec",
+    "address": "sdparksrec@sean.ventures",
+    "kind": "city newsletter",
+    "note": "Pool parties, rec events, park movie nights — never on ticket sites",
+    "active": true
+  },
+  {
+    "id": "littleitalysd",
+    "name": "Little Italy Association",
+    "address": "littleitalysd@sean.ventures",
+    "kind": "neighborhood org",
+    "note": "Mercato + piazza events straight from the source",
+    "active": true
+  },
+  {
+    "id": "sandiego-org",
+    "name": "San Diego Tourism (sandiego.org)",
+    "address": "visitsandiego@sean.ventures",
+    "kind": "official calendar",
+    "note": "Touristy but catches the big annuals early",
+    "active": true
+  }
+]
