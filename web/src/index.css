@@ -1,0 +1,241 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/fraunces";
+@import "@fontsource-variable/instrument-sans";
+@import "@fontsource-variable/spline-sans-mono";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --font-sans: 'Instrument Sans Variable', ui-sans-serif, system-ui, sans-serif;
+    --font-heading: 'Fraunces Variable', Georgia, serif;
+    --font-mono: 'Spline Sans Mono Variable', ui-monospace, monospace;
+    --color-live: var(--live);
+    --color-live-foreground: var(--live-foreground);
+    --color-wine: var(--wine);
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/*
+ * Grapevine is dark-only: warm ink with a faint violet cast (never pure
+ * black), parchment text, lantern-gold for anything live, wine for accents.
+ */
+:root,
+.dark {
+    --background: oklch(0.17 0.014 310);
+    --foreground: oklch(0.93 0.01 85);
+    --card: oklch(0.215 0.016 308);
+    --card-foreground: oklch(0.93 0.01 85);
+    --popover: oklch(0.225 0.016 308);
+    --popover-foreground: oklch(0.93 0.01 85);
+    --primary: oklch(0.9 0.012 85);
+    --primary-foreground: oklch(0.2 0.015 308);
+    --secondary: oklch(0.28 0.02 308);
+    --secondary-foreground: oklch(0.93 0.01 85);
+    --muted: oklch(0.27 0.018 308);
+    --muted-foreground: oklch(0.68 0.018 300);
+    --accent: oklch(0.29 0.022 308);
+    --accent-foreground: oklch(0.93 0.01 85);
+    --destructive: oklch(0.65 0.19 25);
+    --border: oklch(1 0 0 / 11%);
+    --input: oklch(1 0 0 / 14%);
+    --ring: oklch(0.66 0.11 350);
+    --live: oklch(0.82 0.13 85);
+    --live-foreground: oklch(0.24 0.05 85);
+    --wine: oklch(0.62 0.11 355);
+    --chart-1: oklch(0.72 0.15 305);
+    --chart-2: oklch(0.78 0.13 60);
+    --chart-3: oklch(0.76 0.13 140);
+    --chart-4: oklch(0.72 0.14 5);
+    --chart-5: oklch(0.76 0.1 175);
+    --radius: 0.625rem;
+    --sidebar: oklch(0.215 0.016 308);
+    --sidebar-foreground: oklch(0.93 0.01 85);
+    --sidebar-primary: oklch(0.62 0.11 355);
+    --sidebar-primary-foreground: oklch(0.93 0.01 85);
+    --sidebar-accent: oklch(0.29 0.022 308);
+    --sidebar-accent-foreground: oklch(0.93 0.01 85);
+    --sidebar-border: oklch(1 0 0 / 11%);
+    --sidebar-ring: oklch(0.66 0.11 350);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    @apply bg-background text-foreground overscroll-none;
+    }
+  html {
+    @apply font-sans;
+    }
+}
+
+@layer components {
+  /* Floating panels over the map */
+  .glass {
+    background: color-mix(in oklab, var(--background) 72%, transparent);
+    backdrop-filter: blur(16px) saturate(1.2);
+    -webkit-backdrop-filter: blur(16px) saturate(1.2);
+    border: 1px solid var(--border);
+    box-shadow: 0 8px 32px oklch(0 0 0 / 35%);
+  }
+}
+
+/* ---------- map markers ---------- */
+
+/* POI-style dot: category icon inside, label below (like Mapbox's own POIs) */
+.gv-marker {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 9999px;
+  background: var(--marker-color, #8fa3bf);
+  border: 2px solid oklch(0.17 0.014 310);
+  box-shadow: 0 0 0 1.5px color-mix(in oklab, var(--marker-color, #8fa3bf) 55%, transparent),
+    0 2px 8px oklch(0 0 0 / 50%);
+  cursor: pointer;
+  transition: transform 160ms ease;
+}
+
+.gv-marker:hover {
+  transform: scale(1.2);
+}
+
+.gv-marker[data-selected="true"] {
+  transform: scale(1.35);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--marker-color) 70%, transparent),
+    0 2px 12px oklch(0 0 0 / 60%);
+}
+
+/* dark glyph on the colored dot, matching mapbox night POI icons */
+.gv-marker-icon {
+  line-height: 0;
+  color: oklch(0.2 0.03 285);
+}
+
+.gv-marker-label {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 130px;
+  text-align: center;
+  /* DIN Pro is what Mapbox Standard's labels render in */
+  font-family: "DIN Pro", "DIN Offc Pro", "Helvetica Neue", Arial, sans-serif;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: oklch(0.95 0.005 260);
+  text-shadow:
+    0 0 2px oklch(0.24 0.03 265),
+    0 0 2px oklch(0.24 0.03 265),
+    0 0 4px oklch(0.24 0.03 265),
+    0 1px 4px oklch(0.24 0.03 265);
+  opacity: 0;
+  transition: opacity 200ms ease;
+  pointer-events: none;
+}
+
+/* labels appear past neighborhood zoom (class set from EventMap), or when selected */
+.gv-labels-on .gv-marker-label,
+.gv-marker[data-selected="true"] .gv-marker-label {
+  opacity: 1;
+}
+
+/* live events breathe lantern-gold — the signature */
+.gv-marker[data-live="true"] {
+  background: var(--marker-color);
+  box-shadow: 0 0 0 1.5px oklch(0.82 0.13 85 / 80%), 0 0 14px oklch(0.82 0.13 85 / 55%);
+}
+
+.gv-marker[data-live="true"]::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border-radius: 9999px;
+  border: 1.5px solid oklch(0.82 0.13 85 / 70%);
+  animation: gv-pulse 2.4s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+}
+
+@keyframes gv-progress {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+@keyframes gv-pulse {
+  0% {
+    transform: scale(0.55);
+    opacity: 0.9;
+  }
+  70% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+.gv-user-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: oklch(0.72 0.12 240);
+  border: 2.5px solid white;
+  box-shadow: 0 0 10px oklch(0.72 0.12 240 / 70%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gv-marker[data-live="true"]::after {
+    animation: none;
+    opacity: 0.5;
+    transform: scale(1);
+  }
+}
