@@ -1,0 +1,185 @@
+import { useState } from "react"
+import {
+  ExternalLinkIcon,
+  MapPinIcon,
+  NavigationIcon,
+  SparklesIcon,
+} from "lucide-react"
+import { toast } from "sonner"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Separator } from "@/components/ui/separator"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import { Spinner } from "@/components/ui/spinner"
+import { StarRating } from "@/components/StarRating"
+import { useEta } from "@/hooks/useEta"
+import { api } from "@/lib/api"
+import { useGrapevine } from "@/lib/store"
+import { fmtTime, isLive, statusLabel } from "@/lib/time"
+import { CATEGORY_META } from "@/lib/types"
+
+export function EventDetail() {
+  const events = useGrapevine((s) => s.events)
+  const selectedId = useGrapevine((s) => s.selectedId)
+  const detailOpen = useGrapevine((s) => s.detailOpen)
+  const setDetailOpen = useGrapevine((s) => s.setDetailOpen)
+  const settings = useGrapevine((s) => s.settings)
+  const now = useGrapevine((s) => s.now)
+  const userPos = useGrapevine((s) => s.userPos)
+  const upsertEvent = useGrapevine((s) => s.upsertEvent)
+
+  const [rating, setRating] = useState(false)
+
+  const event = events.find((e) => e.id === selectedId)
+  const eta = useEta(detailOpen ? event : null)
+  if (!event) return null
+
+  const meta = CATEGORY_META[event.category]
+  const tz = settings?.tz ?? "UTC"
+  const live = isLive(event, now)
+
+  async function recheckBuzz() {
+    if (!event) return
+    setRating(true)
+    try {
+      upsertEvent(await api.rate(event.id))
+      toast.success("Buzz re-checked with the local model")
+    } catch (err) {
+      toast.error("Couldn't reach the model", {
+        description: String(err).slice(0, 140),
+      })
+    } finally {
+      setRating(false)
+    }
+  }
+
+  const gmaps = `https://www.google.com/maps/dir/?api=1&destination=${event.lat},${event.lng}`
+
+  return (
+    <Sheet open={detailOpen} onOpenChange={setDetailOpen}>
+      <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-md">
+        <SheetHeader className="gap-2">
+          <span
+            className="font-mono text-[11px] tracking-[0.18em] uppercase"
+            style={{ color: meta.color }}
+          >
+            {meta.label} · {event.rarity}
+          </span>
+          <SheetTitle className="font-heading text-2xl leading-tight font-semibold">
+            {event.title}
+          </SheetTitle>
+          <SheetDescription className="flex items-center gap-1.5">
+            <MapPinIcon className="size-3.5 shrink-0" />
+            {event.venue}
+            {event.address ? ` — ${event.address}` : ""}
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="flex flex-col gap-4 px-4 pb-6">
+          <div className="flex items-center justify-between rounded-lg bg-card/60 px-3 py-2">
+            <span className="flex items-center gap-2 text-sm">
+              {live && <span className="size-2 animate-pulse rounded-full bg-live" />}
+              {statusLabel(event, tz, now)}
+            </span>
+            <span className="font-mono text-xs text-muted-foreground">
+              {fmtTime(event.start, tz)} – {fmtTime(event.end, tz)}
+            </span>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <StarRating rating={event.rating} showNumber />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={recheckBuzz}
+                disabled={rating}
+              >
+                {rating ? (
+                  <Spinner data-icon="inline-start" />
+                ) : (
+                  <SparklesIcon data-icon="inline-start" />
+                )}
+                Re-check buzz
+              </Button>
+            </div>
+            {event.ratingRationale && (
+              <blockquote className="border-l-2 border-wine/60 pl-3 text-sm text-muted-foreground italic">
+                “{event.ratingRationale}”
+              </blockquote>
+            )}
+            {event.promoted && (
+              <Badge variant="destructive" className="w-fit">
+                Detected as promoted
+              </Badge>
+            )}
+          </div>
+
+          <p className="text-sm leading-relaxed">{event.description}</p>
+
+          {event.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {event.tags.map((t) => (
+                <Badge key={t} variant="secondary" className="font-normal">
+                  {t}
+                </Badge>
+              ))}
+            </div>
+          )}
+
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-2 text-sm">
+              <NavigationIcon className="size-4 text-muted-foreground" />
+              {eta?.minutes != null ? (
+                <span>
+                  <span className="font-mono">{eta.minutes} min</span> drive ·{" "}
+                  <span className="font-mono">{eta.km} km</span>
+                </span>
+              ) : (
+                <span className="text-muted-foreground">Checking traffic…</span>
+              )}
+            </span>
+            <Button variant="outline" size="sm" asChild>
+              <a href={gmaps} target="_blank" rel="noreferrer">
+                Directions
+                <ExternalLinkIcon data-icon="inline-end" />
+              </a>
+            </Button>
+          </div>
+          <span className="-mt-3 text-xs text-muted-foreground">
+            Traffic-aware, from {userPos ? "your location" : "the city center"}
+          </span>
+
+          {event.ticketUrl ? (
+            <Button asChild className="w-full">
+              <a href={event.ticketUrl} target="_blank" rel="noreferrer">
+                Get tickets · {event.ticketProvider ?? "provider"} · {event.price}
+                <ExternalLinkIcon data-icon="inline-end" />
+              </a>
+            </Button>
+          ) : (
+            <Alert>
+              <AlertTitle>{event.free ? "Free — just show up" : event.price}</AlertTitle>
+              <AlertDescription>
+                No advance tickets needed for this one.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <span className="font-mono text-xs text-muted-foreground">
+            via {event.source} · {event.sourceKind}
+          </span>
+        </div>
+      </SheetContent>
+    </Sheet>
+  )
+}
