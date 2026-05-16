@@ -15,6 +15,52 @@ const TRAFFIC_LAYER = "gv-traffic-line"
 /** Zoom at which marker labels fade in, mirroring Mapbox's own POI labels. */
 const LABEL_MIN_ZOOM = 13
 
+// Markers are plain DOM, so Mapbox renders them at a fixed pixel size at every
+// zoom — full size at street zoom is right, but pulled back to the whole county
+// those same dots turn oversized and pile into an unreadable clump. Scale them
+// with zoom instead, receding as you zoom out the way Mapbox's own POIs do.
+const MARKER_MIN_SCALE = 0.6
+function markerScaleForZoom(zoom: number): number {
+  const t = Math.min(Math.max((zoom - 10) / (LABEL_MIN_ZOOM + 1 - 10), 0), 1)
+  return MARKER_MIN_SCALE + t * (1 - MARKER_MIN_SCALE)
+}
+
+// Seed camera so the map boots (WebGL, style, tiles) in parallel with the API
+// fetch instead of behind it; settings recenter it on arrival if they differ.
+const FALLBACK_CENTER: [number, number] = [-117.1611, 32.7157] // San Diego
+
+// Traffic source+layer are added on first toggle, not at style load — the
+// layer starts hidden by default, so eager-adding only buys a wasted TileJSON
+// fetch on the critical path.
+function addTrafficLayer(map: mapboxgl.Map) {
+  if (map.getSource(TRAFFIC_SOURCE)) return
+  map.addSource(TRAFFIC_SOURCE, {
+    type: "vector",
+    url: "mapbox://mapbox.mapbox-traffic-v1",
+  })
+  map.addLayer({
+    id: TRAFFIC_LAYER,
+    type: "line",
+    source: TRAFFIC_SOURCE,
+    "source-layer": "traffic",
+    slot: "middle",
+    layout: { "line-join": "round" },
+    paint: {
+      "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 14, 2.5, 18, 5],
+      "line-color": [
+        "match",
+        ["get", "congestion"],
+        "low", "#3fae6a",
+        "moderate", "#e3b74f",
+        "heavy", "#e2683f",
+        "severe", "#c43a4b",
+        "#3fae6a",
+      ],
+      "line-opacity": 0.8,
+    },
+  })
+}
+
 // Static SVG per category so plain-DOM markers can reuse the lucide icons.
 const ICON_SVG = Object.fromEntries(
   (Object.keys(CATEGORY_META) as Category[]).map((c) => [
@@ -31,6 +77,9 @@ export function EventMap() {
   const markersRef = useRef(new Map<string, { marker: mapboxgl.Marker; el: HTMLDivElement }>())
   const userMarkerRef = useRef<mapboxgl.Marker | null>(null)
   const styleReadyRef = useRef(false)
+  // Once the user (or the tour) moves the camera, a late settings fetch must
+  // not yank the view back to the configured center.
+  const cameraTouchedRef = useRef(false)
 
   const settings = useGrapevine((s) => s.settings)
   const events = useGrapevine((s) => s.events)
@@ -55,12 +104,12 @@ export function EventMap() {
 
   // --- init (once per mount; cleanup per mapbox-web-integration-patterns) ---
   useEffect(() => {
-    if (!containerRef.current || !settings) return
+    if (!containerRef.current) return
     const map = new mapboxgl.Map({
       container: containerRef.current,
       style: "mapbox://styles/mapbox/standard",
       config: { basemap: { lightPreset: "night" } },
-      center: settings.center,
+      center: FALLBACK_CENTER,
       zoom: 11.8,
       pitch: 52,
       bearing: -12,
@@ -68,49 +117,28 @@ export function EventMap() {
     })
     map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "bottom-right")
 
-    // POI-style labels only past neighborhood zoom, so downtown doesn't clutter
-    const applyLabelZoom = () => {
-      containerRef.current?.classList.toggle(
-        "gv-labels-on",
-        map.getZoom() >= LABEL_MIN_ZOOM,
-      )
+    // originalEvent is only set for user gestures, not programmatic moves
+    map.on("movestart", (e) => {
+      if (e.originalEvent) cameraTouchedRef.current = true
+    })
+
+    // POI-style labels only past neighborhood zoom, so downtown doesn't clutter;
+    // markers scale with zoom (via a CSS var that cascades to every .gv-marker).
+    const applyZoom = () => {
+      const zoom = map.getZoom()
+      const el = containerRef.current
+      if (!el) return
+      el.classList.toggle("gv-labels-on", zoom >= LABEL_MIN_ZOOM)
+      el.style.setProperty("--gv-marker-scale", markerScaleForZoom(zoom).toFixed(3))
     }
-    map.on("zoom", applyLabelZoom)
-    applyLabelZoom()
+    map.on("zoom", applyZoom)
+    applyZoom()
 
     map.on("style.load", () => {
       styleReadyRef.current = true
       map.setConfigProperty("basemap", "lightPreset", "night")
-      if (!map.getSource(TRAFFIC_SOURCE)) {
-        map.addSource(TRAFFIC_SOURCE, {
-          type: "vector",
-          url: "mapbox://mapbox.mapbox-traffic-v1",
-        })
-        map.addLayer({
-          id: TRAFFIC_LAYER,
-          type: "line",
-          source: TRAFFIC_SOURCE,
-          "source-layer": "traffic",
-          slot: "middle",
-          layout: {
-            "line-join": "round",
-            visibility: useGrapevine.getState().trafficOn ? "visible" : "none",
-          },
-          paint: {
-            "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 14, 2.5, 18, 5],
-            "line-color": [
-              "match",
-              ["get", "congestion"],
-              "low", "#3fae6a",
-              "moderate", "#e3b74f",
-              "heavy", "#e2683f",
-              "severe", "#c43a4b",
-              "#3fae6a",
-            ],
-            "line-opacity": 0.8,
-          },
-        })
-      }
+      // trafficOn is persisted; restore it once the style can take layers
+      if (useGrapevine.getState().trafficOn) addTrafficLayer(map)
     })
 
     mapRef.current = map
@@ -122,10 +150,18 @@ export function EventMap() {
       map.remove()
       mapRef.current = null
     }
-    // settings only seeds the initial camera; recreating the map on every
-    // settings save would be disruptive.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings === null])
+  }, [])
+
+  // --- settings arrive after the map booted: recenter if nothing moved yet ---
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !settings || cameraTouchedRef.current) return
+    const [lng, lat] = settings.center
+    const cur = map.getCenter()
+    if (Math.abs(cur.lng - lng) > 1e-6 || Math.abs(cur.lat - lat) > 1e-6) {
+      map.jumpTo({ center: settings.center })
+    }
+  }, [settings])
 
   // --- markers: diff by id so pulses don't restart on unrelated renders ---
   useEffect(() => {
@@ -172,11 +208,16 @@ export function EventMap() {
     }
   }, [visible, now, selectedId, select])
 
-  // --- traffic visibility ---
+  // --- traffic visibility (layer created lazily on first enable) ---
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !styleReadyRef.current || !map.getLayer(TRAFFIC_LAYER)) return
-    map.setLayoutProperty(TRAFFIC_LAYER, "visibility", trafficOn ? "visible" : "none")
+    if (!map || !styleReadyRef.current) return
+    if (trafficOn) {
+      addTrafficLayer(map)
+      map.setLayoutProperty(TRAFFIC_LAYER, "visibility", "visible")
+    } else if (map.getLayer(TRAFFIC_LAYER)) {
+      map.setLayoutProperty(TRAFFIC_LAYER, "visibility", "none")
+    }
   }, [trafficOn])
 
   // --- user position dot ---
@@ -205,6 +246,7 @@ export function EventMap() {
   useEffect(() => {
     const map = mapRef.current
     if (!map || !focus) return
+    cameraTouchedRef.current = true
     map.flyTo({
       center: [focus.lng, focus.lat],
       zoom: carouselOn ? 14.6 : 15.2,

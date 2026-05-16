@@ -135,15 +135,17 @@
   box-shadow: 0 0 0 1.5px color-mix(in oklab, var(--marker-color, #8fa3bf) 55%, transparent),
     0 2px 8px oklch(0 0 0 / 50%);
   cursor: pointer;
+  /* zoom-driven scale (set from EventMap); hover/selected compound onto it */
+  transform: scale(var(--gv-marker-scale, 1));
   transition: transform 160ms ease;
 }
 
 .gv-marker:hover {
-  transform: scale(1.2);
+  transform: scale(calc(var(--gv-marker-scale, 1) * 1.2));
 }
 
 .gv-marker[data-selected="true"] {
-  transform: scale(1.35);
+  transform: scale(calc(var(--gv-marker-scale, 1) * 1.35));
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--marker-color) 70%, transparent),
     0 2px 12px oklch(0 0 0 / 60%);
 }
