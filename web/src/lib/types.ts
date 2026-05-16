@@ -114,6 +114,18 @@ export interface Interests {
   avoids: string[]
 }
 
+/** One newsletter/email run through the extraction pipeline (server log). */
+export interface IngestRecord {
+  id: string
+  receivedAt: string
+  source: string
+  kind: "email" | "manual"
+  subject?: string
+  extracted: number
+  added: number
+  events: { id: string; title: string; start: string }[]
+}
+
 export interface User {
   id: string
   email: string

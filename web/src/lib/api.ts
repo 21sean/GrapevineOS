@@ -1,4 +1,12 @@
-import type { CityEvent, Filters, Interests, Settings, Source, User } from "./types"
+import type {
+  CityEvent,
+  Filters,
+  IngestRecord,
+  Interests,
+  Settings,
+  Source,
+  User,
+} from "./types"
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -123,6 +131,9 @@ export const api = {
       }
     }
   },
+
+  ingestHistory: () =>
+    fetch("/api/ingest/history").then((r) => json<IngestRecord[]>(r)),
 
   ingestEmail: (text: string, source: string, dryRun: boolean) =>
     fetch("/api/ingest/email", {

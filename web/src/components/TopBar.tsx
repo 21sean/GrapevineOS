@@ -1,14 +1,7 @@
 import { useMemo, useState } from "react"
-import { CarFrontIcon, HeartIcon, LogOutIcon, Settings2Icon } from "lucide-react"
+import { CarFrontIcon, HeartIcon, Settings2Icon } from "lucide-react"
+import { AccountDialog } from "@/components/AccountDialog"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
 import {
   Tooltip,
@@ -28,7 +21,6 @@ export function TopBar() {
   const setInterestsOpen = useGrapevine((s) => s.setInterestsOpen)
   const setAdminOpen = useGrapevine((s) => s.setAdminOpen)
   const user = useGrapevine((s) => s.user)
-  const signOut = useGrapevine((s) => s.signOut)
   const [accountOpen, setAccountOpen] = useState(false)
 
   const liveCount = useMemo(
@@ -97,7 +89,7 @@ export function TopBar() {
               <Settings2Icon />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Admin — models, ingestion, sources</TooltipContent>
+          <TooltipContent>Admin: models, ingestion, sources</TooltipContent>
         </Tooltip>
         <Separator orientation="vertical" className="!h-4" />
         {user ? (
@@ -133,36 +125,7 @@ export function TopBar() {
       </div>
 
       {user && (
-        <Dialog open={accountOpen} onOpenChange={setAccountOpen}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-3">
-                <img
-                  src={user.picture}
-                  alt=""
-                  referrerPolicy="no-referrer"
-                  className="size-10 rounded-full border border-border"
-                />
-                {user.name}
-              </DialogTitle>
-              <DialogDescription>
-                {user.email} · your interests and filters sync to this account.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  void signOut()
-                  setAccountOpen(false)
-                }}
-              >
-                <LogOutIcon data-icon="inline-start" />
-                Sign out
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <AccountDialog open={accountOpen} onOpenChange={setAccountOpen} />
       )}
     </header>
   )
