@@ -141,6 +141,14 @@ app.get("/api/logo/:id", async (req, res) => {
 
 // ---------- ingestion ----------
 
+const eventSnapshot = (events: CityEvent[]) =>
+  events.map((e) => ({ id: e.id, title: e.title, start: e.start }));
+
+/** Newest-first log of every email/paste that went through the pipeline. */
+app.get("/api/ingest/history", (_req, res) => {
+  res.json(store.ingests());
+});
+
 /** Extract events from pasted/forwarded email text. dryRun previews only. */
 app.post("/api/ingest/email", async (req, res) => {
   const { text, source = "manual", dryRun = false } = req.body ?? {};
@@ -149,6 +157,13 @@ app.post("/api/ingest/email", async (req, res) => {
     const events = await extractEvents({ text, source });
     if (dryRun) return res.json({ events, added: 0 });
     const added = store.addEvents(events);
+    store.logIngest({
+      source,
+      kind: "manual",
+      extracted: events.length,
+      added: added.length,
+      events: eventSnapshot(added),
+    });
     res.json({ events, added: added.length });
   } catch (err) {
     res.status(502).json({ error: String(err) });
@@ -162,6 +177,13 @@ app.post("/api/ingest/commit", (req, res) => {
     return res.status(400).json({ error: "events[] required" });
   }
   const added = store.addEvents(events);
+  store.logIngest({
+    source: events[0]?.source ?? "manual",
+    kind: "manual",
+    extracted: events.length,
+    added: added.length,
+    events: eventSnapshot(added),
+  });
   res.json({ added: added.length });
 });
 
@@ -179,6 +201,14 @@ app.post("/api/ingest/inbound", async (req, res) => {
   try {
     const events = await extractEvents({ text: `Subject: ${subject}\n\n${text}`, source });
     const added = store.addEvents(events);
+    store.logIngest({
+      source,
+      kind: "email",
+      subject: String(subject) || undefined,
+      extracted: events.length,
+      added: added.length,
+      events: eventSnapshot(added),
+    });
     res.json({ extracted: events.length, added: added.length });
   } catch (err) {
     res.status(502).json({ error: String(err) });

@@ -50,6 +50,22 @@ export interface Source {
   active: boolean;
 }
 
+/**
+ * One newsletter/email run through the extraction pipeline. Kept as a log so
+ * the app can show where its events came from and when.
+ */
+export interface IngestRecord {
+  id: string;
+  receivedAt: string; // ISO 8601
+  source: string; // inbox tag ("sdtoday") or "manual"
+  kind: "email" | "manual";
+  subject?: string; // inbound emails only
+  extracted: number;
+  added: number;
+  /** Snapshot of what landed, so history survives event edits/deletes. */
+  events: { id: string; title: string; start: string }[];
+}
+
 /** Per-account copies of the browser preferences, synced when signed in. */
 export interface UserPrefs {
   filters?: unknown;

@@ -1,7 +1,15 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { CityEvent, Session, Settings, Source, User, UserPrefs } from "./types.js";
+import type {
+  CityEvent,
+  IngestRecord,
+  Session,
+  Settings,
+  Source,
+  User,
+  UserPrefs,
+} from "./types.js";
 
 const DATA_DIR = path.resolve(import.meta.dirname, "../data");
 
@@ -78,6 +86,23 @@ export const store = {
 
   sources(): Source[] {
     return readJson<Source[]>("sources.json", []);
+  },
+
+  // ---------- ingest history ----------
+
+  ingests(): IngestRecord[] {
+    return readJson<IngestRecord[]>("ingests.json", []);
+  },
+
+  /** Prepends a log entry; keeps the newest 200 so the file stays small. */
+  logIngest(r: Omit<IngestRecord, "id" | "receivedAt">): IngestRecord {
+    const record: IngestRecord = {
+      id: crypto.randomUUID(),
+      receivedAt: new Date().toISOString(),
+      ...r,
+    };
+    writeJson("ingests.json", [record, ...this.ingests()].slice(0, 200));
+    return record;
   },
 
   // ---------- users & sessions ----------
