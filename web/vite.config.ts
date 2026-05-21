@@ -11,6 +11,20 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Deps change on dependency bumps, app code on every deploy — split
+        // them so returning visitors only re-download the small app chunk.
+        // mapbox-gl gets its own chunk: it's the bulk of the payload and lets
+        // the browser fetch it in parallel with the rest.
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined
+          return id.includes("mapbox-gl") ? "mapbox" : "vendor"
+        },
+      },
+    },
+  },
   server: {
     // The Google OAuth client is registered for http://localhost:5174 —
     // keep the dev origin pinned so sign-in redirects keep working.

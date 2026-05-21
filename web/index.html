@@ -2,12 +2,15 @@
 <html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
+    <!-- Map style/tile/sprite requests all hit api.mapbox.com; warm the
+         TLS connection while the JS bundle is still downloading. -->
+    <link rel="preconnect" href="https://api.mapbox.com" crossorigin />
     <link rel="icon" type="image/svg+xml" href="/grapevine.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#131118" />
     <meta
       name="description"
-      content="Grapevine — a live map of the San Diego events locals actually go to."
+      content="Grapevine · a live map of the San Diego events locals actually go to."
     />
     <title>Grapevine · what locals actually go to</title>
   </head>

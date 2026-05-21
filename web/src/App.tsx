@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from "react"
+import { lazy, Suspense, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
+import { Button } from "@/components/ui/button"
 import { Toaster } from "@/components/ui/sonner"
 import { Spinner } from "@/components/ui/spinner"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { AdminSheet } from "@/components/admin/AdminSheet"
 import { CarouselOverlay, CAROUSEL_MS } from "@/components/CarouselOverlay"
 import { EventDetail } from "@/components/EventDetail"
 import { FilterRail } from "@/components/FilterRail"
@@ -13,18 +13,31 @@ import { TopBar } from "@/components/TopBar"
 import { carouselEvents } from "@/lib/score"
 import { useGrapevine } from "@/lib/store"
 
+// Operator-only chrome — load its chunk on first open instead of shipping it
+// to every visitor.
+const AdminSheet = lazy(() =>
+  import("@/components/admin/AdminSheet").then((m) => ({ default: m.AdminSheet })),
+)
+
 export function App() {
   const loaded = useGrapevine((s) => s.loaded)
   const load = useGrapevine((s) => s.load)
   const tick = useGrapevine((s) => s.tick)
   const setUserPos = useGrapevine((s) => s.setUserPos)
   const carouselOn = useGrapevine((s) => s.carouselOn)
+  const adminOpen = useGrapevine((s) => s.adminOpen)
   const events = useGrapevine((s) => s.events)
   const filters = useGrapevine((s) => s.filters)
   const interests = useGrapevine((s) => s.interests)
   const now = useGrapevine((s) => s.now)
 
   const [loadError, setLoadError] = useState<string | null>(null)
+  // Latch so the sheet stays mounted after closing — otherwise the close
+  // animation would be cut off when adminOpen flips false.
+  const [adminEverOpened, setAdminEverOpened] = useState(false)
+  useEffect(() => {
+    if (adminOpen) setAdminEverOpened(true)
+  }, [adminOpen])
 
   useEffect(() => {
     load().catch((err) => setLoadError(String(err)))
@@ -53,41 +66,60 @@ export function App() {
   useEffect(() => {
     if (!carouselOn || tourLength < 2) return
     const timer = setInterval(() => {
+      if (document.hidden) return // don't burn battery touring a hidden tab
       const s = useGrapevine.getState()
       s.advanceCarousel((s.carouselIdx + 1) % tourLength)
     }, CAROUSEL_MS)
     return () => clearInterval(timer)
   }, [carouselOn, tourLength])
 
-  if (!loaded) {
-    return (
-      <div className="flex h-svh flex-col items-center justify-center gap-4">
-        <span className="font-heading text-3xl font-semibold italic">
-          Grapevine
-        </span>
-        {loadError ? (
-          <p className="max-w-sm text-center text-sm text-muted-foreground">
-            The API isn't answering. Start it with{" "}
-            <span className="font-mono text-foreground">npm run dev</span> at
-            the project root, then reload.
-          </p>
-        ) : (
-          <Spinner className="size-5" />
-        )}
-      </div>
-    )
-  }
-
   return (
     <TooltipProvider delayDuration={250}>
       <div className="relative h-svh w-full overflow-hidden">
+        {/* Map mounts immediately so WebGL init, style download, and tile
+            fetches run in parallel with the API calls instead of behind them. */}
         <EventMap />
-        <TopBar />
-        <FilterRail />
-        <CarouselOverlay />
-        <EventDetail />
-        <InterestsDialog />
-        <AdminSheet />
+        {loaded ? (
+          <>
+            <TopBar />
+            <FilterRail />
+            <CarouselOverlay />
+            <EventDetail />
+            <InterestsDialog />
+            {(adminOpen || adminEverOpened) && (
+              <Suspense fallback={null}>
+                <AdminSheet />
+              </Suspense>
+            )}
+          </>
+        ) : (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-background/60">
+            <span className="font-heading text-3xl font-semibold italic">
+              Grapevine
+            </span>
+            {loadError ? (
+              <>
+                <p className="max-w-sm text-center text-sm text-muted-foreground">
+                  The API isn't answering. Start it with{" "}
+                  <span className="font-mono text-foreground">npm run dev</span>{" "}
+                  at the project root.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setLoadError(null)
+                    load().catch((err) => setLoadError(String(err)))
+                  }}
+                >
+                  Try again
+                </Button>
+              </>
+            ) : (
+              <Spinner className="size-5" />
+            )}
+          </div>
+        )}
         <Toaster theme="dark" position="bottom-right" />
       </div>
     </TooltipProvider>
