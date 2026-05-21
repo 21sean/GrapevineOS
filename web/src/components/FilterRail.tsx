@@ -112,7 +112,7 @@ export function FilterRail() {
               <EmptyHeader>
                 <EmptyTitle>Nothing gets through</EmptyTitle>
                 <EmptyDescription>
-                  Loosen a filter or lower the buzz bar — the grapevine is
+                  Loosen a filter or lower the buzz bar. The grapevine is
                   quiet under these settings.
                 </EmptyDescription>
               </EmptyHeader>

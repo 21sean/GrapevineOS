@@ -25,7 +25,7 @@ const SAMPLE_EMAIL = `Subject: ☀️ SDtoday: Your 4th of July weekend guide
 
 Happy Thursday, San Diego! Here's what we're eyeing this weekend:
 
-🎆 SATURDAY | Big Bay Boom — the West Coast's largest fireworks show
+🎆 SATURDAY | Big Bay Boom, the West Coast's largest fireworks show
 lights up San Diego Bay at 9pm. Free viewing from Embarcadero,
 Shelter Island, and Coronado Ferry Landing.
 
@@ -113,7 +113,7 @@ export function IngestTab() {
           />
           <FieldDescription>
             {settings?.model
-              ? `Extracted locally by ${settings.model} — nothing leaves your machine.`
+              ? `Extracted locally by ${settings.model}. Nothing leaves your machine.`
               : "Pick a model in the Models tab first."}
           </FieldDescription>
         </Field>
@@ -143,7 +143,7 @@ export function IngestTab() {
           <Separator />
           <div className="flex flex-col gap-3">
             <span className="text-sm text-muted-foreground">
-              Found {preview.length} event{preview.length === 1 ? "" : "s"} —
+              Found {preview.length} event{preview.length === 1 ? "" : "s"},
               geocoded and rated. Uncheck any you don't want.
             </span>
             {preview.map((e) => (

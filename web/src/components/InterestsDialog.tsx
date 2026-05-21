@@ -86,7 +86,7 @@ export function InterestsDialog() {
           <FieldSet>
             <FieldLegend>Less of this</FieldLegend>
             <FieldDescription>
-              Hidden completely — you'll never see these on the map.
+              Hidden completely. You'll never see these on the map.
             </FieldDescription>
             <ToggleGroup
               type="multiple"

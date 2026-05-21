@@ -78,7 +78,7 @@ export function EventDetail() {
           <SheetDescription className="flex items-center gap-1.5">
             <MapPinIcon className="size-3.5 shrink-0" />
             {event.venue}
-            {event.address ? ` — ${event.address}` : ""}
+            {event.address ? `, ${event.address}` : ""}
           </SheetDescription>
         </SheetHeader>
 
@@ -168,7 +168,7 @@ export function EventDetail() {
             </Button>
           ) : (
             <Alert>
-              <AlertTitle>{event.free ? "Free — just show up" : event.price}</AlertTitle>
+              <AlertTitle>{event.free ? "Free · just show up" : event.price}</AlertTitle>
               <AlertDescription>
                 No advance tickets needed for this one.
               </AlertDescription>

@@ -12,13 +12,17 @@ export function SourcesTab() {
     navigator.clipboard
       .writeText(address)
       .then(() => toast.success("Address copied", { description: address }))
-      .catch(() => toast.error("Couldn't copy — clipboard blocked"))
+      .catch(() =>
+        toast.error("Couldn't copy", {
+          description: "Clipboard access was blocked.",
+        }),
+      )
   }
 
   return (
     <div className="flex flex-col gap-5">
       <p className="text-sm leading-relaxed text-muted-foreground">
-        Every address below works automatically — Cloudflare Email Routing's
+        Every address below works automatically. Cloudflare Email Routing's
         catch-all accepts anything at{" "}
         <span className="font-mono text-foreground">@sean.ventures</span>.
         Subscribe to each newsletter with its own address and the{" "}
@@ -70,7 +74,7 @@ export function SourcesTab() {
         <AlertDescription>
           The Cloudflare Email Worker in <span className="font-mono">workers/email-ingest</span>{" "}
           parses incoming newsletters and posts them to this app's ingest
-          endpoint. Deploy steps are in the README — until then, paste emails
+          endpoint. Deploy steps are in the README. Until then, paste emails
           in the Ingest tab.
         </AlertDescription>
       </Alert>
