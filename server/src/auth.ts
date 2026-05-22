@@ -141,10 +141,11 @@ auth.get("/api/me", (req, res) => {
 auth.put("/api/me/prefs", (req, res) => {
   const user = sessionUser(req);
   if (!user) return res.status(401).json({ error: "not signed in" });
-  const { filters, interests } = req.body ?? {};
+  const { filters, interests, pinnedIds } = req.body ?? {};
   const updated = store.updateUserPrefs(user.id, {
     ...(filters !== undefined && { filters }),
     ...(interests !== undefined && { interests }),
+    ...(pinnedIds !== undefined && { pinnedIds }),
   });
   res.json({ user: updated ? publicUser(updated) : null });
 });

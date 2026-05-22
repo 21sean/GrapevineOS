@@ -11,20 +11,60 @@ import { useGrapevine } from "@/lib/store"
 import { visibleEvents } from "@/lib/score"
 import { CATEGORIES, CATEGORY_META, type Category } from "@/lib/types"
 
+const RAIL_MIN = 300
+const RAIL_MAX = 560
+
 export function FilterRail() {
   const events = useGrapevine((s) => s.events)
   const filters = useGrapevine((s) => s.filters)
   const interests = useGrapevine((s) => s.interests)
   const now = useGrapevine((s) => s.now)
   const setFilters = useGrapevine((s) => s.setFilters)
+  const pinnedIds = useGrapevine((s) => s.pinnedIds)
+  const railWidth = useGrapevine((s) => s.railWidth)
+  const setRailWidth = useGrapevine((s) => s.setRailWidth)
 
   const visible = useMemo(
     () => visibleEvents(events, filters, interests, now),
     [events, filters, interests, now],
   )
 
+  // Pinned events float to the top, keeping their buzz order among themselves.
+  const ordered = useMemo(() => {
+    if (pinnedIds.length === 0) return visible
+    const pinned = new Set(pinnedIds)
+    return [
+      ...visible.filter((e) => pinned.has(e.id)),
+      ...visible.filter((e) => !pinned.has(e.id)),
+    ]
+  }, [visible, pinnedIds])
+
+  // Drag the right edge to resize; width persists (device-local).
+  const startResize = (e: React.PointerEvent) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startW = railWidth
+    const onMove = (ev: PointerEvent) => {
+      const next = Math.min(RAIL_MAX, Math.max(RAIL_MIN, startW + ev.clientX - startX))
+      setRailWidth(next)
+    }
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove)
+      window.removeEventListener("pointerup", onUp)
+      document.body.style.userSelect = ""
+      document.body.style.cursor = ""
+    }
+    document.body.style.userSelect = "none"
+    document.body.style.cursor = "ew-resize"
+    window.addEventListener("pointermove", onMove)
+    window.addEventListener("pointerup", onUp)
+  }
+
   return (
-    <aside className="glass absolute top-20 bottom-4 left-4 z-10 flex w-[340px] flex-col overflow-hidden rounded-xl">
+    <aside
+      style={{ width: railWidth }}
+      className="glass absolute top-20 bottom-4 left-4 z-10 flex flex-col overflow-hidden rounded-xl"
+    >
       <div className="flex flex-col gap-3 p-4 pb-3">
         <div className="flex flex-col gap-1.5">
           <ToggleRow
@@ -102,12 +142,12 @@ export function FilterRail() {
         </span>
       </div>
 
-      <ScrollArea className="min-h-0 flex-1">
+      <ScrollArea className="mr-1 min-h-0 flex-1">
         <div className="flex flex-col gap-2 p-3 pt-1">
-          {visible.map((e) => (
+          {ordered.map((e) => (
             <EventCard key={e.id} event={e} />
           ))}
-          {!visible.length && (
+          {!ordered.length && (
             <Empty className="py-10">
               <EmptyHeader>
                 <EmptyTitle>Nothing gets through</EmptyTitle>
@@ -120,6 +160,18 @@ export function FilterRail() {
           )}
         </div>
       </ScrollArea>
+
+      {/* drag the right edge to resize the panel */}
+      <div
+        onPointerDown={startResize}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize event list"
+        title="Drag to resize"
+        className="group/resize absolute inset-y-0 right-0 z-30 flex w-2 cursor-ew-resize touch-none items-center justify-end"
+      >
+        <span className="h-10 w-1 rounded-full bg-border/80 transition-colors group-hover/resize:bg-ring" />
+      </div>
     </aside>
   )
 }

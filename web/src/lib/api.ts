@@ -24,7 +24,11 @@ export const api = {
   logout: () =>
     fetch("/auth/logout", { method: "POST" }).then((r) => json<{ ok: boolean }>(r)),
 
-  savePrefs: (prefs: { filters?: Filters; interests?: Interests }) =>
+  savePrefs: (prefs: {
+    filters?: Filters
+    interests?: Interests
+    pinnedIds?: string[]
+  }) =>
     fetch("/api/me/prefs", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },

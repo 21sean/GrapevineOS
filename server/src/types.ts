@@ -70,6 +70,7 @@ export interface IngestRecord {
 export interface UserPrefs {
   filters?: unknown;
   interests?: unknown;
+  pinnedIds?: unknown;
 }
 
 export interface User {

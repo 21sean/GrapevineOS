@@ -29,10 +29,14 @@ interface GrapevineState {
   carouselIdx: number
   trafficOn: boolean
   userPos: [number, number] | null
+  // width of the left event-list rail, in px (device-local, resizable)
+  railWidth: number
 
   // preferences (persisted)
   filters: Filters
   interests: Interests
+  // events the user pinned to the top of the list
+  pinnedIds: string[]
 
   // actions
   load: () => Promise<void>
@@ -45,9 +49,11 @@ interface GrapevineState {
   advanceCarousel: (idx: number) => void
   setTraffic: (on: boolean) => void
   setUserPos: (pos: [number, number] | null) => void
+  setRailWidth: (px: number) => void
   setFilters: (patch: Partial<Filters>) => void
   toggleCategory: (c: Category) => void
   setInterests: (i: Interests) => void
+  togglePin: (id: string) => void
   signOut: () => Promise<void>
   upsertEvent: (e: CityEvent) => void
   refreshEvents: () => Promise<void>
@@ -64,8 +70,8 @@ function schedulePrefsSync(get: () => GrapevineState) {
   if (!get().user) return
   clearTimeout(prefsTimer)
   prefsTimer = setTimeout(() => {
-    const { user, filters, interests } = get()
-    if (user) api.savePrefs({ filters, interests }).catch(() => {})
+    const { user, filters, interests, pinnedIds } = get()
+    if (user) api.savePrefs({ filters, interests, pinnedIds }).catch(() => {})
   }, 800)
 }
 
@@ -85,11 +91,13 @@ export const useGrapevine = create<GrapevineState>()(
       interestsOpen: false,
       carouselOn: true,
       carouselIdx: 0,
-      trafficOn: false,
+      trafficOn: true,
       userPos: null,
+      railWidth: 340,
 
       filters: DEFAULT_FILTERS,
       interests: { loves: [], avoids: [] },
+      pinnedIds: [],
 
       async load() {
         const [events, settings, sources, me] = await Promise.all([
@@ -109,6 +117,7 @@ export const useGrapevine = create<GrapevineState>()(
           loaded: true,
           ...(prefs?.filters && { filters: { ...DEFAULT_FILTERS, ...prefs.filters } }),
           ...(prefs?.interests && { interests: prefs.interests }),
+          ...(prefs?.pinnedIds && { pinnedIds: prefs.pinnedIds }),
         })
         // First sign-in from this browser: seed the account with local prefs.
         if (me.user && !prefs) schedulePrefsSync(get)
@@ -136,6 +145,7 @@ export const useGrapevine = create<GrapevineState>()(
 
       setTraffic: (trafficOn) => set({ trafficOn }),
       setUserPos: (userPos) => set({ userPos }),
+      setRailWidth: (railWidth) => set({ railWidth }),
 
       setFilters(patch) {
         set({ filters: { ...get().filters, ...patch } })
@@ -153,6 +163,15 @@ export const useGrapevine = create<GrapevineState>()(
 
       setInterests(interests) {
         set({ interests })
+        schedulePrefsSync(get)
+      },
+
+      togglePin(id) {
+        const cur = get().pinnedIds
+        const pinnedIds = cur.includes(id)
+          ? cur.filter((x) => x !== id)
+          : [id, ...cur]
+        set({ pinnedIds })
         schedulePrefsSync(get)
       },
 
@@ -178,11 +197,21 @@ export const useGrapevine = create<GrapevineState>()(
     }),
     {
       name: "grapevine-prefs",
+      version: 1,
       partialize: (s) => ({
         filters: s.filters,
         interests: s.interests,
-        trafficOn: s.trafficOn,
+        pinnedIds: s.pinnedIds,
+        railWidth: s.railWidth,
       }),
+      // v0 persisted a `trafficOn` toggle; traffic is now always on, so drop
+      // the stored value and let the `true` default win.
+      migrate: (persisted, version) => {
+        if (version < 1 && persisted && typeof persisted === "object") {
+          delete (persisted as Record<string, unknown>).trafficOn
+        }
+        return persisted as GrapevineState
+      },
     },
   ),
 )

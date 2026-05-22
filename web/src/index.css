@@ -241,3 +241,51 @@
     transform: scale(1);
   }
 }
+
+/* ---------- mapbox controls (dark) ---------- */
+/* All rules are prefixed with .gv-map (the map container) so they outrank the
+   default mapbox-gl.css, whichever stylesheet the bundler emits last. */
+
+/* Drop the bottom-left wordmark and attribution notice. */
+.gv-map .mapboxgl-ctrl-logo,
+.gv-map .mapboxgl-ctrl-attrib {
+  display: none;
+}
+
+/* Zoom + compass control, restyled to match the app's dark glass panels. */
+.gv-map .mapboxgl-ctrl-group {
+  background: color-mix(in oklab, var(--background) 78%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  backdrop-filter: blur(16px) saturate(1.2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 32px oklch(0 0 0 / 35%);
+}
+
+.gv-map .mapboxgl-ctrl-group button {
+  background-color: transparent;
+}
+
+.gv-map .mapboxgl-ctrl-group button + button {
+  border-top: 1px solid var(--border);
+}
+
+.gv-map .mapboxgl-ctrl button:not(:disabled):hover {
+  background-color: color-mix(in oklab, var(--foreground) 12%, transparent);
+}
+
+/* Kill the default bright-blue focus glow; keep a themed ring for keyboard use. */
+.gv-map .mapboxgl-ctrl-group button:focus {
+  box-shadow: none;
+}
+.gv-map .mapboxgl-ctrl-group button:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--ring);
+}
+
+/* Mapbox bakes dark glyphs into the icon SVGs; invert them to read on dark. */
+.gv-map .mapboxgl-ctrl-group .mapboxgl-ctrl-icon {
+  filter: invert(1) brightness(1.1);
+}
+.gv-map .mapboxgl-ctrl-group button:disabled .mapboxgl-ctrl-icon {
+  opacity: 0.3;
+}
