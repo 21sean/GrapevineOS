@@ -22,6 +22,23 @@ Requirements: Node 22+, [Ollama](https://ollama.com) running locally with at
 least one chat model (`ollama pull qwen3:8b` works fine - pick it in
 Admin -> Models).
 
+## Running the production build locally
+
+The API has no build step (tsx runs TypeScript directly); only the web app
+compiles. Build it, start the API, then serve the bundle with Vite's preview
+server:
+
+```bash
+npm run build                             # tsc -b && vite build -> web/dist
+npm --prefix server run start             # api -> http://localhost:8787
+npm --prefix web run preview -- --port 5174   # web -> http://localhost:5174
+```
+
+Preview inherits the dev proxy, so `/api` and `/auth` are forwarded to the API
+automatically. The `--port 5174` flag matters: the Google OAuth client is
+registered for `http://localhost:5174`, so sign-in breaks on preview's default
+port (4173). Stop the dev server first - it holds the same port.
+
 ## How it works
 
 ```
