@@ -5,6 +5,8 @@ import {
   InboxIcon,
   LogOutIcon,
   MailIcon,
+  PinIcon,
+  PinOffIcon,
   RotateCcwIcon,
   SearchIcon,
   SlidersHorizontalIcon,
@@ -53,6 +55,8 @@ export function AccountDialog({
   const setInterestsOpen = useGrapevine((s) => s.setInterestsOpen)
   const setAdminOpen = useGrapevine((s) => s.setAdminOpen)
   const signOut = useGrapevine((s) => s.signOut)
+  const pinnedIds = useGrapevine((s) => s.pinnedIds)
+  const togglePin = useGrapevine((s) => s.togglePin)
 
   const [history, setHistory] = useState<IngestRecord[] | null>(null)
   const [historyError, setHistoryError] = useState(false)
@@ -93,6 +97,15 @@ export function AccountDialog({
       ).length,
     }
   }, [events, filters, interests, now])
+
+  // Resolve pinned ids to live events (dropping any since deleted).
+  const pinnedEvents = useMemo(
+    () =>
+      pinnedIds
+        .map((id) => events.find((e) => e.id === id))
+        .filter((e): e is CityEvent => Boolean(e)),
+    [pinnedIds, events],
+  )
 
   const filtersDefault =
     JSON.stringify(filters) === JSON.stringify(DEFAULT_FILTERS)
@@ -180,6 +193,80 @@ export function AccountDialog({
         <Separator className="shrink-0" />
 
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+          {/* pinned */}
+          <section>
+            <SectionHeader
+              icon={<PinIcon className="size-3.5" />}
+              title="Pinned"
+              action={
+                pinnedEvents.length > 0 ? (
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {pinnedEvents.length}
+                  </span>
+                ) : undefined
+              }
+            />
+            {pinnedEvents.length > 0 ? (
+              <div className="mt-2 flex flex-col divide-y divide-border overflow-hidden rounded-lg border">
+                {pinnedEvents.map((e) => {
+                  const ended = hasEnded(e, now)
+                  const on = isLive(e, now)
+                  return (
+                    <div
+                      key={e.id}
+                      className="flex items-center justify-between gap-2 pr-1.5 pl-3"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handOff(() => select(e.id))}
+                        className="flex min-w-0 flex-1 items-baseline gap-2 py-2.5 text-left outline-none focus-visible:underline"
+                      >
+                        <span
+                          className={cn(
+                            "truncate text-[13px] font-medium",
+                            ended &&
+                              "text-muted-foreground line-through decoration-border",
+                          )}
+                        >
+                          {e.title}
+                        </span>
+                        <span className="ml-auto flex shrink-0 items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+                          {on ? (
+                            <>
+                              <span className="size-1.5 animate-pulse rounded-full bg-live" />
+                              <span className="text-live">live</span>
+                            </>
+                          ) : ended ? (
+                            "ended"
+                          ) : (
+                            dayLabel(
+                              e.start,
+                              settings?.tz ?? "America/Los_Angeles",
+                              now,
+                            )
+                          )}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Unpin event"
+                        onClick={() => togglePin(e.id)}
+                        className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                      >
+                        <PinOffIcon className="size-3.5" />
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Nothing pinned yet. Tap the pin on any event to keep it on top
+                of your list.
+              </p>
+            )}
+          </section>
+
           {/* taste */}
           <section>
             <SectionHeader

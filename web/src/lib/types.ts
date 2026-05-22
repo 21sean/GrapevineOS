@@ -133,7 +133,7 @@ export interface User {
   picture: string
   createdAt: string
   lastLoginAt: string
-  prefs?: { filters?: Filters; interests?: Interests }
+  prefs?: { filters?: Filters; interests?: Interests; pinnedIds?: string[] }
 }
 
 export interface Filters {

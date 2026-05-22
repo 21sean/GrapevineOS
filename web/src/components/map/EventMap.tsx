@@ -87,6 +87,7 @@ export function EventMap() {
   const interests = useGrapevine((s) => s.interests)
   const now = useGrapevine((s) => s.now)
   const selectedId = useGrapevine((s) => s.selectedId)
+  const detailOpen = useGrapevine((s) => s.detailOpen)
   const carouselOn = useGrapevine((s) => s.carouselOn)
   const carouselIdx = useGrapevine((s) => s.carouselIdx)
   const trafficOn = useGrapevine((s) => s.trafficOn)
@@ -101,6 +102,12 @@ export function EventMap() {
     () => carouselEvents(events, filters, interests, now),
     [events, filters, interests, now],
   )
+
+  // A marker looks "selected" only while its detail sheet is open. Keeping
+  // selectedId set through the sheet's close animation is what lets the sheet
+  // fade out — but the marker must drop its selected look the moment the sheet
+  // starts closing (click-off, Escape, X), not stay stuck highlighted.
+  const activeId = detailOpen ? selectedId : null
 
   // --- init (once per mount; cleanup per mapbox-web-integration-patterns) ---
   useEffect(() => {
@@ -179,7 +186,7 @@ export function EventMap() {
     for (const e of visible) {
       const existing = markersRef.current.get(e.id)
       if (existing) {
-        decorate(existing.el, e, now, selectedId)
+        decorate(existing.el, e, now, activeId)
         continue
       }
       // Mapbox owns the outer element (positions it via inline transform);
@@ -196,7 +203,7 @@ export function EventMap() {
       label.className = "gv-marker-label"
       el.append(icon, label)
       root.appendChild(el)
-      decorate(el, e, now, selectedId)
+      decorate(el, e, now, activeId)
       root.addEventListener("click", (ev) => {
         ev.stopPropagation()
         select(e.id)
@@ -206,7 +213,7 @@ export function EventMap() {
         .addTo(map)
       markersRef.current.set(e.id, { marker, el })
     }
-  }, [visible, now, selectedId, select])
+  }, [visible, now, activeId, select])
 
   // --- traffic visibility (layer created lazily on first enable) ---
   useEffect(() => {
@@ -259,8 +266,9 @@ export function EventMap() {
   }, [focusId, focusSeq, carouselOn])
 
   // mapbox-gl.css forces `position: relative` on the container, so size it
-  // explicitly instead of relying on absolute inset-0.
-  return <div ref={containerRef} className="size-full" />
+  // explicitly instead of relying on absolute inset-0. The gv-map class scopes
+  // the dark control overrides in index.css so they outrank mapbox's own CSS.
+  return <div ref={containerRef} className="gv-map size-full" />
 }
 
 function decorate(

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { CarFrontIcon, HeartIcon, Settings2Icon } from "lucide-react"
+import { HeartIcon, Settings2Icon } from "lucide-react"
 import { AccountDialog } from "@/components/AccountDialog"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -16,8 +16,6 @@ export function TopBar() {
   const settings = useGrapevine((s) => s.settings)
   const events = useGrapevine((s) => s.events)
   const now = useGrapevine((s) => s.now)
-  const trafficOn = useGrapevine((s) => s.trafficOn)
-  const setTraffic = useGrapevine((s) => s.setTraffic)
   const setInterestsOpen = useGrapevine((s) => s.setInterestsOpen)
   const setAdminOpen = useGrapevine((s) => s.setAdminOpen)
   const user = useGrapevine((s) => s.user)
@@ -62,20 +60,6 @@ export function TopBar() {
             </Button>
           </TooltipTrigger>
           <TooltipContent>Tune what floats to the top</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant={trafficOn ? "secondary" : "ghost"}
-              size="sm"
-              className="rounded-full"
-              onClick={() => setTraffic(!trafficOn)}
-            >
-              <CarFrontIcon data-icon="inline-start" />
-              Traffic
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Show live congestion on the map</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
