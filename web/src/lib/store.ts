@@ -34,6 +34,8 @@ interface GrapevineState {
   // "happening now" carousel card: minimized + resizable width (device-local)
   carouselMin: boolean
   carouselWidth: number
+  // phone bottom sheet position; the tour card hides above "peek"
+  dockState: "peek" | "half" | "full"
 
   // preferences (persisted)
   filters: Filters
@@ -55,6 +57,7 @@ interface GrapevineState {
   setRailWidth: (px: number) => void
   setCarouselMin: (v: boolean) => void
   setCarouselWidth: (px: number) => void
+  setDockState: (s: "peek" | "half" | "full") => void
   setFilters: (patch: Partial<Filters>) => void
   toggleCategory: (c: Category) => void
   setInterests: (i: Interests) => void
@@ -101,6 +104,7 @@ export const useGrapevine = create<GrapevineState>()(
       railWidth: 340,
       carouselMin: false,
       carouselWidth: 440,
+      dockState: "peek",
 
       filters: DEFAULT_FILTERS,
       interests: { loves: [], avoids: [] },
@@ -155,6 +159,7 @@ export const useGrapevine = create<GrapevineState>()(
       setRailWidth: (railWidth) => set({ railWidth }),
       setCarouselMin: (carouselMin) => set({ carouselMin }),
       setCarouselWidth: (carouselWidth) => set({ carouselWidth }),
+      setDockState: (dockState) => set({ dockState }),
 
       setFilters(patch) {
         set({ filters: { ...get().filters, ...patch } })

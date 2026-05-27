@@ -27,22 +27,27 @@ export function TopBar() {
   )
 
   return (
-    <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-4 p-4">
-      <div className="glass pointer-events-auto flex h-11 items-center gap-3 rounded-full px-4">
-        <span className="font-heading text-lg font-semibold italic tracking-tight">
+    // Safe-area maxes keep the pills clear of the notch and rounded corners
+    // when the app runs full-bleed (viewport-fit=cover / add-to-home-screen).
+    <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 pt-[max(env(safe-area-inset-top),0.75rem)] pr-[max(env(safe-area-inset-right),0.75rem)] pl-[max(env(safe-area-inset-left),0.75rem)] sm:gap-4 sm:pt-4 sm:pr-4 sm:pl-4">
+      <div className="glass pointer-events-auto flex h-11 items-center gap-2.5 rounded-full px-3.5 sm:gap-3 sm:px-4">
+        <span className="font-heading text-base font-semibold italic tracking-tight sm:text-lg">
           Grapevine
         </span>
+        {/* the city is ambient context — the live count earns the phone space */}
+        <Separator orientation="vertical" className="!h-4 max-sm:hidden" />
+        <span className="text-sm text-muted-foreground max-sm:hidden">
+          {settings?.city}
+        </span>
         <Separator orientation="vertical" className="!h-4" />
-        <span className="text-sm text-muted-foreground">{settings?.city}</span>
-        <Separator orientation="vertical" className="!h-4" />
-        <span className="inline-flex items-center gap-1.5 font-mono text-xs">
+        <span className="inline-flex items-center gap-1.5 font-mono text-xs whitespace-nowrap">
           <span
             className={cn(
               "size-2 rounded-full",
               liveCount ? "animate-pulse bg-live" : "bg-muted-foreground/50",
             )}
           />
-          {liveCount} live now
+          {liveCount} live<span className="max-sm:hidden"> now</span>
         </span>
       </div>
 
@@ -52,11 +57,12 @@ export function TopBar() {
             <Button
               variant="ghost"
               size="sm"
-              className="rounded-full"
+              className="rounded-full max-sm:size-8 max-sm:p-0"
+              aria-label="Interests"
               onClick={() => setInterestsOpen(true)}
             >
               <HeartIcon data-icon="inline-start" />
-              Interests
+              <span className="max-sm:hidden">Interests</span>
             </Button>
           </TooltipTrigger>
           <TooltipContent>Tune what floats to the top</TooltipContent>

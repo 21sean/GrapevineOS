@@ -9,7 +9,9 @@ import { EventDetail } from "@/components/EventDetail"
 import { FilterRail } from "@/components/FilterRail"
 import { InterestsDialog } from "@/components/InterestsDialog"
 import { EventMap } from "@/components/map/EventMap"
+import { MobileDock } from "@/components/MobileDock"
 import { TopBar } from "@/components/TopBar"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import { carouselEvents } from "@/lib/score"
 import { useGrapevine } from "@/lib/store"
 
@@ -32,6 +34,7 @@ export function App() {
   const now = useGrapevine((s) => s.now)
 
   const [loadError, setLoadError] = useState<string | null>(null)
+  const isMobile = useIsMobile()
   // Latch so the sheet stays mounted after closing — otherwise the close
   // animation would be cut off when adminOpen flips false.
   const [adminEverOpened, setAdminEverOpened] = useState(false)
@@ -75,14 +78,16 @@ export function App() {
 
   return (
     <TooltipProvider delayDuration={250}>
-      <div className="relative h-svh w-full overflow-hidden">
+      {/* dvh so the layout tracks Safari's collapsing toolbar; nothing sits in
+          a dead strip when the browser chrome animates away. */}
+      <div className="relative h-dvh w-full overflow-hidden">
         {/* Map mounts immediately so WebGL init, style download, and tile
             fetches run in parallel with the API calls instead of behind them. */}
         <EventMap />
         {loaded ? (
           <>
             <TopBar />
-            <FilterRail />
+            {isMobile ? <MobileDock /> : <FilterRail />}
             <CarouselOverlay />
             <EventDetail />
             <InterestsDialog />
@@ -120,7 +125,8 @@ export function App() {
             )}
           </div>
         )}
-        <Toaster theme="dark" position="bottom-right" />
+        {/* bottom-right is dock territory on phones — toast at the top there */}
+        <Toaster theme="dark" position={isMobile ? "top-center" : "bottom-right"} />
       </div>
     </TooltipProvider>
   )

@@ -28,6 +28,11 @@ export function scoreEvent(e: CityEvent, interests: Interests, now: Date): numbe
   return s
 }
 
+/** Badge count for collapsed filter disclosures, so active filters aren't invisible. */
+export function activeFilterCount(f: Filters): number {
+  return f.categories.length + (f.minRating > 0 ? 1 : 0)
+}
+
 export function matchesFilters(
   e: CityEvent,
   f: Filters,

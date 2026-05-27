@@ -6,8 +6,18 @@
          TLS connection while the JS bundle is still downloading. -->
     <link rel="preconnect" href="https://api.mapbox.com" crossorigin />
     <link rel="icon" type="image/svg+xml" href="/grapevine.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover lets the map run under the notch/home indicator;
+         overlays pad themselves back out with env(safe-area-inset-*). -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
     <meta name="theme-color" content="#131118" />
+    <!-- Add-to-home-screen: full-bleed dark chrome instead of Safari UI. -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Grapevine" />
     <meta
       name="description"
       content="Grapevine · a live map of the San Diego events locals actually go to."

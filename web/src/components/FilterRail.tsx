@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import {
   ChevronDownIcon,
   GemIcon,
@@ -13,8 +13,9 @@ import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { EventCard } from "@/components/EventCard"
+import { useOrderedEvents } from "@/hooks/useOrderedEvents"
+import { activeFilterCount } from "@/lib/score"
 import { useGrapevine } from "@/lib/store"
-import { visibleEvents } from "@/lib/score"
 import { CATEGORIES, CATEGORY_META, type Category } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -22,12 +23,8 @@ const RAIL_MIN = 300
 const RAIL_MAX = 560
 
 export function FilterRail() {
-  const events = useGrapevine((s) => s.events)
   const filters = useGrapevine((s) => s.filters)
-  const interests = useGrapevine((s) => s.interests)
-  const now = useGrapevine((s) => s.now)
   const setFilters = useGrapevine((s) => s.setFilters)
-  const pinnedIds = useGrapevine((s) => s.pinnedIds)
   const railWidth = useGrapevine((s) => s.railWidth)
   const setRailWidth = useGrapevine((s) => s.setRailWidth)
 
@@ -35,24 +32,7 @@ export function FilterRail() {
   // so the list gets the room by default.
   const [filtersOpen, setFiltersOpen] = useState(false)
 
-  const visible = useMemo(
-    () => visibleEvents(events, filters, interests, now),
-    [events, filters, interests, now],
-  )
-
-  // Pinned events float to the top, keeping their buzz order among themselves.
-  const ordered = useMemo(() => {
-    if (pinnedIds.length === 0) return visible
-    const pinned = new Set(pinnedIds)
-    return [
-      ...visible.filter((e) => pinned.has(e.id)),
-      ...visible.filter((e) => !pinned.has(e.id)),
-    ]
-  }, [visible, pinnedIds])
-
-  // Badge on the collapsed disclosure so active filters aren't invisible.
-  const activeFilterCount =
-    filters.categories.length + (filters.minRating > 0 ? 1 : 0)
+  const { visible, ordered } = useOrderedEvents()
 
   // Drag the right edge to resize; width persists (device-local).
   const startResize = (e: React.PointerEvent) => {
@@ -113,9 +93,9 @@ export function FilterRail() {
             <span className="flex items-center gap-2">
               <SlidersHorizontalIcon className="size-3.5 text-muted-foreground" />
               Filters
-              {activeFilterCount > 0 && (
+              {activeFilterCount(filters) > 0 && (
                 <span className="rounded-full bg-wine/20 px-1.5 py-px font-mono text-[10px] text-wine">
-                  {activeFilterCount}
+                  {activeFilterCount(filters)}
                 </span>
               )}
             </span>
@@ -128,48 +108,8 @@ export function FilterRail() {
           </button>
 
           {filtersOpen && (
-            <div className="flex flex-col gap-3 duration-150 animate-in fade-in-0 slide-in-from-top-1">
-              <div className="flex items-center gap-3">
-                <span className="text-xs whitespace-nowrap text-muted-foreground">
-                  Buzz
-                </span>
-                <Slider
-                  value={[filters.minRating]}
-                  min={0}
-                  max={5}
-                  step={0.5}
-                  onValueChange={([v]) => setFilters({ minRating: v })}
-                />
-                <span className="w-9 text-right font-mono text-xs text-muted-foreground">
-                  {filters.minRating > 0
-                    ? `${filters.minRating.toFixed(1)}+`
-                    : "any"}
-                </span>
-              </div>
-
-              <ToggleGroup
-                type="multiple"
-                variant="outline"
-                size="sm"
-                className="flex-wrap justify-start"
-                value={filters.categories}
-                onValueChange={(v) => setFilters({ categories: v as Category[] })}
-              >
-                {CATEGORIES.map((c) => (
-                  <ToggleGroupItem
-                    key={c}
-                    value={c}
-                    aria-label={CATEGORY_META[c].label}
-                    className="gap-1.5 rounded-full px-3"
-                  >
-                    <span
-                      className="size-2 rounded-full"
-                      style={{ background: CATEGORY_META[c].color }}
-                    />
-                    {CATEGORY_META[c].label}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
+            <div className="duration-150 animate-in fade-in-0 slide-in-from-top-1">
+              <BuzzAndCategoryFilters />
             </div>
           )}
         </div>
@@ -217,6 +157,59 @@ export function FilterRail() {
         <span className="h-10 w-1 rounded-full bg-border/80 transition-colors group-hover/resize:bg-ring" />
       </div>
     </aside>
+  )
+}
+
+/**
+ * Buzz threshold + category chips — the disclosure body, shared between the
+ * desktop rail and the phone dock.
+ */
+export function BuzzAndCategoryFilters() {
+  const filters = useGrapevine((s) => s.filters)
+  const setFilters = useGrapevine((s) => s.setFilters)
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-3">
+        <span className="text-xs whitespace-nowrap text-muted-foreground">
+          Buzz
+        </span>
+        <Slider
+          value={[filters.minRating]}
+          min={0}
+          max={5}
+          step={0.5}
+          onValueChange={([v]) => setFilters({ minRating: v })}
+        />
+        <span className="w-9 text-right font-mono text-xs text-muted-foreground">
+          {filters.minRating > 0 ? `${filters.minRating.toFixed(1)}+` : "any"}
+        </span>
+      </div>
+
+      <ToggleGroup
+        type="multiple"
+        variant="outline"
+        size="sm"
+        className="flex-wrap justify-start"
+        value={filters.categories}
+        onValueChange={(v) => setFilters({ categories: v as Category[] })}
+      >
+        {CATEGORIES.map((c) => (
+          <ToggleGroupItem
+            key={c}
+            value={c}
+            aria-label={CATEGORY_META[c].label}
+            className="gap-1.5 rounded-full px-3"
+          >
+            <span
+              className="size-2 rounded-full"
+              style={{ background: CATEGORY_META[c].color }}
+            />
+            {CATEGORY_META[c].label}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+    </div>
   )
 }
 

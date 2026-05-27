@@ -20,6 +20,7 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { StarRating } from "@/components/StarRating"
 import { useEta } from "@/hooks/useEta"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import { api } from "@/lib/api"
 import { useGrapevine } from "@/lib/store"
 import { fmtTime, isLive, statusLabel } from "@/lib/time"
@@ -36,6 +37,7 @@ export function EventDetail() {
   const upsertEvent = useGrapevine((s) => s.upsertEvent)
 
   const [rating, setRating] = useState(false)
+  const isMobile = useIsMobile()
 
   const event = events.find((e) => e.id === selectedId)
   const eta = useEta(detailOpen ? event : null)
@@ -64,7 +66,21 @@ export function EventDetail() {
 
   return (
     <Sheet open={detailOpen} onOpenChange={setDetailOpen}>
-      <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-md">
+      {/* Phones get an iOS-style bottom sheet; desktop keeps the side panel. */}
+      <SheetContent
+        side={isMobile ? "bottom" : "right"}
+        className={
+          isMobile
+            ? "max-h-[86svh] gap-0 overflow-y-auto overscroll-contain rounded-t-2xl pb-[env(safe-area-inset-bottom)]"
+            : "w-full gap-0 overflow-y-auto sm:max-w-md"
+        }
+      >
+        {isMobile && (
+          <div
+            aria-hidden
+            className="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-muted-foreground/40"
+          />
+        )}
         <SheetHeader className="gap-2">
           <span
             className="font-mono text-[11px] tracking-[0.18em] uppercase"

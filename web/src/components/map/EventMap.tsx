@@ -262,12 +262,20 @@ export function EventMap() {
     const map = mapRef.current
     if (!map || !focus) return
     cameraTouchedRef.current = true
+    // Phones: the top pills and the tour card + dock frame a clear strip of
+    // map; pad the camera so the focused marker lands inside it, not under
+    // the overlays. (Media query, not a hook — read at fly time so rotating
+    // the device mid-session picks the right frame.)
+    const phone = window.matchMedia("(max-width: 767px)").matches
     map.flyTo({
       center: [focus.lng, focus.lat],
       zoom: carouselOn ? 14.6 : 15.2,
       pitch: 60,
       bearing: -30 + ((focusSeq >= 0 ? focusSeq : 0) % 5) * 18,
       duration: carouselOn ? 3200 : 2200,
+      padding: phone
+        ? { top: 110, bottom: 300, left: 24, right: 24 }
+        : { top: 0, bottom: 0, left: 0, right: 0 },
       essential: false, // respect prefers-reduced-motion
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps

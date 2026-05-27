@@ -61,7 +61,9 @@ export function EventCard({ event }: { event: CityEvent }) {
               "-my-1 -mr-1 flex size-6 items-center justify-center rounded-md transition hover:bg-background/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
               pinned
                 ? "text-wine"
-                : "text-muted-foreground opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
+                : // gv-pin-btn: index.css keeps this visible on touch screens,
+                  // where the hover reveal below can never fire
+                  "gv-pin-btn text-muted-foreground opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
             )}
           >
             <PinIcon className={cn("size-3.5", pinned && "fill-current")} />

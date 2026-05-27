@@ -103,10 +103,25 @@
     }
   body {
     @apply bg-background text-foreground overscroll-none;
+    /* the gray flash on every tap reads as broken on iOS */
+    -webkit-tap-highlight-color: transparent;
     }
   html {
     @apply font-sans;
+    /* keep Safari from auto-inflating text when the address bar collapses */
+    -webkit-text-size-adjust: 100%;
     }
+  button, [role="button"], a {
+    /* drop the 350ms double-tap-zoom delay on interactive elements */
+    touch-action: manipulation;
+    }
+  /* iOS zooms the whole page into any focused input under 16px — override
+     the 14px shadcn default on phones instead of banning user zoom. */
+  @media (max-width: 767px) {
+    input, textarea, select {
+      font-size: 16px;
+    }
+  }
 }
 
 @layer components {
@@ -245,6 +260,21 @@
   }
 }
 
+@media (pointer: coarse) {
+  /* a 24px dot is a miserable fingertip target — pad the hit area
+     invisibly out to ~44px without touching the visual size */
+  .gv-marker::before {
+    content: "";
+    position: absolute;
+    inset: -10px;
+    border-radius: 9999px;
+  }
+  /* the pin button hides behind hover on desktop; there is no hover here */
+  .gv-pin-btn {
+    opacity: 0.7;
+  }
+}
+
 /* ---------- mapbox controls (dark) ---------- */
 /* All rules are prefixed with .gv-map (the map container) so they outrank the
    default mapbox-gl.css, whichever stylesheet the bundler emits last. */
@@ -291,4 +321,27 @@
 }
 .gv-map .mapboxgl-ctrl-group button:disabled .mapboxgl-ctrl-icon {
   opacity: 0.3;
+}
+
+/* Phones: the bottom-right corner belongs to the dock and tour card. Pinch
+   replaces the zoom buttons; only the compass survives (the tour rotates the
+   bearing, so "which way is north" needs a one-tap answer), moved up under
+   the top-bar pills and sized for fingers. */
+@media (max-width: 767px) {
+  .gv-map .mapboxgl-ctrl-bottom-right {
+    top: calc(max(env(safe-area-inset-top), 0.75rem) + 3.25rem);
+    bottom: auto;
+    right: max(env(safe-area-inset-right), 0.25rem);
+  }
+  .gv-map .mapboxgl-ctrl-group button.mapboxgl-ctrl-zoom-in,
+  .gv-map .mapboxgl-ctrl-group button.mapboxgl-ctrl-zoom-out {
+    display: none;
+  }
+  .gv-map .mapboxgl-ctrl-group button + button {
+    border-top: none;
+  }
+  .gv-map .mapboxgl-ctrl-group button {
+    width: 40px;
+    height: 40px;
+  }
 }
