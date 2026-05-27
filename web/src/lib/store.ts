@@ -31,6 +31,9 @@ interface GrapevineState {
   userPos: [number, number] | null
   // width of the left event-list rail, in px (device-local, resizable)
   railWidth: number
+  // "happening now" carousel card: minimized + resizable width (device-local)
+  carouselMin: boolean
+  carouselWidth: number
 
   // preferences (persisted)
   filters: Filters
@@ -50,6 +53,8 @@ interface GrapevineState {
   setTraffic: (on: boolean) => void
   setUserPos: (pos: [number, number] | null) => void
   setRailWidth: (px: number) => void
+  setCarouselMin: (v: boolean) => void
+  setCarouselWidth: (px: number) => void
   setFilters: (patch: Partial<Filters>) => void
   toggleCategory: (c: Category) => void
   setInterests: (i: Interests) => void
@@ -94,6 +99,8 @@ export const useGrapevine = create<GrapevineState>()(
       trafficOn: true,
       userPos: null,
       railWidth: 340,
+      carouselMin: false,
+      carouselWidth: 440,
 
       filters: DEFAULT_FILTERS,
       interests: { loves: [], avoids: [] },
@@ -146,6 +153,8 @@ export const useGrapevine = create<GrapevineState>()(
       setTraffic: (trafficOn) => set({ trafficOn }),
       setUserPos: (userPos) => set({ userPos }),
       setRailWidth: (railWidth) => set({ railWidth }),
+      setCarouselMin: (carouselMin) => set({ carouselMin }),
+      setCarouselWidth: (carouselWidth) => set({ carouselWidth }),
 
       setFilters(patch) {
         set({ filters: { ...get().filters, ...patch } })
@@ -203,6 +212,8 @@ export const useGrapevine = create<GrapevineState>()(
         interests: s.interests,
         pinnedIds: s.pinnedIds,
         railWidth: s.railWidth,
+        carouselWidth: s.carouselWidth,
+        carouselMin: s.carouselMin,
       }),
       // v0 persisted a `trafficOn` toggle; traffic is now always on, so drop
       // the stored value and let the `true` default win.

@@ -25,6 +25,10 @@ function markerScaleForZoom(zoom: number): number {
   return MARKER_MIN_SCALE + t * (1 - MARKER_MIN_SCALE)
 }
 
+// Lift markers a touch off their ground point so they read as floating above
+// the pitched 3D basemap rather than lying flat on it.
+const MARKER_LIFT = 16
+
 // Seed camera so the map boots (WebGL, style, tiles) in parallel with the API
 // fetch instead of behind it; settings recenter it on arrival if they differ.
 const FALLBACK_CENTER: [number, number] = [-117.1611, 32.7157] // San Diego
@@ -208,7 +212,11 @@ export function EventMap() {
         ev.stopPropagation()
         select(e.id)
       })
-      const marker = new mapboxgl.Marker({ element: root, anchor: "center" })
+      const marker = new mapboxgl.Marker({
+        element: root,
+        anchor: "center",
+        offset: [0, -MARKER_LIFT],
+      })
         .setLngLat([e.lng, e.lat])
         .addTo(map)
       markersRef.current.set(e.id, { marker, el })
