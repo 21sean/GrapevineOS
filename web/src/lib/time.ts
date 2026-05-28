@@ -4,6 +4,28 @@ export function isLive(e: CityEvent, now: Date): boolean {
   return new Date(e.start) <= now && now <= new Date(e.end)
 }
 
+/** Mapbox Standard's four time-of-day lighting presets. */
+export type LightPreset = "dawn" | "day" | "dusk" | "night"
+
+/**
+ * Pick the basemap lighting from the local hour in `tz`, so the map dawns,
+ * brightens, and darkens in step with the city on screen (Pacific for San
+ * Diego). h23 hour cycle keeps midnight at 0 rather than 24.
+ */
+export function lightPresetForTime(now: Date, tz: string): LightPreset {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      hour: "numeric",
+      hourCycle: "h23",
+    }).format(now),
+  )
+  if (hour >= 5 && hour < 7) return "dawn"
+  if (hour >= 7 && hour < 18) return "day"
+  if (hour >= 18 && hour < 20) return "dusk"
+  return "night"
+}
+
 export function hasEnded(e: CityEvent, now: Date): boolean {
   return new Date(e.end) < now
 }
