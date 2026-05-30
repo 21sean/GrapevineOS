@@ -4,7 +4,7 @@ import mapboxgl from "mapbox-gl"
 import "mapbox-gl/dist/mapbox-gl.css"
 import { useGrapevine } from "@/lib/store"
 import { carouselEvents, visibleEvents } from "@/lib/score"
-import { isLive } from "@/lib/time"
+import { isLive, lightPresetForTime } from "@/lib/time"
 import { CATEGORY_META, type Category, type CityEvent } from "@/lib/types"
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN as string
@@ -113,13 +113,26 @@ export function EventMap() {
   // starts closing (click-off, Escape, X), not stay stuck highlighted.
   const activeId = detailOpen ? selectedId : null
 
+  // Map lighting tracks the wall clock in the city's own timezone — Pacific for
+  // San Diego — so the basemap moves through dawn/day/dusk/night with real time
+  // instead of sitting on a fixed preset. `now` ticks every 30s, but the memo
+  // only yields a new string when the hour crosses a boundary, so downstream
+  // effects stay idle in between. Falls back to LA time until settings arrive.
+  const lightPreset = useMemo(
+    () => lightPresetForTime(now, settings?.tz ?? "America/Los_Angeles"),
+    [now, settings?.tz],
+  )
+  // Latest preset for the init/style.load handlers, which run outside render.
+  // Seeded from the mount-time value; kept current by the sync effect below.
+  const lightPresetRef = useRef(lightPreset)
+
   // --- init (once per mount; cleanup per mapbox-web-integration-patterns) ---
   useEffect(() => {
     if (!containerRef.current) return
     const map = new mapboxgl.Map({
       container: containerRef.current,
       style: "mapbox://styles/mapbox/standard",
-      config: { basemap: { lightPreset: "night" } },
+      config: { basemap: { lightPreset: lightPresetRef.current } },
       center: FALLBACK_CENTER,
       zoom: 11.8,
       pitch: 52,
@@ -147,7 +160,7 @@ export function EventMap() {
 
     map.on("style.load", () => {
       styleReadyRef.current = true
-      map.setConfigProperty("basemap", "lightPreset", "night")
+      map.setConfigProperty("basemap", "lightPreset", lightPresetRef.current)
       // trafficOn is persisted; restore it once the style can take layers
       if (useGrapevine.getState().trafficOn) addTrafficLayer(map)
     })
@@ -162,6 +175,14 @@ export function EventMap() {
       mapRef.current = null
     }
   }, [])
+
+  // --- keep basemap lighting in sync as the hour (or city timezone) changes ---
+  useEffect(() => {
+    lightPresetRef.current = lightPreset
+    const map = mapRef.current
+    if (!map || !styleReadyRef.current) return
+    map.setConfigProperty("basemap", "lightPreset", lightPreset)
+  }, [lightPreset])
 
   // --- settings arrive after the map booted: recenter if nothing moved yet ---
   useEffect(() => {
