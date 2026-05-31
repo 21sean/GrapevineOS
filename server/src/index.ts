@@ -7,6 +7,7 @@ import { listInstalled, ollamaBase } from "./ollama.js";
 import { catalog, logo } from "./catalog.js";
 import { eta, geocode } from "./mapbox.js";
 import { extractEvents, rateEvent } from "./ingest.js";
+import { startKvPoll } from "./kvpoll.js";
 import type { CityEvent } from "./types.js";
 
 const app = express();
@@ -218,4 +219,5 @@ app.post("/api/ingest/inbound", async (req, res) => {
 const port = Number(process.env.PORT ?? 8787);
 app.listen(port, () => {
   console.log(`[grapevine] api listening on http://localhost:${port}`);
+  startKvPoll();
 });

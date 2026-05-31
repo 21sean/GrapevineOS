@@ -46,12 +46,16 @@ newsletters ──> Cloudflare Email Routing (catch-all @sean.ventures)
                      │  each source gets its own address: sdtoday@, axios-sandiego@…
                      ▼
               Email Worker (workers/email-ingest)
-                     │  parse -> POST /api/ingest/inbound (shared key)
+                     │  parse -> write to RAW_EMAILS KV namespace
                      ▼
+                 Cloudflare KV  (30-day TTL = re-runnable backup)
+                     ▲
+                     │  server POLLS KV every 60s - no tunnel, no inbound URL
    ┌──────────  Express API (server/) ─────────────┐
+   │  kv-poll: pull new emails, skip processed ids │
    │  Ollama: extract events as strict JSON        │
    │  Ollama: 1-5 "local buzz" rating + promo flag │
-   │  Mapbox (sk token): geocode venues, ETAs      │
+   │  Mapbox (sk token): geocode (bbox-locked), ETA│
    │  JSON store: server/data/events.json          │
    └──────────────────┬────────────────────────────┘
                       ▼
@@ -75,27 +79,64 @@ newsletters ──> Cloudflare Email Routing (catch-all @sean.ventures)
    geocoding (Mapbox, cached), a jaded-local 1-5 buzz rating, and a
    `promoted` flag for pay-to-play placements. Nothing leaves your machine.
 
-Until the worker is deployed, paste any newsletter into
-**Admin -> Ingest** - same pipeline, manual entry.
+You can also paste any newsletter into **Admin -> Ingest** at any time - same
+pipeline, manual entry.
 
-## Deploying the email worker
+## Deploying the email worker (KV-pull, the default)
+
+The worker writes each email to a KV namespace; the local server polls that
+namespace. No tunnel, nothing to redeploy when your laptop's address changes,
+and it catches up on anything that arrived while the machine was asleep.
+
+**Already done for `sean.ventures`:**
+
+- KV namespace `RAW_EMAILS` created (`id 697e0cae62bf4a179aa94e010baa4e5b`,
+  wired into `wrangler.toml` and `server/.env` as `KV_NAMESPACE_ID`)
+- Worker deployed -> `https://grapevine-email-ingest.spagani3.workers.dev`
+- Server poller verified end-to-end (email in KV -> Ollama -> map)
+
+**The one step left - point the catch-all at the worker** (needs Email Routing
+perms this token doesn't have, so do it in the dashboard, zone `sean.ventures`):
+
+> Email -> Email Routing -> Routing rules -> **Catch-all** -> Edit ->
+> Action **Send to Worker** -> `grapevine-email-ingest` -> Save. Make sure the
+> catch-all rule is **enabled**.
+
+That's it. Subscribe newsletters to `sdtoday@sean.ventures`,
+`axios-sandiego@sean.ventures`, etc. and they flow onto the map within a minute.
+
+**To re-deploy the worker after code changes:**
 
 ```bash
 cd workers/email-ingest
-npm install
-npx wrangler kv namespace create RAW_EMAILS   # paste id into wrangler.toml
-npx wrangler secret put INGEST_KEY            # = INGEST_SHARED_KEY in server/.env
+export CLOUDFLARE_API_TOKEN=...   # "Edit Cloudflare Workers" token
+export CLOUDFLARE_ACCOUNT_ID=97e28655beae5913f3adbe7cbea20514
 npm run deploy
 ```
 
-Then in the Cloudflare dashboard (zone `sean.ventures`):
-**Email -> Email Routing -> enable**, and set the **catch-all rule** to
-*Send to Worker -> grapevine-email-ingest*.
+The poller config lives in `server/.env` (`KV_NAMESPACE_ID`, `KV_POLL_SECONDS`,
+`KV_POLL=0` to pause it). Emails stay in KV for 30 days as a re-runnable backup;
+the server tracks processed keys in `server/data/kv-processed.json`, so nothing
+is ingested twice.
 
-The worker needs `INGEST_URL` to reach your API. For local dev, run
-`cloudflared tunnel --url http://localhost:8787` and put the tunnel URL in
-`wrangler.toml`. Raw emails are always kept in KV for 30 days, so nothing is
-lost while the endpoint is down - re-run them any time.
+### Alternative: push mode (tunnel / deployed API)
+
+If you'd rather the worker POST straight to the API instead of polling, set
+`INGEST_URL` in `wrangler.toml` `[vars]` to a reachable URL and
+`npx wrangler secret put INGEST_KEY` (= `INGEST_SHARED_KEY` in `server/.env`),
+then redeploy. For a local server, expose it with
+`cloudflared tunnel --url http://localhost:8787` - but the quick-tunnel URL
+changes on every restart, so you'd edit `wrangler.toml` and redeploy each time.
+That fragility is exactly why pull mode is the default. The worker writes to KV
+either way, so you can run both at once.
+
+### Is it free?
+
+Yes, end to end. **Email Routing** is free and unlimited. The **Workers free
+plan** (100k requests/day) covers Email Workers. **KV** free tier is 100k
+reads + 1k writes/day, 1 GB - a 60s poll is ~1,440 list ops/day plus a read per
+new email, far under the cap. The **cloudflared quick-tunnel** (push mode) is
+free too.
 
 ## Mapbox usage & free tier
 

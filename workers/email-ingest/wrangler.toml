@@ -1,33 +1,35 @@
 # Grapevine email ingestion worker
 #
 # Every newsletter sent to *@sean.ventures lands here via Email Routing's
-# catch-all. The worker parses the email and forwards it to the Grapevine
-# ingest endpoint, keeping the raw copy in KV as a backup.
+# catch-all. The worker parses the email and writes it to the RAW_EMAILS KV
+# namespace. In the default PULL setup the local server polls that namespace —
+# no tunnel, nothing to redeploy.
 #
-# One-time setup (Cloudflare dashboard, zone sean.ventures):
-#   1. Email > Email Routing > enable (Cloudflare adds MX/SPF records)
-#   2. Create the KV namespace:  npx wrangler kv namespace create RAW_EMAILS
-#      then paste the returned id below.
-#   3. Set the secret:           npx wrangler secret put INGEST_KEY
-#      (must match INGEST_SHARED_KEY in server/.env)
-#   4. Deploy:                   npm run deploy
-#   5. Email > Email Routing > Routing rules > Catch-all
-#      -> action "Send to Worker" -> grapevine-email-ingest
+# One-time setup:
+#   1. Dashboard > Email > Email Routing > enable (adds MX/SPF records)   [done]
+#   2. npx wrangler kv namespace create RAW_EMAILS
+#        -> paste the returned id into `id` below
+#        -> also put it in server/.env as KV_NAMESPACE_ID (the poller reads it)
+#   3. npm run deploy
+#   4. Dashboard > Email > Email Routing > Routing rules > Catch-all
+#        -> action "Send to Worker" -> grapevine-email-ingest
 #
-# Auth for wrangler: set CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID in your
-# shell (values are in server/.env), or run `npx wrangler login`.
+# Wrangler auth: create an API token (template "Edit Cloudflare Workers"),
+# then `export CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=...`, or run
+# `npx wrangler login`.
 
 name = "grapevine-email-ingest"
 main = "src/index.ts"
 compatibility_date = "2025-06-01"
 account_id = "97e28655beae5913f3adbe7cbea20514"
 
-[vars]
-# Where to POST parsed emails. The local dev server is not reachable from
-# Cloudflare — point this at a tunnel (`cloudflared tunnel --url
-# http://localhost:8787`) or the deployed API when you have one.
-INGEST_URL = "https://REPLACE-WITH-TUNNEL-OR-DEPLOY.example.com/api/ingest/inbound"
-
 [[kv_namespaces]]
 binding = "RAW_EMAILS"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "697e0cae62bf4a179aa94e010baa4e5b"
+
+# --- Optional PUSH mode (tunnel/deploy) -------------------------------------
+# Pull mode needs nothing here. To ALSO push each email straight to the API,
+# uncomment and point INGEST_URL at a cloudflared tunnel or your deployed API,
+# then `npx wrangler secret put INGEST_KEY` (= INGEST_SHARED_KEY in server/.env).
+# [vars]
+# INGEST_URL = "https://<your-tunnel>.trycloudflare.com/api/ingest/inbound"

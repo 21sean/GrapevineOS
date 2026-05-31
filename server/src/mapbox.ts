@@ -88,7 +88,17 @@ export interface GeocodeHit {
   name: string;
 }
 
-/** Forward-geocode a venue/address, biased toward the city center. */
+// Half-size of the geocoding box around the city center, in degrees. Wide
+// enough to cover the metro (Del Mar/Escondido to Chula Vista) but tight enough
+// that a vague venue string ("Adams Avenue") can't resolve to another country.
+const GEO_BBOX_LON = 0.75;
+const GEO_BBOX_LAT = 0.65;
+
+/**
+ * Forward-geocode a venue/address, constrained to the city's bounding box.
+ * proximity biases ranking; the bbox + country hard-limit it so a loose venue
+ * name can't land halfway across the world.
+ */
 export async function geocode(
   q: string,
   proximity: [number, number],
@@ -97,10 +107,12 @@ export async function geocode(
   const key = q.trim().toLowerCase();
   if (key in cache) return cache[key];
 
+  const [cx, cy] = proximity;
+  const bbox = [cx - GEO_BBOX_LON, cy - GEO_BBOX_LAT, cx + GEO_BBOX_LON, cy + GEO_BBOX_LAT].join(",");
   const url =
     `https://api.mapbox.com/search/geocode/v6/forward` +
-    `?q=${encodeURIComponent(q)}&proximity=${proximity[0]},${proximity[1]}` +
-    `&limit=1&access_token=${token()}`;
+    `?q=${encodeURIComponent(q)}&proximity=${cx},${cy}` +
+    `&bbox=${bbox}&country=us&limit=1&access_token=${token()}`;
   const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
   if (!res.ok) return null; // don't cache transport errors
   const body = (await res.json()) as any;
