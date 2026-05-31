@@ -1,6 +1,8 @@
 import type {
+  CalendarStatus,
   CityEvent,
   Filters,
+  InboxEmail,
   IngestRecord,
   Interests,
   Settings,
@@ -135,6 +137,36 @@ export const api = {
       }
     }
   },
+
+  calendarStatus: () =>
+    fetch("/api/calendar/status").then((r) => json<CalendarStatus>(r)),
+
+  calendarAdd: (id: string) =>
+    fetch(`/api/calendar/events/${id}`, { method: "POST" }).then((r) =>
+      json<CalendarStatus & { googleSynced: boolean; warning?: string }>(r),
+    ),
+
+  calendarRemove: (id: string) =>
+    fetch(`/api/calendar/events/${id}`, { method: "DELETE" }).then((r) =>
+      json<CalendarStatus>(r),
+    ),
+
+  calendarDisconnect: () =>
+    fetch("/api/calendar/google/disconnect", { method: "POST" }).then((r) =>
+      json<CalendarStatus>(r),
+    ),
+
+  inbox: () =>
+    fetch("/api/inbox").then((r) =>
+      json<{ configured: boolean; emails: InboxEmail[] }>(r),
+    ),
+
+  reprocessInbox: (key: string) =>
+    fetch("/api/inbox/reprocess", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key }),
+    }).then((r) => json<{ extracted: number; added: number }>(r)),
 
   ingestHistory: () =>
     fetch("/api/ingest/history").then((r) => json<IngestRecord[]>(r)),

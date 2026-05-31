@@ -2,12 +2,13 @@ import "dotenv/config";
 import express from "express";
 import { Readable } from "node:stream";
 import { auth } from "./auth.js";
+import { calendar } from "./calendar.js";
 import { store } from "./store.js";
 import { listInstalled, ollamaBase } from "./ollama.js";
 import { catalog, logo } from "./catalog.js";
 import { eta, geocode } from "./mapbox.js";
 import { extractEvents, rateEvent } from "./ingest.js";
-import { startKvPoll } from "./kvpoll.js";
+import { listInbox, reprocessInbox, startKvPoll } from "./kvpoll.js";
 import type { CityEvent } from "./types.js";
 
 const app = express();
@@ -16,6 +17,10 @@ app.use(express.json({ limit: "2mb" }));
 // ---------- auth (Google sign-in, sessions, /api/me) ----------
 
 app.use(auth);
+
+// ---------- calendar (saved events, Google sync, ICS feed) ----------
+
+app.use(calendar);
 
 // ---------- events ----------
 
@@ -211,6 +216,26 @@ app.post("/api/ingest/inbound", async (req, res) => {
       events: eventSnapshot(added),
     });
     res.json({ extracted: events.length, added: added.length });
+  } catch (err) {
+    res.status(502).json({ error: String(err) });
+  }
+});
+
+// ---------- inbox (raw emails sitting in Cloudflare KV) ----------
+
+app.get("/api/inbox", async (_req, res) => {
+  try {
+    res.json(await listInbox());
+  } catch (err) {
+    res.status(502).json({ error: String(err) });
+  }
+});
+
+app.post("/api/inbox/reprocess", async (req, res) => {
+  const key = String(req.body?.key ?? "");
+  if (!key) return res.status(400).json({ error: "key required" });
+  try {
+    res.json(await reprocessInbox(key));
   } catch (err) {
     res.status(502).json({ error: String(err) });
   }

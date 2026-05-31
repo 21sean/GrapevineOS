@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react"
 import {
+  CalendarIcon,
+  CheckIcon,
   ClipboardPasteIcon,
+  CopyIcon,
   HeartIcon,
   InboxIcon,
   LogOutIcon,
@@ -10,8 +13,10 @@ import {
   RotateCcwIcon,
   SearchIcon,
   SlidersHorizontalIcon,
+  UnplugIcon,
   XIcon,
 } from "lucide-react"
+import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -57,10 +62,14 @@ export function AccountDialog({
   const signOut = useGrapevine((s) => s.signOut)
   const pinnedIds = useGrapevine((s) => s.pinnedIds)
   const togglePin = useGrapevine((s) => s.togglePin)
+  const calendar = useGrapevine((s) => s.calendar)
+  const setCalendar = useGrapevine((s) => s.setCalendar)
 
   const [history, setHistory] = useState<IngestRecord[] | null>(null)
   const [historyError, setHistoryError] = useState(false)
   const [query, setQuery] = useState("")
+  const [disconnecting, setDisconnecting] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   // Fresh search each time the dialog opens (render-phase reset, per React docs).
   const [wasOpen, setWasOpen] = useState(open)
@@ -147,6 +156,34 @@ export function AccountDialog({
   const handOff = (action: () => void) => {
     onOpenChange(false)
     action()
+  }
+
+  // Apple Calendar subscribes via the webcal scheme; same feed, same URL.
+  const webcal = calendar?.feedUrl?.replace(/^https?:/, "webcal:")
+
+  async function copyFeed() {
+    if (!webcal) return
+    try {
+      await navigator.clipboard.writeText(webcal)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      toast.error("Couldn't copy — feed link: " + webcal)
+    }
+  }
+
+  async function disconnectGoogle() {
+    setDisconnecting(true)
+    try {
+      setCalendar(await api.calendarDisconnect())
+      toast.success("Google Calendar disconnected", {
+        description: "Events already synced stay on your calendar.",
+      })
+    } catch (err) {
+      toast.error("Couldn't disconnect", { description: String(err).slice(0, 140) })
+    } finally {
+      setDisconnecting(false)
+    }
   }
 
   return (
@@ -265,6 +302,77 @@ export function AccountDialog({
                 of your list.
               </p>
             )}
+          </section>
+
+          {/* calendar sync */}
+          <section>
+            <SectionHeader
+              icon={<CalendarIcon className="size-3.5" />}
+              title="Calendar sync"
+              action={
+                calendar && calendar.synced.length > 0 ? (
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {calendar.synced.length}
+                  </span>
+                ) : undefined
+              }
+            />
+            <div className="mt-2 flex flex-col gap-2">
+              <div className="flex items-center justify-between rounded-lg border px-3 py-2">
+                <span className="flex items-center gap-2 text-[13px] font-medium">
+                  Google Calendar
+                  {calendar?.google && (
+                    <Badge variant="outline" className="border-live/50 text-live">
+                      connected
+                    </Badge>
+                  )}
+                </span>
+                {calendar?.google ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={disconnectGoogle}
+                    disabled={disconnecting}
+                  >
+                    {disconnecting ? (
+                      <Spinner data-icon="inline-start" />
+                    ) : (
+                      <UnplugIcon data-icon="inline-start" />
+                    )}
+                    Disconnect
+                  </Button>
+                ) : (
+                  <Button variant="secondary" size="sm" className="h-7 text-xs" asChild>
+                    <a href="/auth/google/calendar">Connect</a>
+                  </Button>
+                )}
+              </div>
+              <div className="flex items-center justify-between rounded-lg border px-3 py-2">
+                <span className="text-[13px] font-medium">Apple Calendar</span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={copyFeed}
+                  disabled={!webcal}
+                >
+                  {copied ? (
+                    <CheckIcon data-icon="inline-start" />
+                  ) : (
+                    <CopyIcon data-icon="inline-start" />
+                  )}
+                  {copied ? "Copied" : "Copy feed link"}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Saved events sync straight to Google Calendar once connected.
+                Apple doesn't allow direct writes, so subscribe to your feed
+                instead (Calendar → File → New Calendar Subscription) — adds
+                and removals follow automatically. Any event also downloads as
+                a .ics file.
+              </p>
+            </div>
           </section>
 
           {/* taste */}

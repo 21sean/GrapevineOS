@@ -6,6 +6,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { InboxTab } from "@/components/admin/InboxTab"
 import { IngestTab } from "@/components/admin/IngestTab"
 import { ModelsTab } from "@/components/admin/ModelsTab"
 import { SourcesTab } from "@/components/admin/SourcesTab"
@@ -30,6 +31,7 @@ export function AdminSheet() {
             <TabsList className="w-full">
               <TabsTrigger value="models">Models</TabsTrigger>
               <TabsTrigger value="ingest">Ingest</TabsTrigger>
+              <TabsTrigger value="inbox">Inbox</TabsTrigger>
               <TabsTrigger value="sources">Sources</TabsTrigger>
             </TabsList>
             <TabsContent value="models" className="pt-4">
@@ -37,6 +39,9 @@ export function AdminSheet() {
             </TabsContent>
             <TabsContent value="ingest" className="pt-4">
               <IngestTab />
+            </TabsContent>
+            <TabsContent value="inbox" className="pt-4">
+              <InboxTab />
             </TabsContent>
             <TabsContent value="sources" className="pt-4">
               <SourcesTab />

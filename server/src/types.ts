@@ -73,6 +73,26 @@ export interface UserPrefs {
   pinnedIds?: unknown;
 }
 
+/** OAuth tokens from the incremental Google Calendar consent (auth.ts). */
+export interface GoogleTokens {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number; // epoch ms when accessToken dies
+  scope: string;
+}
+
+/**
+ * One event a user saved to their calendar. googleEventId is set once the
+ * entry has been pushed to their Google Calendar; the ICS feed serves the
+ * same set to Apple Calendar and friends.
+ */
+export interface CalendarEntry {
+  userId: string;
+  eventId: string;
+  googleEventId?: string;
+  addedAt: string; // ISO 8601
+}
+
 export interface User {
   id: string;
   googleId: string; // Google `sub` claim — stable per account
@@ -82,6 +102,8 @@ export interface User {
   createdAt: string;
   lastLoginAt: string;
   prefs?: UserPrefs;
+  google?: GoogleTokens; // present once Google Calendar is connected
+  feedToken?: string; // unguessable path segment for the personal ICS feed
 }
 
 export interface Session {

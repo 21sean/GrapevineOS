@@ -33,7 +33,10 @@ function config(): Config | null {
   const namespaceId = process.env.KV_NAMESPACE_ID;
   const disabled = /^(0|false|no)$/i.test(process.env.KV_POLL ?? "");
   if (disabled || !token || !accountId || !namespaceId) return null;
-  const seconds = Number(process.env.KV_POLL_SECONDS ?? 60);
+  // Every tick costs one KV `list` op, and the free tier allows 1,000/day —
+  // a 60s poll alone eats 1,440. Newsletters aren't latency-sensitive, so
+  // default to 15 minutes (96/day) and let .env override for testing.
+  const seconds = Number(process.env.KV_POLL_SECONDS ?? 900);
   return {
     token,
     accountId,
@@ -87,18 +90,35 @@ async function listKeys(c: Config): Promise<string[]> {
   return names;
 }
 
-async function readEmail(c: Config, key: string): Promise<{
+interface RawEmail {
   to?: string;
+  from?: string;
   subject?: string;
   text?: string;
-} | null> {
+  receivedAt?: string;
+}
+
+// KV values are immutable (timestamped keys, written once by the worker), so
+// cache every body we fetch — reopening the admin Inbox tab or reprocessing
+// costs zero extra KV reads. Bounded; entries age out with the 30-day KV TTL.
+const emailCache = new Map<string, RawEmail>();
+const EMAIL_CACHE_MAX = 500;
+
+async function readEmail(c: Config, key: string): Promise<RawEmail | null> {
+  const cached = emailCache.get(key);
+  if (cached) return cached;
   const res = await fetch(kvUrl(c, `/values/${encodeURIComponent(key)}`), {
     headers: { Authorization: `Bearer ${c.token}` },
     signal: AbortSignal.timeout(15000),
   });
   if (!res.ok) return null;
   try {
-    return JSON.parse(await res.text());
+    const email = JSON.parse(await res.text()) as RawEmail;
+    if (emailCache.size >= EMAIL_CACHE_MAX) {
+      emailCache.delete(emailCache.keys().next().value!);
+    }
+    emailCache.set(key, email);
+    return email;
   } catch {
     return null;
   }
@@ -164,6 +184,83 @@ async function tick(c: Config): Promise<void> {
   } finally {
     running = false;
   }
+}
+
+// ---------- admin inbox (on-demand views over the same namespace) ----------
+
+export interface InboxEmail {
+  key: string;
+  source: string;
+  from: string;
+  subject: string;
+  receivedAt: string;
+  chars: number;
+  processed: boolean;
+}
+
+/**
+ * Newest emails in the namespace with their pipeline status. One KV list op
+ * per call plus one value read per email not already cached.
+ */
+export async function listInbox(limit = 30): Promise<{
+  configured: boolean;
+  emails: InboxEmail[];
+}> {
+  const c = config();
+  if (!c) return { configured: false, emails: [] };
+  // Keys are `${receivedAt ISO}_${source}`, so lexicographic == chronological.
+  const keys = (await listKeys(c)).sort().reverse().slice(0, limit);
+  const processed = loadProcessed();
+  const emails = await Promise.all(
+    keys.map(async (key): Promise<InboxEmail | null> => {
+      const email = await readEmail(c, key);
+      if (!email) return null;
+      return {
+        key,
+        source: String(email.to ?? "").split("@")[0] || "inbound",
+        from: email.from ?? "",
+        subject: email.subject ?? "",
+        receivedAt: email.receivedAt ?? key.split("_")[0] ?? "",
+        chars: (email.text ?? "").length,
+        processed: processed.has(key),
+      };
+    }),
+  );
+  return { configured: true, emails: emails.filter((e): e is InboxEmail => !!e) };
+}
+
+/**
+ * Re-run one email through extraction, whether or not it was processed
+ * before — dedupe in addEvents keeps reruns harmless.
+ */
+export async function reprocessInbox(key: string): Promise<{
+  extracted: number;
+  added: number;
+}> {
+  const c = config();
+  if (!c) throw new Error("KV polling is not configured");
+  const email = await readEmail(c, key);
+  if (!email?.text) throw new Error("email not found in KV (expired?)");
+  const source = String(email.to ?? "").split("@")[0] || "inbound";
+  const events = await extractEvents({
+    text: `Subject: ${email.subject ?? ""}\n\n${email.text}`,
+    source,
+  });
+  const added = store.addEvents(events);
+  store.logIngest({
+    source,
+    kind: "email",
+    subject: email.subject || undefined,
+    extracted: events.length,
+    added: added.length,
+    events: added.map((e) => ({ id: e.id, title: e.title, start: e.start })),
+  });
+  const processed = loadProcessed();
+  if (!processed.has(key)) {
+    processed.add(key);
+    saveProcessed(processed);
+  }
+  return { extracted: events.length, added: added.length };
 }
 
 /** Starts the KV poll loop if Cloudflare + namespace config is present. */

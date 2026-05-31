@@ -136,6 +136,25 @@ export interface User {
   prefs?: { filters?: Filters; interests?: Interests; pinnedIds?: string[] }
 }
 
+/** Server view of the signed-in user's calendar sync state. */
+export interface CalendarStatus {
+  signedIn: boolean
+  google: boolean // Google Calendar connected (tokens on file)
+  synced: string[] // event ids saved to "my calendar"
+  feedUrl: string | null // personal ICS feed — subscribe from Apple Calendar
+}
+
+/** A raw newsletter sitting in Cloudflare KV, as shown in the admin inbox. */
+export interface InboxEmail {
+  key: string
+  source: string
+  from: string
+  subject: string
+  receivedAt: string
+  chars: number
+  processed: boolean
+}
+
 export interface Filters {
   categories: Category[] // empty = all
   liveOnly: boolean

@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import type {
+  CalendarStatus,
   Category,
   CityEvent,
   Filters,
@@ -17,6 +18,7 @@ interface GrapevineState {
   settings: Settings | null
   sources: Source[]
   user: User | null
+  calendar: CalendarStatus | null
   loaded: boolean
 
   // ui
@@ -66,6 +68,8 @@ interface GrapevineState {
   upsertEvent: (e: CityEvent) => void
   refreshEvents: () => Promise<void>
   setSettings: (s: Settings) => void
+  setCalendar: (c: CalendarStatus | null) => void
+  refreshCalendar: () => Promise<void>
 }
 
 import { api } from "./api"
@@ -90,6 +94,7 @@ export const useGrapevine = create<GrapevineState>()(
       settings: null,
       sources: [],
       user: null,
+      calendar: null,
       loaded: false,
 
       now: new Date(),
@@ -111,11 +116,12 @@ export const useGrapevine = create<GrapevineState>()(
       pinnedIds: [],
 
       async load() {
-        const [events, settings, sources, me] = await Promise.all([
+        const [events, settings, sources, me, calendar] = await Promise.all([
           api.events(),
           api.settings(),
           api.sources(),
           api.me().catch(() => ({ user: null })),
+          api.calendarStatus().catch(() => null),
         ])
         // Signed in: account prefs win over what this browser had locally,
         // so filters/interests follow the user across devices.
@@ -125,6 +131,7 @@ export const useGrapevine = create<GrapevineState>()(
           settings,
           sources,
           user: me.user,
+          calendar,
           loaded: true,
           ...(prefs?.filters && { filters: { ...DEFAULT_FILTERS, ...prefs.filters } }),
           ...(prefs?.interests && { interests: prefs.interests }),
@@ -192,7 +199,7 @@ export const useGrapevine = create<GrapevineState>()(
       async signOut() {
         clearTimeout(prefsTimer)
         await api.logout().catch(() => {})
-        set({ user: null })
+        set({ user: null, calendar: null })
       },
 
       upsertEvent(e) {
@@ -208,6 +215,12 @@ export const useGrapevine = create<GrapevineState>()(
       },
 
       setSettings: (settings) => set({ settings }),
+
+      setCalendar: (calendar) => set({ calendar }),
+
+      async refreshCalendar() {
+        set({ calendar: await api.calendarStatus().catch(() => null) })
+      },
     }),
     {
       name: "grapevine-prefs",

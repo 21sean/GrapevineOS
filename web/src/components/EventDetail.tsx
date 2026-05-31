@@ -1,5 +1,8 @@
 import { useState } from "react"
 import {
+  CalendarCheckIcon,
+  CalendarPlusIcon,
+  DownloadIcon,
   ExternalLinkIcon,
   MapPinIcon,
   NavigationIcon,
@@ -35,8 +38,12 @@ export function EventDetail() {
   const now = useGrapevine((s) => s.now)
   const userPos = useGrapevine((s) => s.userPos)
   const upsertEvent = useGrapevine((s) => s.upsertEvent)
+  const user = useGrapevine((s) => s.user)
+  const calendar = useGrapevine((s) => s.calendar)
+  const setCalendar = useGrapevine((s) => s.setCalendar)
 
   const [rating, setRating] = useState(false)
+  const [calBusy, setCalBusy] = useState(false)
   const isMobile = useIsMobile()
 
   const event = events.find((e) => e.id === selectedId)
@@ -63,6 +70,49 @@ export function EventDetail() {
   }
 
   const gmaps = `https://www.google.com/maps/dir/?api=1&destination=${event.lat},${event.lng}`
+  const saved = calendar?.synced.includes(event.id) ?? false
+
+  async function toggleCalendar() {
+    if (!event) return
+    if (!user) {
+      toast("Sign in to save events to your calendar", {
+        action: {
+          label: "Sign in",
+          onClick: () => {
+            window.location.href = "/auth/google"
+          },
+        },
+      })
+      return
+    }
+    setCalBusy(true)
+    try {
+      if (saved) {
+        setCalendar(await api.calendarRemove(event.id))
+        toast.success("Removed from your calendar", {
+          description: calendar?.google
+            ? "Deleted from Google Calendar too"
+            : undefined,
+        })
+      } else {
+        const res = await api.calendarAdd(event.id)
+        setCalendar(res)
+        toast.success("Added to your calendar", {
+          description: res.warning
+            ? "Google Calendar didn't sync — it's still in your Grapevine feed"
+            : res.googleSynced
+              ? "Synced to your Google Calendar"
+              : "Connect Google Calendar in your account to sync",
+        })
+      }
+    } catch (err) {
+      toast.error("Calendar update failed", {
+        description: String(err).slice(0, 140),
+      })
+    } finally {
+      setCalBusy(false)
+    }
+  }
 
   return (
     <Sheet open={detailOpen} onOpenChange={setDetailOpen}>
@@ -174,6 +224,32 @@ export function EventDetail() {
           <span className="-mt-3 text-xs text-muted-foreground">
             Traffic-aware, from {userPos ? "your location" : "the city center"}
           </span>
+
+          <div className="flex gap-2">
+            <Button
+              variant={saved ? "secondary" : "outline"}
+              size="sm"
+              className="flex-1"
+              onClick={toggleCalendar}
+              disabled={calBusy}
+            >
+              {calBusy ? (
+                <Spinner data-icon="inline-start" />
+              ) : saved ? (
+                <CalendarCheckIcon data-icon="inline-start" />
+              ) : (
+                <CalendarPlusIcon data-icon="inline-start" />
+              )}
+              {saved ? "On your calendar" : "Add to calendar"}
+            </Button>
+            {/* Apple Calendar has no write API — .ics import is the reliable path. */}
+            <Button variant="outline" size="sm" asChild>
+              <a href={`/api/events/${event.id}/ics`} download>
+                <DownloadIcon data-icon="inline-start" />
+                .ics
+              </a>
+            </Button>
+          </div>
 
           {event.ticketUrl ? (
             <Button asChild className="w-full">

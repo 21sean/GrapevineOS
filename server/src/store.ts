@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type {
+  CalendarEntry,
   CityEvent,
   IngestRecord,
   Session,
@@ -132,6 +133,73 @@ export const store = {
 
   userById(id: string): User | undefined {
     return this.users().find((u) => u.id === id);
+  },
+
+  updateUser(id: string, patch: Partial<User>): User | undefined {
+    const users = this.users();
+    const idx = users.findIndex((u) => u.id === id);
+    if (idx === -1) return undefined;
+    users[idx] = { ...users[idx], ...patch, id };
+    this.saveUsers(users);
+    return users[idx];
+  },
+
+  /** Mints the unguessable ICS-feed token on first use, then reuses it. */
+  ensureFeedToken(id: string): string | undefined {
+    const user = this.userById(id);
+    if (!user) return undefined;
+    if (user.feedToken) return user.feedToken;
+    return this.updateUser(id, { feedToken: crypto.randomBytes(16).toString("hex") })
+      ?.feedToken;
+  },
+
+  userByFeedToken(token: string): User | undefined {
+    return token ? this.users().find((u) => u.feedToken === token) : undefined;
+  },
+
+  // ---------- calendar (per-user saved events) ----------
+
+  calendarEntries(): CalendarEntry[] {
+    return readJson<CalendarEntry[]>("calendar.json", []);
+  },
+
+  saveCalendarEntries(entries: CalendarEntry[]) {
+    writeJson("calendar.json", entries);
+  },
+
+  userCalendar(userId: string): CalendarEntry[] {
+    return this.calendarEntries().filter((e) => e.userId === userId);
+  },
+
+  /** Add-or-update, keyed by (userId, eventId) — saving twice is a no-op. */
+  upsertCalendarEntry(
+    userId: string,
+    eventId: string,
+    patch?: Partial<CalendarEntry>,
+  ): CalendarEntry {
+    const all = this.calendarEntries();
+    const idx = all.findIndex((e) => e.userId === userId && e.eventId === eventId);
+    if (idx !== -1) {
+      all[idx] = { ...all[idx], ...patch, userId, eventId };
+      this.saveCalendarEntries(all);
+      return all[idx];
+    }
+    const entry: CalendarEntry = {
+      userId,
+      eventId,
+      addedAt: new Date().toISOString(),
+      ...patch,
+    };
+    this.saveCalendarEntries([...all, entry]);
+    return entry;
+  },
+
+  removeCalendarEntry(userId: string, eventId: string) {
+    this.saveCalendarEntries(
+      this.calendarEntries().filter(
+        (e) => !(e.userId === userId && e.eventId === eventId),
+      ),
+    );
   },
 
   updateUserPrefs(id: string, prefs: UserPrefs): User | undefined {

@@ -44,11 +44,21 @@ export function App() {
 
   useEffect(() => {
     load().catch((err) => setLoadError(String(err)))
-    // the OAuth callback bounces here with ?auth=failed when sign-in dies
+    // the OAuth callbacks bounce here with ?auth= / ?calendar= status params
     const params = new URLSearchParams(window.location.search)
     if (params.get("auth") === "failed") {
       toast.error("Google sign-in didn't complete. Try again.")
+    }
+    if (params.get("calendar") === "connected") {
+      toast.success("Google Calendar connected", {
+        description: "Events you save now sync automatically.",
+      })
+    } else if (params.get("calendar") === "failed") {
+      toast.error("Google Calendar didn't connect. Try again from your account.")
+    }
+    if (params.has("auth") || params.has("calendar")) {
       params.delete("auth")
+      params.delete("calendar")
       const qs = params.toString()
       window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname)
     }

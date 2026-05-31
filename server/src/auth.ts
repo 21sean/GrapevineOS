@@ -9,6 +9,7 @@
  */
 import crypto from "node:crypto";
 import { Router, type Request, type Response } from "express";
+import { CALENDAR_SCOPE, insertGoogleEvent } from "./gcal.js";
 import { store } from "./store.js";
 import type { User } from "./types.js";
 
@@ -65,7 +66,9 @@ export const auth = Router();
 
 auth.get("/auth/google", (_req, res) => {
   const state = crypto.randomBytes(16).toString("hex");
-  setCookie(res, STATE_COOKIE, state, STATE_TTL_MS);
+  // Cookie value carries which flow this state belongs to: sign-in vs the
+  // incremental Calendar consent below. Both share one registered redirect.
+  setCookie(res, STATE_COOKIE, `${state}.signin`, STATE_TTL_MS);
   const params = new URLSearchParams({
     client_id: env("GOOGLE_CLIENT_ID"),
     redirect_uri: redirectUri(),
@@ -77,13 +80,38 @@ auth.get("/auth/google", (_req, res) => {
   res.redirect(`${GOOGLE_AUTH_URL}?${params}`);
 });
 
+/**
+ * Incremental consent: a signed-in user grants Calendar access on top of the
+ * profile-only sign-in. offline + consent forces a refresh token so the
+ * server can keep writing to their calendar between visits.
+ */
+auth.get("/auth/google/calendar", (req, res) => {
+  const user = sessionUser(req);
+  if (!user) return res.redirect("/?calendar=failed");
+  const state = crypto.randomBytes(16).toString("hex");
+  setCookie(res, STATE_COOKIE, `${state}.calendar`, STATE_TTL_MS);
+  const params = new URLSearchParams({
+    client_id: env("GOOGLE_CLIENT_ID"),
+    redirect_uri: redirectUri(),
+    response_type: "code",
+    scope: CALENDAR_SCOPE,
+    state,
+    access_type: "offline",
+    prompt: "consent",
+    include_granted_scopes: "true",
+    login_hint: user.email,
+  });
+  res.redirect(`${GOOGLE_AUTH_URL}?${params}`);
+});
+
 auth.get("/auth/google/callback", async (req, res) => {
   const code = typeof req.query.code === "string" ? req.query.code : "";
   const state = typeof req.query.state === "string" ? req.query.state : "";
-  const expected = cookies(req)[STATE_COOKIE];
+  const [expected, flow = "signin"] = (cookies(req)[STATE_COOKIE] ?? "").split(".");
   clearCookie(res, STATE_COOKIE);
+  const failed = flow === "calendar" ? "/?calendar=failed" : "/?auth=failed";
   if (!code || !state || !expected || state !== expected) {
-    return res.redirect("/?auth=failed");
+    return res.redirect(failed);
   }
   try {
     const tokenRes = await fetch(GOOGLE_TOKEN_URL, {
@@ -99,6 +127,31 @@ auth.get("/auth/google/callback", async (req, res) => {
       signal: AbortSignal.timeout(10000),
     });
     if (!tokenRes.ok) throw new Error(`token exchange failed: ${await tokenRes.text()}`);
+
+    if (flow === "calendar") {
+      const tokens = (await tokenRes.json()) as {
+        access_token?: string;
+        refresh_token?: string;
+        expires_in?: number;
+        scope?: string;
+      };
+      const user = sessionUser(req);
+      // Needs an active session, a refresh token, and the box left checked.
+      if (!user || !tokens.refresh_token || !tokens.scope?.includes(CALENDAR_SCOPE)) {
+        return res.redirect("/?calendar=failed");
+      }
+      const updated = store.updateUser(user.id, {
+        google: {
+          accessToken: tokens.access_token ?? "",
+          refreshToken: tokens.refresh_token,
+          expiresAt: Date.now() + (tokens.expires_in ?? 0) * 1000,
+          scope: tokens.scope,
+        },
+      });
+      if (updated) await backfillGoogleCalendar(updated);
+      return res.redirect("/?calendar=connected");
+    }
+
     const { id_token } = (await tokenRes.json()) as { id_token?: string };
     if (!id_token) throw new Error("no id_token in token response");
 
@@ -122,9 +175,29 @@ auth.get("/auth/google/callback", async (req, res) => {
     res.redirect("/");
   } catch (err) {
     console.error("[auth] google callback:", err);
-    res.redirect("/?auth=failed");
+    res.redirect(failed);
   }
 });
+
+/**
+ * Events saved before Google was connected only lived in the ICS feed —
+ * push them to the newly connected calendar so both sides match.
+ */
+async function backfillGoogleCalendar(user: User): Promise<void> {
+  const tz = store.settings().tz;
+  const events = store.events();
+  for (const entry of store.userCalendar(user.id)) {
+    if (entry.googleEventId) continue;
+    const event = events.find((e) => e.id === entry.eventId);
+    if (!event) continue;
+    try {
+      const googleEventId = await insertGoogleEvent(user, event, tz);
+      store.upsertCalendarEntry(user.id, entry.eventId, { googleEventId });
+    } catch (err) {
+      console.error(`[calendar] backfill ${entry.eventId}:`, String(err).slice(0, 160));
+    }
+  }
+}
 
 auth.post("/auth/logout", (req, res) => {
   const token = cookies(req)[SESSION_COOKIE];
@@ -152,6 +225,6 @@ auth.put("/api/me/prefs", (req, res) => {
 
 /** Strip internal fields before sending a user to the browser. */
 function publicUser(u: User) {
-  const { googleId: _googleId, ...rest } = u;
+  const { googleId: _googleId, google: _google, feedToken: _feedToken, ...rest } = u;
   return rest;
 }
