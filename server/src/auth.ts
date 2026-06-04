@@ -4,8 +4,8 @@
  * The browser hits /auth/google (full-page redirect), Google sends the user
  * back to /auth/google/callback (proxied through Vite in dev, so the cookie
  * origin matches the app), and we exchange the code server-side using the
- * client secret from .env. Sessions persist to data/sessions.json so
- * `tsx watch` restarts don't sign anyone out.
+ * client secret from .env. Sessions persist to Postgres so `tsx watch`
+ * restarts don't sign anyone out.
  */
 import crypto from "node:crypto";
 import { Router, type Request, type Response } from "express";
@@ -55,7 +55,7 @@ function clearCookie(res: Response, name: string) {
 }
 
 /** Resolves the signed-in user from the session cookie, if any. */
-export function sessionUser(req: Request): User | null {
+export async function sessionUser(req: Request): Promise<User | null> {
   const token = cookies(req)[SESSION_COOKIE];
   return token ? store.sessionUser(token) : null;
 }
@@ -85,8 +85,8 @@ auth.get("/auth/google", (_req, res) => {
  * profile-only sign-in. offline + consent forces a refresh token so the
  * server can keep writing to their calendar between visits.
  */
-auth.get("/auth/google/calendar", (req, res) => {
-  const user = sessionUser(req);
+auth.get("/auth/google/calendar", async (req, res) => {
+  const user = await sessionUser(req);
   if (!user) return res.redirect("/?calendar=failed");
   const state = crypto.randomBytes(16).toString("hex");
   setCookie(res, STATE_COOKIE, `${state}.calendar`, STATE_TTL_MS);
@@ -135,19 +135,18 @@ auth.get("/auth/google/callback", async (req, res) => {
         expires_in?: number;
         scope?: string;
       };
-      const user = sessionUser(req);
+      const user = await sessionUser(req);
       // Needs an active session, a refresh token, and the box left checked.
       if (!user || !tokens.refresh_token || !tokens.scope?.includes(CALENDAR_SCOPE)) {
         return res.redirect("/?calendar=failed");
       }
-      const updated = store.updateUser(user.id, {
-        google: {
-          accessToken: tokens.access_token ?? "",
-          refreshToken: tokens.refresh_token,
-          expiresAt: Date.now() + (tokens.expires_in ?? 0) * 1000,
-          scope: tokens.scope,
-        },
+      await store.setGoogleTokens(user.id, {
+        accessToken: tokens.access_token ?? "",
+        refreshToken: tokens.refresh_token,
+        expiresAt: Date.now() + (tokens.expires_in ?? 0) * 1000,
+        scope: tokens.scope,
       });
+      const updated = await store.userById(user.id);
       if (updated) await backfillGoogleCalendar(updated);
       return res.redirect("/?calendar=connected");
     }
@@ -165,13 +164,14 @@ auth.get("/auth/google/callback", async (req, res) => {
     };
     if (!claims.sub) throw new Error("id_token missing sub claim");
 
-    const user = store.upsertUser({
+    const user = await store.upsertUser({
       googleId: claims.sub,
       email: claims.email ?? "",
       name: claims.name ?? claims.email ?? "Google user",
       picture: claims.picture ?? "",
     });
-    setCookie(res, SESSION_COOKIE, store.createSession(user.id, SESSION_TTL_MS), SESSION_TTL_MS);
+    const session = await store.createSession(user.id, SESSION_TTL_MS);
+    setCookie(res, SESSION_COOKIE, session, SESSION_TTL_MS);
     res.redirect("/");
   } catch (err) {
     console.error("[auth] google callback:", err);
@@ -184,38 +184,38 @@ auth.get("/auth/google/callback", async (req, res) => {
  * push them to the newly connected calendar so both sides match.
  */
 async function backfillGoogleCalendar(user: User): Promise<void> {
-  const tz = store.settings().tz;
-  const events = store.events();
-  for (const entry of store.userCalendar(user.id)) {
+  const tz = (await store.settings()).tz;
+  const events = await store.events();
+  for (const entry of await store.userCalendar(user.id)) {
     if (entry.googleEventId) continue;
     const event = events.find((e) => e.id === entry.eventId);
     if (!event) continue;
     try {
       const googleEventId = await insertGoogleEvent(user, event, tz);
-      store.upsertCalendarEntry(user.id, entry.eventId, { googleEventId });
+      await store.upsertCalendarEntry(user.id, entry.eventId, { googleEventId });
     } catch (err) {
       console.error(`[calendar] backfill ${entry.eventId}:`, String(err).slice(0, 160));
     }
   }
 }
 
-auth.post("/auth/logout", (req, res) => {
+auth.post("/auth/logout", async (req, res) => {
   const token = cookies(req)[SESSION_COOKIE];
-  if (token) store.deleteSession(token);
+  if (token) await store.deleteSession(token);
   clearCookie(res, SESSION_COOKIE);
   res.json({ ok: true });
 });
 
-auth.get("/api/me", (req, res) => {
-  const user = sessionUser(req);
+auth.get("/api/me", async (req, res) => {
+  const user = await sessionUser(req);
   res.json({ user: user ? publicUser(user) : null });
 });
 
-auth.put("/api/me/prefs", (req, res) => {
-  const user = sessionUser(req);
+auth.put("/api/me/prefs", async (req, res) => {
+  const user = await sessionUser(req);
   if (!user) return res.status(401).json({ error: "not signed in" });
   const { filters, interests, pinnedIds } = req.body ?? {};
-  const updated = store.updateUserPrefs(user.id, {
+  const updated = await store.updateUserPrefs(user.id, {
     ...(filters !== undefined && { filters }),
     ...(interests !== undefined && { interests }),
     ...(pinnedIds !== undefined && { pinnedIds }),

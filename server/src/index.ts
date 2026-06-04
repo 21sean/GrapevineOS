@@ -8,7 +8,7 @@ import { listInstalled, ollamaBase } from "./ollama.js";
 import { catalog, logo } from "./catalog.js";
 import { eta, geocode } from "./mapbox.js";
 import { extractEvents, rateEvent } from "./ingest.js";
-import { listInbox, reprocessInbox, startKvPoll } from "./kvpoll.js";
+import { listInbox, reprocessInbox, startInboxPoll } from "./inbox.js";
 import type { CityEvent } from "./types.js";
 
 const app = express();
@@ -24,16 +24,20 @@ app.use(calendar);
 
 // ---------- events ----------
 
-app.get("/api/events", (_req, res) => {
-  res.json(store.events());
+app.get("/api/events", async (_req, res) => {
+  try {
+    res.json(await store.events());
+  } catch (err) {
+    res.status(502).json({ error: String(err) });
+  }
 });
 
 app.post("/api/events/:id/rate", async (req, res) => {
-  const event = store.events().find((e) => e.id === req.params.id);
+  const event = await store.eventById(req.params.id);
   if (!event) return res.status(404).json({ error: "unknown event" });
   try {
     const r = await rateEvent(event);
-    const updated = store.updateEvent(event.id, {
+    const updated = await store.updateEvent(event.id, {
       rating: r.rating,
       ratingRationale: r.rationale,
       promoted: r.promoted,
@@ -46,12 +50,12 @@ app.post("/api/events/:id/rate", async (req, res) => {
 
 // ---------- settings & sources ----------
 
-app.get("/api/settings", (_req, res) => res.json(store.settings()));
+app.get("/api/settings", async (_req, res) => res.json(await store.settings()));
 
-app.put("/api/settings", (req, res) => {
+app.put("/api/settings", async (req, res) => {
   const { city, center, tz, model, ollamaUrl } = req.body ?? {};
   res.json(
-    store.saveSettings({
+    await store.saveSettings({
       ...(city !== undefined && { city }),
       ...(center !== undefined && { center }),
       ...(tz !== undefined && { tz }),
@@ -61,7 +65,7 @@ app.put("/api/settings", (req, res) => {
   );
 });
 
-app.get("/api/sources", (_req, res) => res.json(store.sources()));
+app.get("/api/sources", async (_req, res) => res.json(await store.sources()));
 
 // ---------- mapbox (secret token stays here) ----------
 
@@ -72,7 +76,7 @@ app.get("/api/eta", async (req, res) => {
       ? [parts[0], parts[1]]
       : null;
   };
-  const from = parse(req.query.from) ?? store.settings().center;
+  const from = parse(req.query.from) ?? (await store.settings()).center;
   const to = parse(req.query.to);
   if (!to) return res.status(400).json({ error: "to=lng,lat required" });
   try {
@@ -86,7 +90,7 @@ app.get("/api/geocode", async (req, res) => {
   const q = String(req.query.q ?? "");
   if (!q) return res.status(400).json({ error: "q required" });
   try {
-    res.json(await geocode(q, store.settings().center));
+    res.json(await geocode(q, (await store.settings()).center));
   } catch (err) {
     res.status(502).json({ error: String(err) });
   }
@@ -95,14 +99,15 @@ app.get("/api/geocode", async (req, res) => {
 // ---------- ollama ----------
 
 app.get("/api/ollama/health", async (_req, res) => {
+  const base = await ollamaBase().catch(() => "http://localhost:11434");
   try {
-    const r = await fetch(`${ollamaBase()}/api/version`, {
+    const r = await fetch(`${base}/api/version`, {
       signal: AbortSignal.timeout(3000),
     });
     const version = r.ok ? ((await r.json()) as { version?: string }).version : null;
-    res.json({ ok: r.ok, url: ollamaBase(), version });
+    res.json({ ok: r.ok, url: base, version });
   } catch {
-    res.json({ ok: false, url: ollamaBase(), version: null });
+    res.json({ ok: false, url: base, version: null });
   }
 });
 
@@ -119,7 +124,7 @@ app.post("/api/ollama/pull", async (req, res) => {
   const model = String(req.body?.model ?? "");
   if (!model) return res.status(400).json({ error: "model required" });
   try {
-    const upstream = await fetch(`${ollamaBase()}/api/pull`, {
+    const upstream = await fetch(`${await ollamaBase()}/api/pull`, {
       method: "POST",
       body: JSON.stringify({ model, stream: true }),
     });
@@ -151,8 +156,12 @@ const eventSnapshot = (events: CityEvent[]) =>
   events.map((e) => ({ id: e.id, title: e.title, start: e.start }));
 
 /** Newest-first log of every email/paste that went through the pipeline. */
-app.get("/api/ingest/history", (_req, res) => {
-  res.json(store.ingests());
+app.get("/api/ingest/history", async (_req, res) => {
+  try {
+    res.json(await store.ingests());
+  } catch (err) {
+    res.status(502).json({ error: String(err) });
+  }
 });
 
 /** Extract events from pasted/forwarded email text. dryRun previews only. */
@@ -162,8 +171,8 @@ app.post("/api/ingest/email", async (req, res) => {
   try {
     const events = await extractEvents({ text, source });
     if (dryRun) return res.json({ events, added: 0 });
-    const added = store.addEvents(events);
-    store.logIngest({
+    const added = await store.addEvents(events);
+    await store.logIngest({
       source,
       kind: "manual",
       extracted: events.length,
@@ -177,20 +186,24 @@ app.post("/api/ingest/email", async (req, res) => {
 });
 
 /** Commit previously previewed events. */
-app.post("/api/ingest/commit", (req, res) => {
+app.post("/api/ingest/commit", async (req, res) => {
   const events: CityEvent[] = req.body?.events ?? [];
   if (!Array.isArray(events) || !events.length) {
     return res.status(400).json({ error: "events[] required" });
   }
-  const added = store.addEvents(events);
-  store.logIngest({
-    source: events[0]?.source ?? "manual",
-    kind: "manual",
-    extracted: events.length,
-    added: added.length,
-    events: eventSnapshot(added),
-  });
-  res.json({ added: added.length });
+  try {
+    const added = await store.addEvents(events);
+    await store.logIngest({
+      source: events[0]?.source ?? "manual",
+      kind: "manual",
+      extracted: events.length,
+      added: added.length,
+      events: eventSnapshot(added),
+    });
+    res.json({ added: added.length });
+  } catch (err) {
+    res.status(502).json({ error: String(err) });
+  }
 });
 
 /**
@@ -206,8 +219,8 @@ app.post("/api/ingest/inbound", async (req, res) => {
   const source = String(to).split("@")[0] || "inbound";
   try {
     const events = await extractEvents({ text: `Subject: ${subject}\n\n${text}`, source });
-    const added = store.addEvents(events);
-    store.logIngest({
+    const added = await store.addEvents(events);
+    await store.logIngest({
       source,
       kind: "email",
       subject: String(subject) || undefined,
@@ -221,7 +234,7 @@ app.post("/api/ingest/inbound", async (req, res) => {
   }
 });
 
-// ---------- inbox (raw emails sitting in Cloudflare KV) ----------
+// ---------- inbox (raw emails in Postgres, written by the email worker) ----------
 
 app.get("/api/inbox", async (_req, res) => {
   try {
@@ -244,5 +257,5 @@ app.post("/api/inbox/reprocess", async (req, res) => {
 const port = Number(process.env.PORT ?? 8787);
 app.listen(port, () => {
   console.log(`[grapevine] api listening on http://localhost:${port}`);
-  startKvPoll();
+  startInboxPoll();
 });

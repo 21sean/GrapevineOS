@@ -53,7 +53,7 @@ export async function extractEvents(opts: {
   source: string;
   model?: string;
 }): Promise<ExtractedEvent[]> {
-  const settings = store.settings();
+  const settings = await store.settings();
   const today = new Date().toLocaleDateString("en-CA", { timeZone: settings.tz });
   const raw = await chatJSON({
     system: EXTRACTION_SYSTEM(settings.city, settings.tz, today),

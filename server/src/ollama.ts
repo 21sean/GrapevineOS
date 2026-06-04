@@ -1,8 +1,8 @@
 import { store } from "./store.js";
 
-export function ollamaBase(): string {
+export async function ollamaBase(): Promise<string> {
   return (
-    store.settings().ollamaUrl ||
+    (await store.settings()).ollamaUrl ||
     process.env.OLLAMA_URL ||
     "http://localhost:11434"
   ).replace(/\/$/, "");
@@ -17,7 +17,8 @@ export interface InstalledModel {
 }
 
 export async function listInstalled(): Promise<InstalledModel[]> {
-  const res = await fetch(`${ollamaBase()}/api/tags`);
+  const base = await ollamaBase();
+  const res = await fetch(`${base}/api/tags`);
   if (!res.ok) throw new Error(`ollama /api/tags → ${res.status}`);
   const body = (await res.json()) as { models: any[] };
   const models = body.models ?? [];
@@ -26,7 +27,7 @@ export async function listInstalled(): Promise<InstalledModel[]> {
       let capabilities: string[] = m.capabilities ?? [];
       if (!capabilities.length) {
         try {
-          const show = await fetch(`${ollamaBase()}/api/show`, {
+          const show = await fetch(`${base}/api/show`, {
             method: "POST",
             body: JSON.stringify({ model: m.name }),
           });
@@ -57,8 +58,9 @@ export async function chatJSON(opts: {
   user: string;
   model?: string;
 }): Promise<any> {
-  const model = opts.model || store.settings().model;
+  const model = opts.model || (await store.settings()).model;
   if (!model) throw new Error("No Ollama model selected (set one in Admin → Models)");
+  const base = await ollamaBase();
 
   const payload: Record<string, unknown> = {
     model,
@@ -71,14 +73,14 @@ export async function chatJSON(opts: {
     ],
   };
 
-  let res = await fetch(`${ollamaBase()}/api/chat`, {
+  let res = await fetch(`${base}/api/chat`, {
     method: "POST",
     body: JSON.stringify({ ...payload, think: false }),
   });
   if (!res.ok) {
     const errText = await res.text();
     if (/think/i.test(errText)) {
-      res = await fetch(`${ollamaBase()}/api/chat`, {
+      res = await fetch(`${base}/api/chat`, {
         method: "POST",
         body: JSON.stringify(payload),
       });

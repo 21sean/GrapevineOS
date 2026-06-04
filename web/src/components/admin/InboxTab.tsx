@@ -65,11 +65,10 @@ export function InboxTab() {
   if (!configured) {
     return (
       <Alert>
-        <AlertTitle>KV polling isn't configured</AlertTitle>
+        <AlertTitle>Inbox isn't configured</AlertTitle>
         <AlertDescription>
-          Set <span className="font-mono">CLOUDFLARE_API_TOKEN</span>,{" "}
-          <span className="font-mono">CLOUDFLARE_ACCOUNT_ID</span> and{" "}
-          <span className="font-mono">KV_NAMESPACE_ID</span> in{" "}
+          Set <span className="font-mono">SUPABASE_URL</span> and{" "}
+          <span className="font-mono">SUPABASE_SECRET_KEY</span> in{" "}
           <span className="font-mono">server/.env</span> to see the inbound
           newsletter inbox here.
         </AlertDescription>
@@ -81,9 +80,9 @@ export function InboxTab() {
     <div className="flex flex-col gap-4">
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Everything the email worker has banked in KV (30-day window). The
-          poller picks new mail up automatically; re-run one to extract again
-          with the current model.
+          Everything the email worker has banked in Supabase (30-day window).
+          The poller picks new mail up automatically; re-run one to extract
+          again with the current model.
         </p>
         <Button
           variant="outline"

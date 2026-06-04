@@ -6,9 +6,11 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "seed:supabase": "tsx scripts/seed-supabase.ts"
   },
   "dependencies": {
+    "@supabase/supabase-js": "2.110.0",
     "dotenv": "^16.4.7",
     "express": "^5.1.0"
   },
