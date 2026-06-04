@@ -1,8 +1,13 @@
-import type { CityEvent, Filters, Interests } from "./types"
+import { FARMERS_MARKET_TAG, type CityEvent, type Filters, type Interests } from "./types"
 import { hasEnded, isLive, minutesUntilStart } from "./time"
 
 function interestTerms(e: CityEvent): string[] {
   return [...e.tags.map((t) => t.toLowerCase()), e.category]
+}
+
+/** True for the weekly neighborhood farmers markets (tagged at ingest). */
+export function isFarmersMarket(e: CityEvent): boolean {
+  return e.tags.some((t) => t.toLowerCase() === FARMERS_MARKET_TAG)
 }
 
 /**
@@ -43,6 +48,7 @@ export function matchesFilters(
   if (f.hidePromoted && e.promoted) return false
   if (f.liveOnly && !isLive(e, now)) return false
   if (f.rareOnly && e.rarity !== "rare") return false
+  if (f.farmersOnly && !isFarmersMarket(e)) return false
   if (f.minRating > 0 && e.rating < f.minRating) return false
   if (f.categories.length && !f.categories.includes(e.category)) return false
   if (interestTerms(e).some((t) => interests.avoids.includes(t))) return false

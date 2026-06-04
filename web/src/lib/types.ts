@@ -159,6 +159,7 @@ export interface Filters {
   categories: Category[] // empty = all
   liveOnly: boolean
   rareOnly: boolean
+  farmersOnly: boolean // only weekly farmers markets
   hidePromoted: boolean
   minRating: number
 }
@@ -167,6 +168,10 @@ export const DEFAULT_FILTERS: Filters = {
   categories: [],
   liveOnly: false,
   rareOnly: false,
+  farmersOnly: false,
   hidePromoted: true,
   minRating: 0,
 }
+
+/** A farmers market carries this tag; the "Farmers markets" filter keys off it. */
+export const FARMERS_MARKET_TAG = "farmers market"

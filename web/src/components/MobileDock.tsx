@@ -4,6 +4,7 @@ import {
   MegaphoneOffIcon,
   RadioIcon,
   SlidersHorizontalIcon,
+  SproutIcon,
 } from "lucide-react"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Separator } from "@/components/ui/separator"
@@ -213,6 +214,14 @@ export function MobileDock() {
           >
             <GemIcon className="size-3.5 text-wine" />
             Rare finds
+          </Chip>
+          <Chip
+            active={filters.farmersOnly}
+            activeClass="border-[#56c7ac]/50 bg-[#56c7ac]/15 text-[#56c7ac]"
+            onClick={() => setFilters({ farmersOnly: !filters.farmersOnly })}
+          >
+            <SproutIcon className="size-3.5 text-[#56c7ac]" />
+            Farmers markets
           </Chip>
           <Chip
             active={filters.hidePromoted}

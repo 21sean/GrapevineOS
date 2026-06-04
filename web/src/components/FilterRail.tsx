@@ -5,6 +5,7 @@ import {
   MegaphoneOffIcon,
   RadioIcon,
   SlidersHorizontalIcon,
+  SproutIcon,
 } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
@@ -74,6 +75,18 @@ export function FilterRail() {
             hint="parades, races, one-offs"
             checked={filters.rareOnly}
             onChange={(v) => setFilters({ rareOnly: v })}
+          />
+          <ToggleRow
+            icon={
+              <SproutIcon
+                className="size-3.5"
+                style={{ color: CATEGORY_META.market.color }}
+              />
+            }
+            label="Farmers markets"
+            hint="weekly, by neighborhood"
+            checked={filters.farmersOnly}
+            onChange={(v) => setFilters({ farmersOnly: v })}
           />
           <ToggleRow
             icon={<MegaphoneOffIcon className="size-3.5 text-muted-foreground" />}
