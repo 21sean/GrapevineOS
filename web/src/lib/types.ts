@@ -32,6 +32,9 @@ export interface CityEvent {
   lat: number
   start: string
   end: string
+  /** RFC 5545 RRULE (e.g. "FREQ=WEEKLY;BYDAY=SA") when the event repeats;
+   * absent for one-offs. start/end are the anchor occurrence + duration. */
+  recurrence?: string
   price: string
   free: boolean
   ticketUrl?: string

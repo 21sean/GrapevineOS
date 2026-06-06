@@ -1,7 +1,8 @@
-import { PinIcon } from "lucide-react"
+import { PinIcon, RepeatIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { StarRating } from "@/components/StarRating"
 import { useGrapevine } from "@/lib/store"
+import { recurrenceSummary } from "@/lib/recurrence"
 import { isLive, timeRange } from "@/lib/time"
 import { CATEGORY_META, type CityEvent } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -15,7 +16,9 @@ export function EventCard({ event }: { event: CityEvent }) {
   const pinnedIds = useGrapevine((s) => s.pinnedIds)
   const togglePin = useGrapevine((s) => s.togglePin)
 
-  const live = isLive(event, now)
+  const tz = settings?.tz ?? "UTC"
+  const live = isLive(event, now, tz)
+  const repeats = recurrenceSummary(event.recurrence)
   const meta = CATEGORY_META[event.category]
   // Highlight only while the detail is actually open, so closing it clears the
   // card the same moment it clears the map marker.
@@ -71,8 +74,13 @@ export function EventCard({ event }: { event: CityEvent }) {
         </div>
       </div>
 
-      <span className="font-mono text-xs text-muted-foreground">
-        {timeRange(event, settings?.tz ?? "UTC", now)} · {event.venue}
+      <span className="flex items-center gap-1 font-mono text-xs text-muted-foreground">
+        {repeats && (
+          <RepeatIcon className="size-3 shrink-0" aria-label={`Repeats: ${repeats}`} />
+        )}
+        <span className="truncate">
+          {timeRange(event, tz, now)} · {event.venue}
+        </span>
       </span>
 
       <div className="flex items-center gap-2">

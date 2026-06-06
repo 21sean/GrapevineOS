@@ -12,10 +12,11 @@ export function useOrderedEvents() {
   const interests = useGrapevine((s) => s.interests)
   const now = useGrapevine((s) => s.now)
   const pinnedIds = useGrapevine((s) => s.pinnedIds)
+  const tz = useGrapevine((s) => s.settings?.tz)
 
   const visible = useMemo(
-    () => visibleEvents(events, filters, interests, now),
-    [events, filters, interests, now],
+    () => visibleEvents(events, filters, interests, now, tz),
+    [events, filters, interests, now, tz],
   )
 
   const ordered = useMemo(() => {

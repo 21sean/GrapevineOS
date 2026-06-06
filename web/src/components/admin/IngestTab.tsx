@@ -18,6 +18,7 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { StarRating } from "@/components/StarRating"
 import { api } from "@/lib/api"
+import { recurrenceSummary } from "@/lib/recurrence"
 import { useGrapevine } from "@/lib/store"
 import { CATEGORY_META, type CityEvent } from "@/lib/types"
 
@@ -163,7 +164,10 @@ export function IngestTab() {
                 <div className="flex min-w-0 flex-col gap-1">
                   <span className="text-sm font-medium">{e.title}</span>
                   <span className="font-mono text-xs text-muted-foreground">
-                    {new Date(e.start).toLocaleString()} · {e.venue}
+                    {new Date(e.start).toLocaleString()}
+                    {recurrenceSummary(e.recurrence) &&
+                      ` · ${recurrenceSummary(e.recurrence)}`}{" "}
+                    · {e.venue}
                   </span>
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge

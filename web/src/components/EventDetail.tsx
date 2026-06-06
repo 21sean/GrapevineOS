@@ -6,6 +6,7 @@ import {
   ExternalLinkIcon,
   MapPinIcon,
   NavigationIcon,
+  RepeatIcon,
   SparklesIcon,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -27,6 +28,7 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import { api } from "@/lib/api"
 import { useGrapevine } from "@/lib/store"
 import { fmtTime, isLive, statusLabel } from "@/lib/time"
+import { nextOccurrence, recurrenceSummary } from "@/lib/recurrence"
 import { CATEGORY_META } from "@/lib/types"
 
 export function EventDetail() {
@@ -52,7 +54,9 @@ export function EventDetail() {
 
   const meta = CATEGORY_META[event.category]
   const tz = settings?.tz ?? "UTC"
-  const live = isLive(event, now)
+  const live = isLive(event, now, tz)
+  const occ = nextOccurrence(event, now, tz)
+  const repeats = recurrenceSummary(event.recurrence)
 
   async function recheckBuzz() {
     if (!event) return
@@ -155,9 +159,16 @@ export function EventDetail() {
               {statusLabel(event, tz, now)}
             </span>
             <span className="font-mono text-xs text-muted-foreground">
-              {fmtTime(event.start, tz)} – {fmtTime(event.end, tz)}
+              {fmtTime(occ.start, tz)} – {fmtTime(occ.end, tz)}
             </span>
           </div>
+
+          {repeats && (
+            <div className="-mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <RepeatIcon className="size-3.5" />
+              <span>{repeats} · next occurrence shown</span>
+            </div>
+          )}
 
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between">
