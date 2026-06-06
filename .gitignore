@@ -13,3 +13,6 @@ server/data/calendar.json
 .playwright-mcp/
 *.jpeg
 *.png
+
+# Local Claude Code skill mirror (source of truth: .agents/skills/ + skills-lock.json)
+.claude/skills/

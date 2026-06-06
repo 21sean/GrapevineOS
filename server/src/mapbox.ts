@@ -4,11 +4,11 @@
  * the web app talks to these endpoints instead.
  *
  * Both calls are cached to stay far inside the free tier:
- *  - geocode: persistent (data/geocache.json) — venues don't move
- *  - eta: 10-minute TTL — traffic-aware, so it shouldn't live forever
+ *  - geocode: permanent (geocode_cache table) — venues don't move; misses
+ *    are cached too (null lng/lat) so a bad venue string is billed once
+ *  - eta: 10-minute in-memory TTL — traffic-aware, so it shouldn't live forever
  */
-import fs from "node:fs";
-import path from "node:path";
+import { db } from "./db.js";
 
 function token(): string {
   const t = process.env.MAPBOX_SECRET_TOKEN;
@@ -21,27 +21,9 @@ function token(): string {
 const ETA_TTL_MS = 10 * 60 * 1000;
 const etaCache = new Map<string, { at: number; value: Eta | null }>();
 
-const GEOCACHE_FILE = path.resolve(import.meta.dirname, "../data/geocache.json");
-let geoCache: Record<string, GeocodeHit | null> | null = null;
-
-function loadGeoCache(): Record<string, GeocodeHit | null> {
-  if (geoCache) return geoCache;
-  try {
-    geoCache = JSON.parse(fs.readFileSync(GEOCACHE_FILE, "utf8"));
-  } catch {
-    geoCache = {};
-  }
-  return geoCache!;
-}
-
-function saveGeoCache() {
-  if (!geoCache) return;
-  try {
-    fs.writeFileSync(GEOCACHE_FILE, JSON.stringify(geoCache, null, 2));
-  } catch {
-    /* cache persistence is best-effort */
-  }
-}
+// Per-process memo in front of the table: repeat lookups in one session
+// (ingest batches hit the same venue over and over) cost zero round trips.
+const geoMemo = new Map<string, GeocodeHit | null>();
 
 /** ~110 m grid so nearby origins share an ETA cache entry. */
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
@@ -103,9 +85,23 @@ export async function geocode(
   q: string,
   proximity: [number, number],
 ): Promise<GeocodeHit | null> {
-  const cache = loadGeoCache();
   const key = q.trim().toLowerCase();
-  if (key in cache) return cache[key];
+  if (geoMemo.has(key)) return geoMemo.get(key)!;
+
+  const { data: cached } = await db
+    .from("geocode_cache")
+    .select("*")
+    .eq("query", key)
+    .maybeSingle()
+    .throwOnError();
+  if (cached) {
+    const value: GeocodeHit | null =
+      cached.lng !== null && cached.lat !== null
+        ? { lng: cached.lng, lat: cached.lat, name: cached.name }
+        : null;
+    geoMemo.set(key, value);
+    return value;
+  }
 
   const [cx, cy] = proximity;
   const bbox = [cx - GEO_BBOX_LON, cy - GEO_BBOX_LAT, cx + GEO_BBOX_LON, cy + GEO_BBOX_LAT].join(",");
@@ -124,7 +120,13 @@ export async function geocode(
         name: feat.properties?.full_address ?? q,
       }
     : null;
-  cache[key] = value;
-  saveGeoCache();
+  geoMemo.set(key, value);
+  // Cache persistence is best-effort — a failed write just re-geocodes later.
+  await db
+    .from("geocode_cache")
+    .upsert(
+      { query: key, lng: value?.lng ?? null, lat: value?.lat ?? null, name: value?.name ?? "" },
+      { onConflict: "query", ignoreDuplicates: true },
+    );
   return value;
 }

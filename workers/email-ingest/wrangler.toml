@@ -1,15 +1,15 @@
 # Grapevine email ingestion worker
 #
 # Every newsletter sent to *@sean.ventures lands here via Email Routing's
-# catch-all. The worker parses the email and writes it to the RAW_EMAILS KV
-# namespace. In the default PULL setup the local server polls that namespace —
-# no tunnel, nothing to redeploy.
+# catch-all. The worker parses the email and inserts it into the Supabase
+# raw_emails table; the local server polls unprocessed rows. The RAW_EMAILS
+# KV namespace stays bound as a dead letter — used only if the Supabase
+# insert fails, so an outage never drops an email.
 #
 # One-time setup:
 #   1. Dashboard > Email > Email Routing > enable (adds MX/SPF records)   [done]
-#   2. npx wrangler kv namespace create RAW_EMAILS
-#        -> paste the returned id into `id` below
-#        -> also put it in server/.env as KV_NAMESPACE_ID (the poller reads it)
+#   2. npx wrangler secret put SUPABASE_SECRET_KEY
+#        -> the secret API key from Supabase dashboard > Settings > API
 #   3. npm run deploy
 #   4. Dashboard > Email > Email Routing > Routing rules > Catch-all
 #        -> action "Send to Worker" -> grapevine-email-ingest
@@ -23,13 +23,15 @@ main = "src/index.ts"
 compatibility_date = "2025-06-01"
 account_id = "97e28655beae5913f3adbe7cbea20514"
 
+[vars]
+SUPABASE_URL = "https://hgkjlyggzrziylwazadc.supabase.co"
+# --- Optional PUSH mode (tunnel/deploy) -------------------------------------
+# To ALSO push each email straight to the API for instant processing,
+# uncomment and point INGEST_URL at a cloudflared tunnel or your deployed API,
+# then `npx wrangler secret put INGEST_KEY` (= INGEST_SHARED_KEY in server/.env).
+# INGEST_URL = "https://<your-tunnel>.trycloudflare.com/api/ingest/inbound"
+
+# Dead-letter store (only written when the Supabase insert fails).
 [[kv_namespaces]]
 binding = "RAW_EMAILS"
 id = "697e0cae62bf4a179aa94e010baa4e5b"
-
-# --- Optional PUSH mode (tunnel/deploy) -------------------------------------
-# Pull mode needs nothing here. To ALSO push each email straight to the API,
-# uncomment and point INGEST_URL at a cloudflared tunnel or your deployed API,
-# then `npx wrangler secret put INGEST_KEY` (= INGEST_SHARED_KEY in server/.env).
-# [vars]
-# INGEST_URL = "https://<your-tunnel>.trycloudflare.com/api/ingest/inbound"

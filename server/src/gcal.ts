@@ -42,7 +42,7 @@ async function accessToken(user: User): Promise<string> {
     accessToken: body.access_token,
     expiresAt: Date.now() + body.expires_in * 1000,
   };
-  store.updateUser(user.id, { google: next });
+  await store.setGoogleTokens(user.id, next);
   user.google = next; // keep the in-flight request's copy current too
   return next.accessToken;
 }
@@ -108,5 +108,5 @@ export async function disconnectGoogle(user: User): Promise<void> {
       signal: AbortSignal.timeout(10000),
     }).catch(() => {});
   }
-  store.updateUser(user.id, { google: undefined });
+  await store.setGoogleTokens(user.id, null);
 }
