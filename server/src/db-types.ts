@@ -103,6 +103,7 @@ export type Database = {
           rarity: Database["public"]["Enums"]["event_rarity"]
           rating: number
           rating_rationale: string | null
+          recurrence: string | null
           source_id: string
           source_kind: Database["public"]["Enums"]["event_source_kind"]
           starts_at: string
@@ -129,6 +130,7 @@ export type Database = {
           rarity?: Database["public"]["Enums"]["event_rarity"]
           rating?: number
           rating_rationale?: string | null
+          recurrence?: string | null
           source_id: string
           source_kind?: Database["public"]["Enums"]["event_source_kind"]
           starts_at: string
@@ -155,6 +157,7 @@ export type Database = {
           rarity?: Database["public"]["Enums"]["event_rarity"]
           rating?: number
           rating_rationale?: string | null
+          recurrence?: string | null
           source_id?: string
           source_kind?: Database["public"]["Enums"]["event_source_kind"]
           starts_at?: string

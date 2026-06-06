@@ -61,6 +61,8 @@ function gcalBody(e: CityEvent, tz: string) {
     description,
     start: { dateTime: e.start, timeZone: tz },
     end: { dateTime: e.end, timeZone: tz },
+    // Google expands the RRULE from the anchor occurrence, same as Apple/ICS.
+    ...(e.recurrence && { recurrence: [`RRULE:${e.recurrence}`] }),
   };
 }
 

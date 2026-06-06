@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { chatJSON } from "./ollama.js";
 import { geocode } from "./mapbox.js";
+import { normalizeRRule } from "./recurrence.js";
 import { store } from "./store.js";
 import { CATEGORIES, type Category, type CityEvent, type Rarity } from "./types.js";
 
@@ -17,8 +18,15 @@ Return ONLY a JSON object shaped exactly like:
   "tags": string[],                    // 2-5 lowercase interest tags, e.g. "live music","beer","running","family","yoga"
   "venue": string,
   "address": string,                   // street address if present, else venue + city
-  "start": string,                     // ISO 8601 WITH timezone offset, resolve relative dates against today
+  "start": string,                     // ISO 8601 WITH timezone offset, resolve relative dates against today.
+                                       // For a recurring event, this is the NEXT occurrence on or after today.
   "end": string,                       // ISO 8601; if unknown, estimate a sensible duration
+  "recurrence": string|null,           // RFC 5545 RRULE if it repeats on a schedule, else null.
+                                       // "every Saturday" -> "FREQ=WEEKLY;BYDAY=SA";
+                                       // "weekly" (no day) -> "FREQ=WEEKLY";
+                                       // "Tuesdays & Thursdays" -> "FREQ=WEEKLY;BYDAY=TU,TH";
+                                       // "every other Friday" -> "FREQ=WEEKLY;INTERVAL=2;BYDAY=FR";
+                                       // "daily" -> "FREQ=DAILY". One-off events: null.
   "price": string,                     // "Free", "$15", "$40+" etc
   "free": boolean,
   "ticketUrl": string|null,
@@ -37,7 +45,9 @@ Rules:
 - Only include events happening in or near ${city} with a concrete date.
 - Skip ads for products, job posts, classes-in-general, and anything without a when+where.
 - Never invent ticket URLs. Use null when absent.
-- If the email lists many events, extract each one separately.`;
+- If the email lists many events, extract each one separately.
+- If an event repeats on a schedule (a weekly market, run club, trivia night), emit ONE
+  event: set "recurrence" to its RRULE and anchor "start"/"end" to the next occurrence.`;
 
 export interface ExtractedEvent extends CityEvent {}
 
@@ -91,6 +101,7 @@ export async function extractEvents(opts: {
       lat,
       start: String(it.start),
       end: String(it.end ?? it.start),
+      ...(normalizeRRule(it.recurrence) && { recurrence: normalizeRRule(it.recurrence)! }),
       price: String(it.price ?? (it.free ? "Free" : "")),
       free: Boolean(it.free),
       ticketUrl: it.ticketUrl || undefined,

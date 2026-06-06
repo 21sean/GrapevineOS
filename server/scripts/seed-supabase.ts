@@ -12,6 +12,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { db } from "../src/db.js";
 import { eventKey } from "../src/store.js";
+import { normalizeRRule } from "../src/recurrence.js";
 import type {
   CalendarEntry,
   CityEvent,
@@ -87,6 +88,7 @@ await db
       lat: e.lat,
       starts_at: e.start,
       ends_at: new Date(e.end) >= new Date(e.start) ? e.end : e.start,
+      recurrence: normalizeRRule(e.recurrence),
       price: e.price,
       is_free: e.free,
       ticket_url: e.ticketUrl ?? null,

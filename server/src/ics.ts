@@ -54,6 +54,9 @@ function vevent(e: CityEvent, stamp: string): string[] {
     `DTSTAMP:${stamp}`,
     `DTSTART:${utc(e.start)}`,
     `DTEND:${utc(e.end)}`,
+    // A recurring event ships DTSTART as its anchor occurrence plus the rule;
+    // the calendar client expands every future occurrence itself.
+    ...(e.recurrence ? [`RRULE:${e.recurrence}`] : []),
     `SUMMARY:${esc(e.title)}`,
     `DESCRIPTION:${esc(description)}`,
     `LOCATION:${esc(e.address ? `${e.venue}, ${e.address}` : e.venue)}`,
