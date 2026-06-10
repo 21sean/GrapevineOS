@@ -63,6 +63,7 @@ await db
       ...derived.map((id) => ({
         id,
         name: id,
+        address: "",
         kind: "derived",
         note: "Auto-registered from ingested events during the JSON migration.",
         active: false,
