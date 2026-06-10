@@ -19,8 +19,14 @@ export interface CityEvent {
   address?: string;
   lng: number;
   lat: number;
-  start: string; // ISO 8601 with offset
+  start: string; // ISO 8601 with offset — anchor (first/next) occurrence
   end: string;
+  /**
+   * RFC 5545 RRULE (no "RRULE:" prefix), e.g. "FREQ=WEEKLY;BYDAY=SA", when the
+   * event repeats. Absent/undefined means a one-off. `start`/`end` are the
+   * anchor occurrence + duration that the rule expands forward.
+   */
+  recurrence?: string;
   price: string; // "Free", "$15", "$40+"
   free: boolean;
   ticketUrl?: string;

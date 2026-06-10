@@ -22,8 +22,8 @@ export function TopBar() {
   const [accountOpen, setAccountOpen] = useState(false)
 
   const liveCount = useMemo(
-    () => events.filter((e) => isLive(e, now)).length,
-    [events, now],
+    () => events.filter((e) => isLive(e, now, settings?.tz)).length,
+    [events, now, settings?.tz],
   )
 
   return (

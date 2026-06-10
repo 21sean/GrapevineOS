@@ -47,8 +47,8 @@ export function CarouselOverlay() {
   const dockState = useGrapevine((s) => s.dockState)
 
   const tour = useMemo(
-    () => carouselEvents(events, filters, interests, now),
-    [events, filters, interests, now],
+    () => carouselEvents(events, filters, interests, now, settings?.tz),
+    [events, filters, interests, now, settings?.tz],
   )
 
   const idx = tour.length ? carouselIdx % tour.length : 0

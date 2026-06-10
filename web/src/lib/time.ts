@@ -1,7 +1,27 @@
+import { nextOccurrence } from "./recurrence"
 import type { CityEvent } from "./types"
 
-export function isLive(e: CityEvent, now: Date): boolean {
-  return new Date(e.start) <= now && now <= new Date(e.end)
+/**
+ * All of these read the event's *effective* occurrence: for a one-off that is
+ * just its start/end, but for a recurring event it's the current-or-next
+ * occurrence (see nextOccurrence), so recurring events stay live/upcoming week
+ * after week instead of retiring after their anchor date. `tz` is optional and
+ * only sharpens multi-day BYDAY rules; single-day weekly rolls forward the same
+ * in any zone.
+ */
+
+export function isLive(e: CityEvent, now: Date, tz?: string): boolean {
+  const { start, end } = nextOccurrence(e, now, tz)
+  return new Date(start) <= now && now <= new Date(end)
+}
+
+export function hasEnded(e: CityEvent, now: Date, tz?: string): boolean {
+  return new Date(nextOccurrence(e, now, tz).end) < now
+}
+
+export function minutesUntilStart(e: CityEvent, now: Date, tz?: string): number {
+  const { start } = nextOccurrence(e, now, tz)
+  return Math.round((new Date(start).getTime() - now.getTime()) / 60000)
 }
 
 /** Mapbox Standard's four time-of-day lighting presets. */
@@ -24,14 +44,6 @@ export function lightPresetForTime(now: Date, tz: string): LightPreset {
   if (hour >= 7 && hour < 18) return "day"
   if (hour >= 18 && hour < 20) return "dusk"
   return "night"
-}
-
-export function hasEnded(e: CityEvent, now: Date): boolean {
-  return new Date(e.end) < now
-}
-
-export function minutesUntilStart(e: CityEvent, now: Date): number {
-  return Math.round((new Date(e.start).getTime() - now.getTime()) / 60000)
 }
 
 function fmt(iso: string, tz: string, opts: Intl.DateTimeFormatOptions): string {
@@ -60,16 +72,18 @@ export function dayLabel(iso: string, tz: string, now: Date): string {
 
 /** "6:00 – 8:00 PM" for today, "Fri Jul 3 · 6:00 PM" otherwise. */
 export function timeRange(e: CityEvent, tz: string, now: Date): string {
-  const range = `${fmtTime(e.start, tz)} – ${fmtTime(e.end, tz)}`
-  const day = dayLabel(e.start, tz, now)
-  return day === "Today" ? range : `${day} · ${fmtTime(e.start, tz)}`
+  const occ = nextOccurrence(e, now, tz)
+  const range = `${fmtTime(occ.start, tz)} – ${fmtTime(occ.end, tz)}`
+  const day = dayLabel(occ.start, tz, now)
+  return day === "Today" ? range : `${day} · ${fmtTime(occ.start, tz)}`
 }
 
 /** Short status for badges/cards. */
 export function statusLabel(e: CityEvent, tz: string, now: Date): string {
-  if (isLive(e, now)) return "Live now"
-  if (hasEnded(e, now)) return "Ended"
-  const mins = minutesUntilStart(e, now)
+  const occ = nextOccurrence(e, now, tz)
+  if (new Date(occ.start) <= now && now <= new Date(occ.end)) return "Live now"
+  if (new Date(occ.end) < now) return "Ended"
+  const mins = Math.round((new Date(occ.start).getTime() - now.getTime()) / 60000)
   if (mins <= 90) return `Starts in ${mins} min`
-  return `${dayLabel(e.start, tz, now)} · ${fmtTime(e.start, tz)}`
+  return `${dayLabel(occ.start, tz, now)} · ${fmtTime(occ.start, tz)}`
 }

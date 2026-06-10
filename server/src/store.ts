@@ -8,6 +8,7 @@
  */
 import crypto from "node:crypto";
 import { db } from "./db.js";
+import { normalizeRRule } from "./recurrence.js";
 import type { Json, Tables, TablesInsert } from "./db-types.js";
 import type {
   CalendarEntry,
@@ -20,12 +21,15 @@ import type {
   UserPrefs,
 } from "./types.js";
 
-/** Stable dedupe key: normalized title + start date. Enforced by a unique
- * index on events.dedupe_key, so ingest dedupe is a DB guarantee. */
-export function eventKey(e: Pick<CityEvent, "title" | "start">): string {
-  return (
-    e.title.toLowerCase().replace(/[^a-z0-9]/g, "") + "|" + e.start.slice(0, 10)
-  );
+/** Stable dedupe key, enforced by a unique index on events.dedupe_key so
+ * ingest dedupe is a DB guarantee. One-offs key on normalized title + start
+ * date. Recurring events key on title + the recurrence rule (a stable "series
+ * key"), so re-ingesting next week's newsletter updates the one series row
+ * instead of spawning a duplicate per occurrence. */
+export function eventKey(e: Pick<CityEvent, "title" | "start" | "recurrence">): string {
+  const title = e.title.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const rule = normalizeRRule(e.recurrence);
+  return rule ? `${title}|${rule}` : `${title}|${e.start.slice(0, 10)}`;
 }
 
 // ---------- row mappers ----------
@@ -43,6 +47,7 @@ function rowToEvent(r: Tables<"events">): CityEvent {
     lat: r.lat,
     start: r.starts_at,
     end: r.ends_at,
+    recurrence: r.recurrence ?? undefined,
     price: r.price,
     free: r.is_free,
     ticketUrl: r.ticket_url ?? undefined,
@@ -72,6 +77,9 @@ function eventToRow(e: CityEvent): TablesInsert<"events"> {
     lat: e.lat,
     starts_at: e.start,
     ends_at: end,
+    // Normalize on write so every path stores a canonical rule (or null) and
+    // never trips the events.recurrence check constraint.
+    recurrence: normalizeRRule(e.recurrence),
     price: e.price,
     is_free: e.free,
     ticket_url: e.ticketUrl ?? null,
@@ -216,6 +224,9 @@ export const store = {
         ...(patch.lat !== undefined && { lat: patch.lat }),
         ...(patch.start !== undefined && { starts_at: patch.start }),
         ...(patch.end !== undefined && { ends_at: patch.end }),
+        ...(patch.recurrence !== undefined && {
+          recurrence: normalizeRRule(patch.recurrence),
+        }),
         ...(patch.price !== undefined && { price: patch.price }),
         ...(patch.free !== undefined && { is_free: patch.free }),
         ...(patch.ticketUrl !== undefined && { ticket_url: patch.ticketUrl ?? null }),

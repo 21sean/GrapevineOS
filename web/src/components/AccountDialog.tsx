@@ -31,6 +31,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
 import { api } from "@/lib/api"
+import { nextOccurrence } from "@/lib/recurrence"
 import { matchesFilters } from "@/lib/score"
 import { useGrapevine } from "@/lib/store"
 import { dayLabel, hasEnded, isLive } from "@/lib/time"
@@ -89,14 +90,16 @@ export function AccountDialog({
       .catch(() => setHistoryError(true))
   }, [open])
 
+  const tz = settings?.tz ?? "America/Los_Angeles"
+
   const stats = useMemo(() => {
-    const upcoming = events.filter((e) => !hasEnded(e, now))
+    const upcoming = events.filter((e) => !hasEnded(e, now, tz))
     const terms = (e: CityEvent) => [
       ...e.tags.map((t) => t.toLowerCase()),
       e.category,
     ]
     return {
-      onMap: events.filter((e) => matchesFilters(e, filters, interests, now))
+      onMap: events.filter((e) => matchesFilters(e, filters, interests, now, tz))
         .length,
       boosted: upcoming.filter((e) =>
         terms(e).some((t) => interests.loves.includes(t)),
@@ -105,7 +108,7 @@ export function AccountDialog({
         terms(e).some((t) => interests.avoids.includes(t)),
       ).length,
     }
-  }, [events, filters, interests, now])
+  }, [events, filters, interests, now, tz])
 
   // Resolve pinned ids to live events (dropping any since deleted).
   const pinnedEvents = useMemo(
@@ -246,8 +249,8 @@ export function AccountDialog({
             {pinnedEvents.length > 0 ? (
               <div className="mt-2 flex flex-col divide-y divide-border overflow-hidden rounded-lg border">
                 {pinnedEvents.map((e) => {
-                  const ended = hasEnded(e, now)
-                  const on = isLive(e, now)
+                  const ended = hasEnded(e, now, tz)
+                  const on = isLive(e, now, tz)
                   return (
                     <div
                       key={e.id}
@@ -276,11 +279,7 @@ export function AccountDialog({
                           ) : ended ? (
                             "ended"
                           ) : (
-                            dayLabel(
-                              e.start,
-                              settings?.tz ?? "America/Los_Angeles",
-                              now,
-                            )
+                            dayLabel(nextOccurrence(e, now, tz).start, tz, now)
                           )}
                         </span>
                       </button>
@@ -670,8 +669,8 @@ function IngestRow({
         <div className="flex flex-col">
           {record.events.map((snap) => {
             const live = events.find((e) => e.id === snap.id)
-            const ended = live ? hasEnded(live, now) : true
-            const isOn = live ? isLive(live, now) : false
+            const ended = live ? hasEnded(live, now, tz) : true
+            const isOn = live ? isLive(live, now, tz) : false
             return (
               <button
                 key={snap.id}
@@ -702,7 +701,7 @@ function IngestRow({
                   ) : ended || !live ? (
                     "ended"
                   ) : (
-                    dayLabel(snap.start, tz, now)
+                    dayLabel(nextOccurrence(live, now, tz).start, tz, now)
                   )}
                 </span>
               </button>
