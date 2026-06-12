@@ -1,5 +1,10 @@
 import { useMemo, useState } from "react"
-import { HeartIcon, Settings2Icon } from "lucide-react"
+import {
+  CalendarDaysIcon,
+  HeartIcon,
+  Settings2Icon,
+  SparklesIcon,
+} from "lucide-react"
 import { AccountDialog } from "@/components/AccountDialog"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -18,6 +23,8 @@ export function TopBar() {
   const now = useGrapevine((s) => s.now)
   const setInterestsOpen = useGrapevine((s) => s.setInterestsOpen)
   const setAdminOpen = useGrapevine((s) => s.setAdminOpen)
+  const setAskOpen = useGrapevine((s) => s.setAskOpen)
+  const setCalendarOpen = useGrapevine((s) => s.setCalendarOpen)
   const user = useGrapevine((s) => s.user)
   const [accountOpen, setAccountOpen] = useState(false)
 
@@ -51,7 +58,29 @@ export function TopBar() {
         </span>
       </div>
 
+      {/* The agent entry point doubles as the app's search box. */}
+      <button
+        type="button"
+        onClick={() => setAskOpen(true)}
+        className="glass pointer-events-auto hidden h-11 min-w-0 max-w-md flex-1 items-center gap-2.5 rounded-full px-4 text-sm text-muted-foreground transition-colors hover:text-foreground sm:flex"
+      >
+        <SparklesIcon className="size-4 shrink-0 text-wine" />
+        <span className="truncate">Ask Grapevine</span>
+        <kbd className="ml-auto rounded border border-border bg-secondary/60 px-1.5 py-0.5 font-mono text-[10px]">
+          {navigator.userAgent.includes("Mac") ? "⌘K" : "Ctrl K"}
+        </kbd>
+      </button>
+
       <div className="glass pointer-events-auto flex h-11 items-center gap-1 rounded-full px-2">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="rounded-full sm:hidden"
+          aria-label="Ask Grapevine"
+          onClick={() => setAskOpen(true)}
+        >
+          <SparklesIcon className="text-wine" />
+        </Button>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -66,6 +95,20 @@ export function TopBar() {
             </Button>
           </TooltipTrigger>
           <TooltipContent>Tune what floats to the top</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="rounded-full"
+              aria-label="Your calendar"
+              onClick={() => setCalendarOpen(true)}
+            >
+              <CalendarDaysIcon />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Your Google Calendar, right here</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>

@@ -45,6 +45,8 @@ export interface Settings {
   tz: string;
   model: string;
   ollamaUrl: string;
+  /** Who answers chat: the local Ollama agent or a subscription-authed CLI. */
+  chatProvider: "ollama" | "claude" | "codex" | "gemini";
 }
 
 export interface Source {
@@ -116,6 +118,21 @@ export interface Session {
   tokenHash: string; // sha256 of the cookie value — raw tokens aren't stored
   userId: string;
   expiresAt: number;
+}
+
+/** One row in the Ask Grapevine history panel. */
+export interface ChatThreadMeta {
+  id: string; // the LangGraph thread id the client minted
+  title: string; // first user message, truncated
+  provider: string; // who answered: ollama model path or a CLI provider
+  updatedAt: string; // ISO 8601 — last exchange
+}
+
+/** One persisted chat message (only user/assistant text, never tool frames). */
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string; // ISO 8601
 }
 
 export const CATEGORIES: Category[] = [

@@ -53,6 +53,32 @@ export interface Settings {
   tz: string
   model: string
   ollamaUrl: string
+  /** Who answers chat: the local Ollama agent or a subscription-authed CLI. */
+  chatProvider: ChatProviderId
+}
+
+export type ChatProviderId = "ollama" | "claude" | "codex" | "gemini"
+
+/** One row from GET /api/providers — a locally installed, OAuth-authed CLI. */
+export interface CliProviderStatus {
+  id: Exclude<ChatProviderId, "ollama">
+  name: string
+  vendor: string
+  logo: string
+  bin: string
+  installHint: string
+  loginHint: string
+  loginNote: string
+  installed: boolean
+  version: string | null
+  authed: boolean
+  authKind: "subscription" | "api-key" | null
+}
+
+export interface McpInfo {
+  url: string
+  transport: string
+  keyRequired: boolean
 }
 
 export interface Source {
@@ -147,6 +173,120 @@ export interface CalendarStatus {
   feedUrl: string | null // personal ICS feed — subscribe from Apple Calendar
 }
 
+// ---------- in-app Google Calendar (the month/agenda popup) ----------
+
+/** Event colors ("etiquette"), mapped server-side onto Google colorIds. */
+export const ETIQUETTE_COLORS = [
+  "sky",
+  "amber",
+  "violet",
+  "rose",
+  "emerald",
+  "orange",
+] as const
+
+export type Etiquette = (typeof ETIQUETTE_COLORS)[number]
+
+/** Dark-theme tints for event chips/cards + the etiquette picker swatches. */
+export const ETIQUETTE_META: Record<
+  Etiquette,
+  { dot: string; chip: string; swatch: string }
+> = {
+  sky: {
+    dot: "bg-sky-400",
+    chip: "border-sky-400/25 bg-sky-400/15 text-sky-200",
+    swatch: "border-sky-400",
+  },
+  amber: {
+    dot: "bg-amber-400",
+    chip: "border-amber-400/25 bg-amber-400/15 text-amber-200",
+    swatch: "border-amber-400",
+  },
+  violet: {
+    dot: "bg-violet-400",
+    chip: "border-violet-400/25 bg-violet-400/15 text-violet-200",
+    swatch: "border-violet-400",
+  },
+  rose: {
+    dot: "bg-rose-400",
+    chip: "border-rose-400/25 bg-rose-400/15 text-rose-200",
+    swatch: "border-rose-400",
+  },
+  emerald: {
+    dot: "bg-emerald-400",
+    chip: "border-emerald-400/25 bg-emerald-400/15 text-emerald-200",
+    swatch: "border-emerald-400",
+  },
+  orange: {
+    dot: "bg-orange-400",
+    chip: "border-orange-400/25 bg-orange-400/15 text-orange-200",
+    swatch: "border-orange-400",
+  },
+}
+
+/** Coerce whatever color string the server sends into a known etiquette. */
+export function asEtiquette(c: string): Etiquette {
+  return (ETIQUETTE_COLORS as readonly string[]).includes(c)
+    ? (c as Etiquette)
+    : "sky"
+}
+
+export interface GcalAttendee {
+  email: string
+  displayName?: string
+  responseStatus: string // needsAction | accepted | declined | tentative
+  organizer: boolean
+  self: boolean
+}
+
+/** One event from the user's primary Google Calendar, server-shaped. */
+export interface GcalEvent {
+  id: string
+  title: string
+  description: string
+  location: string
+  start: string // ISO datetime, or YYYY-MM-DD when allDay
+  end: string // exclusive end date when allDay (Google convention)
+  allDay: boolean
+  color: string
+  htmlLink: string
+  canEdit: boolean
+  guestsCanModify: boolean
+  organizerEmail: string
+  attendees: GcalAttendee[]
+  recurringEventId?: string
+  /** Set when this Google event is a synced Grapevine save. */
+  grapevineEventId?: string
+}
+
+/** Fields PATCH/POST /api/calendar/google/events accepts. */
+export interface GcalEventPatch {
+  title?: string
+  description?: string
+  location?: string
+  start?: string
+  end?: string
+  allDay?: boolean
+  color?: string
+  guestsCanModify?: boolean
+  attendees?: { email: string; displayName?: string; responseStatus?: string }[]
+}
+
+// ---------- chat history (Ask Grapevine, signed-in users) ----------
+
+export interface ChatThreadMeta {
+  id: string
+  title: string
+  provider: string
+  updatedAt: string
+}
+
+export interface ChatMessageRec {
+  role: "user" | "assistant"
+  content: string
+  createdAt: string
+}
+
 /** A raw newsletter sitting in Cloudflare KV, as shown in the admin inbox. */
 export interface InboxEmail {
   key: string
@@ -178,3 +318,29 @@ export const DEFAULT_FILTERS: Filters = {
 
 /** A farmers market carries this tag; the "Farmers markets" filter keys off it. */
 export const FARMERS_MARKET_TAG = "farmers market"
+
+// ---------- agent ("Ask Grapevine") ----------
+
+/** Side-effects the agent asks the client to perform (or propose). */
+export type AgentAction =
+  | { kind: "highlight"; eventIds: string[]; fit?: boolean }
+  | { kind: "proposeCalendar"; eventIds: string[]; note?: string }
+  | {
+      kind: "proposeInterests"
+      addLoves: string[]
+      addAvoids: string[]
+      removeLoves: string[]
+      removeAvoids: string[]
+      reason: string
+    }
+
+/** One NDJSON line streamed from POST /api/agent/chat. */
+export type AgentFrame =
+  | { type: "status"; label: string }
+  | { type: "delta"; text: string }
+  | { type: "replace"; text: string }
+  | { type: "tool"; name: string; label: string; state: "start" | "done"; detail?: string }
+  | { type: "action"; action: AgentAction }
+  | { type: "notice"; code: string; message: string }
+  | { type: "done"; threadId?: string }
+  | { type: "error"; message: string }

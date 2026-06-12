@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Toaster } from "@/components/ui/sonner"
 import { Spinner } from "@/components/ui/spinner"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { AgentChat } from "@/components/AgentChat"
 import { CarouselOverlay, CAROUSEL_MS } from "@/components/CarouselOverlay"
 import { EventDetail } from "@/components/EventDetail"
 import { FilterRail } from "@/components/FilterRail"
@@ -21,6 +22,13 @@ const AdminSheet = lazy(() =>
   import("@/components/admin/AdminSheet").then((m) => ({ default: m.AdminSheet })),
 )
 
+// Same deal for the Google Calendar popup (react-day-picker et al.).
+const CalendarDialog = lazy(() =>
+  import("@/components/calendar/CalendarDialog").then((m) => ({
+    default: m.CalendarDialog,
+  })),
+)
+
 export function App() {
   const loaded = useGrapevine((s) => s.loaded)
   const load = useGrapevine((s) => s.load)
@@ -28,6 +36,7 @@ export function App() {
   const setUserPos = useGrapevine((s) => s.setUserPos)
   const carouselOn = useGrapevine((s) => s.carouselOn)
   const adminOpen = useGrapevine((s) => s.adminOpen)
+  const calendarOpen = useGrapevine((s) => s.calendarOpen)
   const events = useGrapevine((s) => s.events)
   const filters = useGrapevine((s) => s.filters)
   const interests = useGrapevine((s) => s.interests)
@@ -36,11 +45,12 @@ export function App() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const isMobile = useIsMobile()
   // Latch so the sheet stays mounted after closing — otherwise the close
-  // animation would be cut off when adminOpen flips false.
+  // animation would be cut off when adminOpen flips false. Render-phase
+  // state adjustment, per the React docs (same pattern as AccountDialog).
   const [adminEverOpened, setAdminEverOpened] = useState(false)
-  useEffect(() => {
-    if (adminOpen) setAdminEverOpened(true)
-  }, [adminOpen])
+  if (adminOpen && !adminEverOpened) setAdminEverOpened(true)
+  const [calendarEverOpened, setCalendarEverOpened] = useState(false)
+  if (calendarOpen && !calendarEverOpened) setCalendarEverOpened(true)
 
   useEffect(() => {
     load().catch((err) => setLoadError(String(err)))
@@ -101,9 +111,15 @@ export function App() {
             <CarouselOverlay />
             <EventDetail />
             <InterestsDialog />
+            <AgentChat />
             {(adminOpen || adminEverOpened) && (
               <Suspense fallback={null}>
                 <AdminSheet />
+              </Suspense>
+            )}
+            {(calendarOpen || calendarEverOpened) && (
+              <Suspense fallback={null}>
+                <CalendarDialog />
               </Suspense>
             )}
           </>

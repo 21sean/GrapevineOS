@@ -38,6 +38,12 @@ interface GrapevineState {
   carouselWidth: number
   // phone bottom sheet position; the tour card hides above "peek"
   dockState: "peek" | "half" | "full"
+  // "Ask Grapevine" agent overlay
+  askOpen: boolean
+  // in-app Google Calendar popup
+  calendarOpen: boolean
+  // events the agent pinned on the map; seq bumps so repeat highlights re-fly
+  agentHighlight: { ids: string[]; fit: boolean; seq: number } | null
 
   // preferences (persisted)
   filters: Filters
@@ -60,6 +66,10 @@ interface GrapevineState {
   setCarouselMin: (v: boolean) => void
   setCarouselWidth: (px: number) => void
   setDockState: (s: "peek" | "half" | "full") => void
+  setAskOpen: (open: boolean) => void
+  setCalendarOpen: (open: boolean) => void
+  setAgentHighlight: (ids: string[], fit?: boolean) => void
+  clearAgentHighlight: () => void
   setFilters: (patch: Partial<Filters>) => void
   toggleCategory: (c: Category) => void
   setInterests: (i: Interests) => void
@@ -110,6 +120,9 @@ export const useGrapevine = create<GrapevineState>()(
       carouselMin: false,
       carouselWidth: 440,
       dockState: "peek",
+      askOpen: false,
+      calendarOpen: false,
+      agentHighlight: null,
 
       filters: DEFAULT_FILTERS,
       interests: { loves: [], avoids: [] },
@@ -167,6 +180,21 @@ export const useGrapevine = create<GrapevineState>()(
       setCarouselMin: (carouselMin) => set({ carouselMin }),
       setCarouselWidth: (carouselWidth) => set({ carouselWidth }),
       setDockState: (dockState) => set({ dockState }),
+
+      setAskOpen(askOpen) {
+        // Opening pauses the tour; closing retires the agent's map pins.
+        set({ askOpen, ...(askOpen ? { carouselOn: false } : { agentHighlight: null }) })
+      },
+
+      setCalendarOpen: (calendarOpen) => set({ calendarOpen }),
+
+      setAgentHighlight(ids, fit = true) {
+        set({
+          agentHighlight: { ids, fit, seq: (get().agentHighlight?.seq ?? 0) + 1 },
+        })
+      },
+
+      clearAgentHighlight: () => set({ agentHighlight: null }),
 
       setFilters(patch) {
         set({ filters: { ...get().filters, ...patch } })

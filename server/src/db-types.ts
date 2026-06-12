@@ -21,6 +21,7 @@ export type Database = {
         Row: {
           center_lat: number
           center_lng: number
+          chat_provider: string
           city: string
           id: number
           model: string
@@ -31,6 +32,7 @@ export type Database = {
         Insert: {
           center_lat: number
           center_lng: number
+          chat_provider?: string
           city: string
           id?: number
           model?: string
@@ -41,6 +43,7 @@ export type Database = {
         Update: {
           center_lat?: number
           center_lng?: number
+          chat_provider?: string
           city?: string
           id?: number
           model?: string
@@ -79,6 +82,73 @@ export type Database = {
           },
           {
             foreignKeyName: "calendar_entries_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: number
+          role: string
+          thread_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: never
+          role: string
+          thread_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: never
+          role?: string
+          thread_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "chat_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_threads: {
+        Row: {
+          created_at: string
+          id: string
+          provider: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          provider?: string
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          provider?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_threads_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"

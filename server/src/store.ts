@@ -12,6 +12,8 @@ import { normalizeRRule } from "./recurrence.js";
 import type { Json, Tables, TablesInsert } from "./db-types.js";
 import type {
   CalendarEntry,
+  ChatMessage,
+  ChatThreadMeta,
   CityEvent,
   GoogleTokens,
   IngestRecord,
@@ -30,6 +32,11 @@ export function eventKey(e: Pick<CityEvent, "title" | "start" | "recurrence">): 
   const title = e.title.toLowerCase().replace(/[^a-z0-9]/g, "");
   const rule = normalizeRRule(e.recurrence);
   return rule ? `${title}|${rule}` : `${title}|${e.start.slice(0, 10)}`;
+}
+
+/** DB stores chat_provider as free text; unknown values fall back to ollama. */
+function coerceProvider(v: string): Settings["chatProvider"] {
+  return v === "claude" || v === "codex" || v === "gemini" ? v : "ollama";
 }
 
 // ---------- row mappers ----------
@@ -263,6 +270,7 @@ export const store = {
         tz: "America/Los_Angeles",
         model: "",
         ollamaUrl: "",
+        chatProvider: "ollama",
       };
     }
     return {
@@ -271,6 +279,7 @@ export const store = {
       tz: data.tz,
       model: data.model,
       ollamaUrl: data.ollama_url,
+      chatProvider: coerceProvider(data.chat_provider),
     };
   },
 
@@ -286,6 +295,7 @@ export const store = {
         tz: next.tz,
         model: next.model,
         ollama_url: next.ollamaUrl,
+        chat_provider: next.chatProvider,
       })
       .throwOnError();
     return next;
@@ -365,6 +375,18 @@ export const store = {
       .from("users")
       .select(USER_SELECT)
       .eq("id", id)
+      .maybeSingle()
+      .throwOnError();
+    return data ? rowToUser(data as UserRow) : undefined;
+  },
+
+  /** Lookup for the external agent API's AGENT_USER_EMAIL binding. */
+  async userByEmail(email: string): Promise<User | undefined> {
+    const { data } = await db
+      .from("users")
+      .select(USER_SELECT)
+      .ilike("email", email)
+      .limit(1)
       .maybeSingle()
       .throwOnError();
     return data ? rowToUser(data as UserRow) : undefined;
@@ -484,6 +506,98 @@ export const store = {
       .update({ google_event_id: null })
       .eq("user_id", userId)
       .throwOnError();
+  },
+
+  // ---------- chat history (Ask Grapevine, signed-in users only) ----------
+
+  /** Who owns a thread id, or null when it doesn't exist yet. */
+  async chatThreadOwner(threadId: string): Promise<string | null> {
+    const { data } = await db
+      .from("chat_threads")
+      .select("user_id")
+      .eq("id", threadId)
+      .maybeSingle()
+      .throwOnError();
+    return data?.user_id ?? null;
+  },
+
+  /** Newest-first thread list for the history panel. */
+  async chatThreads(userId: string): Promise<ChatThreadMeta[]> {
+    const { data } = await db
+      .from("chat_threads")
+      .select("id, title, provider, updated_at")
+      .eq("user_id", userId)
+      .order("updated_at", { ascending: false })
+      .limit(100)
+      .throwOnError();
+    return data.map((r) => ({
+      id: r.id,
+      title: r.title,
+      provider: r.provider,
+      updatedAt: r.updated_at,
+    }));
+  },
+
+  /** Full transcript of one thread — only if `userId` owns it. */
+  async chatMessages(userId: string, threadId: string): Promise<ChatMessage[] | null> {
+    if ((await this.chatThreadOwner(threadId)) !== userId) return null;
+    const { data } = await db
+      .from("chat_messages")
+      .select("role, content, created_at")
+      .eq("thread_id", threadId)
+      .order("id", { ascending: true })
+      .limit(500)
+      .throwOnError();
+    return data.map((r) => ({
+      role: r.role as ChatMessage["role"],
+      content: r.content,
+      createdAt: r.created_at,
+    }));
+  },
+
+  /**
+   * Persist one exchange. Creates the thread on first use (titled from the
+   * opening message) and bumps updated_at so the history list stays sorted.
+   * Ownership must be checked by the caller before the turn ever runs.
+   */
+  async appendChatTurn(
+    userId: string,
+    threadId: string,
+    provider: string,
+    turn: { userText: string; assistantText: string },
+  ): Promise<void> {
+    const owner = await this.chatThreadOwner(threadId);
+    if (owner && owner !== userId) return; // never write into someone else's thread
+    if (!owner) {
+      await db
+        .from("chat_threads")
+        .insert({
+          id: threadId,
+          user_id: userId,
+          title: turn.userText.replace(/\s+/g, " ").slice(0, 80),
+          provider,
+        })
+        .throwOnError();
+    } else {
+      await db
+        .from("chat_threads")
+        .update({ provider })
+        .eq("id", threadId)
+        .throwOnError();
+    }
+    await db
+      .from("chat_messages")
+      .insert([
+        { thread_id: threadId, role: "user", content: turn.userText },
+        { thread_id: threadId, role: "assistant", content: turn.assistantText },
+      ])
+      .throwOnError();
+  },
+
+  async deleteChatThread(userId: string, threadId: string): Promise<boolean> {
+    if ((await this.chatThreadOwner(threadId)) !== userId) return false;
+    await db.from("chat_threads").delete().eq("id", threadId).throwOnError();
+    return true;
   },
 
   // ---------- sessions ----------

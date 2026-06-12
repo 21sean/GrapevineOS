@@ -1,10 +1,17 @@
 import type {
+  AgentFrame,
   CalendarStatus,
+  ChatMessageRec,
+  ChatThreadMeta,
   CityEvent,
+  CliProviderStatus,
   Filters,
+  GcalEvent,
+  GcalEventPatch,
   InboxEmail,
   IngestRecord,
   Interests,
+  McpInfo,
   Settings,
   Source,
   User,
@@ -79,6 +86,15 @@ export const api = {
       >(r),
     ),
 
+  /** CLI chat providers (claude/codex/gemini) installed on the server machine. */
+  providers: (refresh = false) =>
+    fetch(`/api/providers${refresh ? "?refresh=1" : ""}`).then((r) =>
+      json<{ providers: CliProviderStatus[] }>(r),
+    ),
+
+  /** Where MCP clients (Claude Code/Desktop) connect to drive this app. */
+  mcpInfo: () => fetch("/api/mcp/info").then((r) => json<McpInfo>(r)),
+
   catalog: () =>
     fetch("/api/catalog").then((r) =>
       json<
@@ -138,6 +154,53 @@ export const api = {
     }
   },
 
+  /**
+   * Streams the agent's NDJSON frames; abort via `signal` to stop generation.
+   * Conversation history lives server-side in the LangGraph checkpointer —
+   * send the same `threadId` to continue a conversation.
+   */
+  async agentChat(
+    body: {
+      threadId: string
+      message: string
+      context?: {
+        userPos?: [number, number]
+        interests?: Interests
+        savedEventIds?: string[]
+        signedIn?: boolean
+      }
+    },
+    onFrame: (frame: AgentFrame) => void,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const res = await fetch("/api/agent/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal,
+    })
+    if (!res.ok || !res.body) throw new Error(await res.text())
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ""
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split("\n")
+      buffer = lines.pop() ?? ""
+      for (const line of lines) {
+        if (!line.trim()) continue
+        try {
+          onFrame(JSON.parse(line) as AgentFrame)
+        } catch (err) {
+          if (err instanceof SyntaxError) continue
+          throw err
+        }
+      }
+    }
+  },
+
   calendarStatus: () =>
     fetch("/api/calendar/status").then((r) => json<CalendarStatus>(r)),
 
@@ -154,6 +217,45 @@ export const api = {
   calendarDisconnect: () =>
     fetch("/api/calendar/google/disconnect", { method: "POST" }).then((r) =>
       json<CalendarStatus>(r),
+    ),
+
+  /** The user's Google Calendar between two ISO instants (the popup window). */
+  gcalEvents: (from: string, to: string) =>
+    fetch(
+      `/api/calendar/google/events?${new URLSearchParams({ from, to })}`,
+    ).then((r) => json<{ events: GcalEvent[] }>(r)),
+
+  gcalCreate: (body: GcalEventPatch) =>
+    fetch("/api/calendar/google/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).then((r) => json<GcalEvent>(r)),
+
+  gcalUpdate: (id: string, patch: GcalEventPatch) =>
+    fetch(`/api/calendar/google/events/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    }).then((r) => json<GcalEvent>(r)),
+
+  gcalDelete: (id: string) =>
+    fetch(`/api/calendar/google/events/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }).then((r) => json<CalendarStatus>(r)),
+
+  /** Ask Grapevine history — signed-in users only, ownership checked server-side. */
+  chatThreads: () =>
+    fetch("/api/chat/threads").then((r) => json<{ threads: ChatThreadMeta[] }>(r)),
+
+  chatThread: (id: string) =>
+    fetch(`/api/chat/threads/${encodeURIComponent(id)}`).then((r) =>
+      json<{ id: string; messages: ChatMessageRec[] }>(r),
+    ),
+
+  chatThreadDelete: (id: string) =>
+    fetch(`/api/chat/threads/${encodeURIComponent(id)}`, { method: "DELETE" }).then(
+      (r) => json<{ ok: boolean }>(r),
     ),
 
   inbox: () =>

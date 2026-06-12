@@ -97,11 +97,25 @@ export function EventMap() {
   const trafficOn = useGrapevine((s) => s.trafficOn)
   const userPos = useGrapevine((s) => s.userPos)
   const select = useGrapevine((s) => s.select)
+  const agentHighlight = useGrapevine((s) => s.agentHighlight)
 
   const visible = useMemo(
     () => visibleEvents(events, filters, interests, now),
     [events, filters, interests, now],
   )
+
+  // The agent's picks render even when the user's filters would hide them
+  // (e.g. hidePromoted) — a recommendation with no pin is a broken answer.
+  const agentIds = useMemo(
+    () => new Set(agentHighlight?.ids ?? []),
+    [agentHighlight],
+  )
+  const rendered = useMemo(() => {
+    if (!agentIds.size) return visible
+    const shown = new Set(visible.map((e) => e.id))
+    const extras = events.filter((e) => agentIds.has(e.id) && !shown.has(e.id))
+    return extras.length ? [...visible, ...extras] : visible
+  }, [visible, events, agentIds])
   const tour = useMemo(
     () => carouselEvents(events, filters, interests, now),
     [events, filters, interests, now],
@@ -199,7 +213,7 @@ export function EventMap() {
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
-    const wanted = new Map(visible.map((e) => [e.id, e]))
+    const wanted = new Map(rendered.map((e) => [e.id, e]))
 
     for (const [id, { marker }] of markersRef.current) {
       if (!wanted.has(id)) {
@@ -208,10 +222,10 @@ export function EventMap() {
       }
     }
 
-    for (const e of visible) {
+    for (const e of rendered) {
       const existing = markersRef.current.get(e.id)
       if (existing) {
-        decorate(existing.el, e, now, activeId)
+        decorate(existing.el, e, now, activeId, agentIds)
         continue
       }
       // Mapbox owns the outer element (positions it via inline transform);
@@ -228,7 +242,7 @@ export function EventMap() {
       label.className = "gv-marker-label"
       el.append(icon, label)
       root.appendChild(el)
-      decorate(el, e, now, activeId)
+      decorate(el, e, now, activeId, agentIds)
       root.addEventListener("click", (ev) => {
         ev.stopPropagation()
         select(e.id)
@@ -242,7 +256,7 @@ export function EventMap() {
         .addTo(map)
       markersRef.current.set(e.id, { marker, el })
     }
-  }, [visible, now, activeId, select])
+  }, [rendered, now, activeId, select, agentIds])
 
   // --- traffic visibility (layer created lazily on first enable) ---
   useEffect(() => {
@@ -302,6 +316,44 @@ export function EventMap() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusId, focusSeq, carouselOn])
 
+  // --- camera: agent highlights (one pin flies, several fit together) ---
+  // Padding keeps pins clear of the chat palette (top), the FilterRail
+  // (desktop left), and the dock (phone bottom).
+  useEffect(() => {
+    const map = mapRef.current
+    const hl = agentHighlight
+    if (!map || !hl?.fit || !hl.ids.length) return
+    const pts = events.filter((e) => hl.ids.includes(e.id))
+    if (!pts.length) return
+    cameraTouchedRef.current = true
+    const phone = window.matchMedia("(max-width: 767px)").matches
+    const padding = phone
+      ? { top: 110, bottom: 300, left: 32, right: 32 }
+      : { top: 340, bottom: 80, left: 380, right: 80 }
+    if (pts.length === 1) {
+      map.flyTo({
+        center: [pts[0].lng, pts[0].lat],
+        zoom: 15.2,
+        pitch: 60,
+        bearing: -18,
+        duration: 2200,
+        padding,
+        essential: false,
+      })
+    } else {
+      const bounds = new mapboxgl.LngLatBounds()
+      for (const e of pts) bounds.extend([e.lng, e.lat])
+      map.fitBounds(bounds, {
+        padding,
+        pitch: 45,
+        bearing: -12,
+        duration: 1800,
+        maxZoom: 14.5,
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentHighlight?.seq])
+
   // mapbox-gl.css forces `position: relative` on the container, so size it
   // explicitly instead of relying on absolute inset-0. The gv-map class scopes
   // the dark control overrides in index.css so they outrank mapbox's own CSS.
@@ -313,10 +365,12 @@ function decorate(
   e: CityEvent,
   now: Date,
   selectedId: string | null,
+  agentIds?: Set<string>,
 ) {
   el.style.setProperty("--marker-color", CATEGORY_META[e.category].color)
   el.dataset.live = String(isLive(e, now))
   el.dataset.selected = String(e.id === selectedId)
+  el.dataset.agent = String(agentIds?.has(e.id) ?? false)
   if (el.dataset.category !== e.category) {
     el.dataset.category = e.category
     const icon = el.querySelector<HTMLSpanElement>(".gv-marker-icon")

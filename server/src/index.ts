@@ -1,8 +1,12 @@
 import "dotenv/config";
 import express from "express";
 import { Readable } from "node:stream";
+import { agent } from "./agent/index.js";
+import { warmupGuardrails } from "./agent/guardrails.js";
 import { auth } from "./auth.js";
 import { calendar } from "./calendar.js";
+import { mcp, mcpKeyRequired } from "./mcp.js";
+import { detectProviders } from "./providers.js";
 import { store } from "./store.js";
 import { listInstalled, ollamaBase } from "./ollama.js";
 import { catalog, logo } from "./catalog.js";
@@ -21,6 +25,14 @@ app.use(auth);
 // ---------- calendar (saved events, Google sync, ICS feed) ----------
 
 app.use(calendar);
+
+// ---------- agent ("Ask Grapevine" chat + external tools API) ----------
+
+app.use(agent);
+
+// ---------- MCP server (Grapevine tools for Claude & other MCP clients) ----------
+
+app.use(mcp);
 
 // ---------- events ----------
 
@@ -53,7 +65,13 @@ app.post("/api/events/:id/rate", async (req, res) => {
 app.get("/api/settings", async (_req, res) => res.json(await store.settings()));
 
 app.put("/api/settings", async (req, res) => {
-  const { city, center, tz, model, ollamaUrl } = req.body ?? {};
+  const { city, center, tz, model, ollamaUrl, chatProvider } = req.body ?? {};
+  if (
+    chatProvider !== undefined &&
+    !["ollama", "claude", "codex", "gemini"].includes(chatProvider)
+  ) {
+    return res.status(400).json({ error: "unknown chatProvider" });
+  }
   res.json(
     await store.saveSettings({
       ...(city !== undefined && { city }),
@@ -61,11 +79,35 @@ app.put("/api/settings", async (req, res) => {
       ...(tz !== undefined && { tz }),
       ...(model !== undefined && { model }),
       ...(ollamaUrl !== undefined && { ollamaUrl }),
+      ...(chatProvider !== undefined && { chatProvider }),
     }),
   );
 });
 
 app.get("/api/sources", async (_req, res) => res.json(await store.sources()));
+
+// ---------- chat providers (subscription CLIs) + MCP status ----------
+
+app.get("/api/providers", async (req, res) => {
+  try {
+    const force = req.query.refresh === "1";
+    res.json({ providers: await detectProviders(force) });
+  } catch (err) {
+    res.status(502).json({ error: String(err) });
+  }
+});
+
+app.get("/api/mcp/info", (_req, res) => {
+  // /mcp is served by this express app directly (not proxied through the web
+  // origin), so an MCP client connects to the server port. MCP_PUBLIC_URL
+  // overrides it when the server sits behind a public reverse proxy.
+  const base = process.env.MCP_PUBLIC_URL ?? `http://localhost:${port}`;
+  res.json({
+    url: `${base.replace(/\/$/, "")}/mcp`,
+    transport: "http",
+    keyRequired: mcpKeyRequired(),
+  });
+});
 
 // ---------- mapbox (secret token stays here) ----------
 
@@ -258,4 +300,5 @@ const port = Number(process.env.PORT ?? 8787);
 app.listen(port, () => {
   console.log(`[grapevine] api listening on http://localhost:${port}`);
   startInboxPoll();
+  warmupGuardrails();
 });

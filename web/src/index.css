@@ -219,6 +219,21 @@
   animation: gv-pulse 2.4s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
 }
 
+/* the agent's picks pulse wine — distinct from the live-now gold */
+.gv-marker[data-agent="true"] {
+  box-shadow: 0 0 0 1.5px color-mix(in oklab, var(--wine) 85%, transparent),
+    0 0 14px color-mix(in oklab, var(--wine) 55%, transparent);
+}
+
+.gv-marker[data-agent="true"]::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border-radius: 9999px;
+  border: 1.5px solid color-mix(in oklab, var(--wine) 75%, transparent);
+  animation: gv-pulse 2.4s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+}
+
 @keyframes gv-progress {
   from {
     width: 0%;
@@ -253,7 +268,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .gv-marker[data-live="true"]::after {
+  .gv-marker[data-live="true"]::after,
+  .gv-marker[data-agent="true"]::after {
     animation: none;
     opacity: 0.5;
     transform: scale(1);

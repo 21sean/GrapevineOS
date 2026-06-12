@@ -7,15 +7,26 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
-    "seed:supabase": "tsx scripts/seed-supabase.ts"
+    "seed:supabase": "tsx scripts/seed-supabase.ts",
+    "guardrails:eval": "tsx scripts/guardrails-eval.ts"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
+    "@langchain/core": "^1.2.1",
+    "@langchain/langgraph": "^1.4.7",
+    "@langchain/ollama": "^1.3.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@mozilla/readability": "^0.6.0",
     "@supabase/supabase-js": "2.110.0",
     "dotenv": "^16.4.7",
-    "express": "^5.1.0"
+    "duck-duck-scrape": "^2.2.7",
+    "express": "^5.1.0",
+    "jsdom": "^29.1.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
+    "@types/jsdom": "^28.0.3",
     "@types/node": "^24.0.0",
     "tsx": "^4.19.2",
     "typescript": "~5.8.0"

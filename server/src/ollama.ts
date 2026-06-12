@@ -48,6 +48,30 @@ export async function listInstalled(): Promise<InstalledModel[]> {
   return withCaps;
 }
 
+const toolSupport = new Map<string, boolean>();
+
+/** Whether the model advertises the "tools" capability (cached per model). */
+export async function modelSupportsTools(model: string): Promise<boolean> {
+  const cached = toolSupport.get(model);
+  if (cached !== undefined) return cached;
+  const base = await ollamaBase();
+  let ok = false;
+  try {
+    const res = await fetch(`${base}/api/show`, {
+      method: "POST",
+      body: JSON.stringify({ model }),
+    });
+    if (res.ok) {
+      const caps = ((await res.json()) as any).capabilities ?? [];
+      ok = caps.includes("tools");
+    }
+  } catch {
+    /* treat probe failure as no tools; the chat itself will surface errors */
+  }
+  toolSupport.set(model, ok);
+  return ok;
+}
+
 /**
  * Chat with the active model and get parsed JSON back.
  * Uses Ollama's `format: "json"`; retries without `think` if the
