@@ -16,3 +16,4 @@ server/data/calendar.json
 
 # Local Claude Code skill mirror (source of truth: .agents/skills/ + skills-lock.json)
 .claude/skills/
+server/.cache/
