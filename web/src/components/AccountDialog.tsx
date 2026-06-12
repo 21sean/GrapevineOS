@@ -65,6 +65,7 @@ export function AccountDialog({
   const togglePin = useGrapevine((s) => s.togglePin)
   const calendar = useGrapevine((s) => s.calendar)
   const setCalendar = useGrapevine((s) => s.setCalendar)
+  const setCalendarOpen = useGrapevine((s) => s.setCalendarOpen)
 
   const [history, setHistory] = useState<IngestRecord[] | null>(null)
   const [historyError, setHistoryError] = useState(false)
@@ -309,7 +310,16 @@ export function AccountDialog({
               icon={<CalendarIcon className="size-3.5" />}
               title="Calendar sync"
               action={
-                calendar && calendar.synced.length > 0 ? (
+                calendar?.google ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="-my-1 h-7 text-xs"
+                    onClick={() => handOff(() => setCalendarOpen(true))}
+                  >
+                    Open calendar
+                  </Button>
+                ) : calendar && calendar.synced.length > 0 ? (
                   <span className="font-mono text-xs text-muted-foreground">
                     {calendar.synced.length}
                   </span>

@@ -16,6 +16,23 @@ export function calendarConnected(user: User): boolean {
   return !!user.google?.refreshToken;
 }
 
+/**
+ * Turns a Google Calendar API failure into a one-line message. Google wraps
+ * errors as {error:{message}}; surfacing that (e.g. "Google Calendar API has
+ * not been used in project … Enable it …") beats dumping raw JSON at the user.
+ */
+async function gcalError(res: Response, verb: string): Promise<Error> {
+  const body = await res.text().catch(() => "");
+  let message = body.slice(0, 200);
+  try {
+    const parsed = JSON.parse(body) as { error?: { message?: string } };
+    if (parsed.error?.message) message = parsed.error.message;
+  } catch {
+    /* not JSON — keep the truncated text */
+  }
+  return new Error(`Google Calendar ${verb} failed (${res.status}): ${message}`);
+}
+
 /** Valid access token for the user, refreshing (and persisting) if expired. */
 async function accessToken(user: User): Promise<string> {
   const t = user.google;
@@ -86,6 +103,241 @@ export async function insertGoogleEvent(
     throw new Error(`calendar insert ${res.status}: ${(await res.text()).slice(0, 200)}`);
   }
   return ((await res.json()) as { id: string }).id;
+}
+
+// ---------------------------------------------------------------------------
+// Full calendar client — the in-app preview (list/create/edit/invite) works
+// on the user's primary calendar through the same events scope as the sync.
+// ---------------------------------------------------------------------------
+
+/** Etiquette color (the web's palette) ↔ Google colorId. */
+const COLOR_TO_ID: Record<string, string> = {
+  sky: "7", // Peacock
+  amber: "5", // Banana
+  violet: "3", // Grape
+  rose: "4", // Flamingo
+  emerald: "10", // Basil
+  orange: "6", // Tangerine
+};
+const ID_TO_COLOR: Record<string, string> = {
+  "1": "violet", // Lavender
+  "2": "emerald", // Sage
+  "3": "violet",
+  "4": "rose",
+  "5": "amber",
+  "6": "orange",
+  "7": "sky",
+  "8": "sky", // Graphite
+  "9": "sky", // Blueberry
+  "10": "emerald",
+  "11": "rose", // Tomato
+};
+
+interface RawGcalTime {
+  date?: string; // all-day: YYYY-MM-DD
+  dateTime?: string;
+  timeZone?: string;
+}
+
+interface RawGcalEvent {
+  id: string;
+  status?: string;
+  summary?: string;
+  description?: string;
+  location?: string;
+  colorId?: string;
+  htmlLink?: string;
+  start?: RawGcalTime;
+  end?: RawGcalTime;
+  recurringEventId?: string;
+  guestsCanModify?: boolean;
+  organizer?: { email?: string; displayName?: string; self?: boolean };
+  attendees?: {
+    email?: string;
+    displayName?: string;
+    responseStatus?: string;
+    organizer?: boolean;
+    self?: boolean;
+    optional?: boolean;
+    resource?: boolean;
+  }[];
+}
+
+/** The shape the web calendar renders — times stay ISO, colors are palette names. */
+export interface GcalEvent {
+  id: string;
+  title: string;
+  description: string;
+  location: string;
+  start: string; // ISO datetime, or YYYY-MM-DD when allDay
+  end: string; // exclusive end date when allDay (Google convention)
+  allDay: boolean;
+  color: string;
+  htmlLink: string;
+  canEdit: boolean;
+  guestsCanModify: boolean;
+  organizerEmail: string;
+  attendees: {
+    email: string;
+    displayName?: string;
+    responseStatus: string;
+    organizer: boolean;
+    self: boolean;
+  }[];
+  recurringEventId?: string;
+}
+
+/** Fields the web can set on create/update; times are ISO (or YYYY-MM-DD all-day). */
+export interface GcalEventPatch {
+  title?: string;
+  description?: string;
+  location?: string;
+  start?: string;
+  end?: string;
+  allDay?: boolean;
+  color?: string;
+  guestsCanModify?: boolean;
+  attendees?: { email: string; displayName?: string; responseStatus?: string }[];
+}
+
+function toWebEvent(r: RawGcalEvent, user: User): GcalEvent {
+  const allDay = !!r.start?.date;
+  const isOrganizer = !!r.organizer?.self || r.organizer?.email === user.email;
+  return {
+    id: r.id,
+    title: r.summary ?? "(no title)",
+    description: r.description ?? "",
+    location: r.location ?? "",
+    start: r.start?.dateTime ?? r.start?.date ?? "",
+    end: r.end?.dateTime ?? r.end?.date ?? "",
+    allDay,
+    color: (r.colorId && ID_TO_COLOR[r.colorId]) || "sky",
+    htmlLink: r.htmlLink ?? "",
+    canEdit: isOrganizer || !!r.guestsCanModify,
+    guestsCanModify: !!r.guestsCanModify,
+    organizerEmail: r.organizer?.email ?? "",
+    attendees: (r.attendees ?? [])
+      .filter((a) => a.email && !a.resource)
+      .map((a) => ({
+        email: a.email!,
+        displayName: a.displayName,
+        responseStatus: a.responseStatus ?? "needsAction",
+        organizer: !!a.organizer,
+        self: !!a.self,
+      })),
+    ...(r.recurringEventId && { recurringEventId: r.recurringEventId }),
+  };
+}
+
+/** Google's start/end objects from ISO strings; all-day uses exclusive dates. */
+function toGcalTimes(start: string, end: string, allDay: boolean, tz: string) {
+  if (allDay) {
+    return {
+      start: { date: start.slice(0, 10) },
+      end: { date: end.slice(0, 10) },
+    };
+  }
+  return {
+    start: { dateTime: start, timeZone: tz },
+    end: { dateTime: end, timeZone: tz },
+  };
+}
+
+function patchToBody(patch: GcalEventPatch, tz: string): Record<string, unknown> {
+  return {
+    ...(patch.title !== undefined && { summary: patch.title }),
+    ...(patch.description !== undefined && { description: patch.description }),
+    ...(patch.location !== undefined && { location: patch.location }),
+    ...(patch.start !== undefined &&
+      patch.end !== undefined &&
+      toGcalTimes(patch.start, patch.end, !!patch.allDay, tz)),
+    ...(patch.color !== undefined && { colorId: COLOR_TO_ID[patch.color] ?? null }),
+    ...(patch.guestsCanModify !== undefined && { guestsCanModify: patch.guestsCanModify }),
+    ...(patch.attendees !== undefined && {
+      attendees: patch.attendees.map((a) => ({
+        email: a.email,
+        ...(a.displayName && { displayName: a.displayName }),
+        ...(a.responseStatus && { responseStatus: a.responseStatus }),
+      })),
+    }),
+  };
+}
+
+/**
+ * Events on the user's primary calendar inside [from, to). Recurring series
+ * come back expanded into single occurrences, ordered by start.
+ */
+export async function listGoogleEvents(
+  user: User,
+  from: string,
+  to: string,
+): Promise<GcalEvent[]> {
+  const token = await accessToken(user);
+  const params = new URLSearchParams({
+    timeMin: new Date(from).toISOString(),
+    timeMax: new Date(to).toISOString(),
+    singleEvents: "true",
+    orderBy: "startTime",
+    maxResults: "250",
+  });
+  const res = await fetch(`${EVENTS_URL}?${params}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) throw await gcalError(res, "list");
+  const body = (await res.json()) as { items?: RawGcalEvent[] };
+  return (body.items ?? [])
+    .filter((r) => r.status !== "cancelled")
+    .map((r) => toWebEvent(r, user));
+}
+
+/**
+ * Creates a free-form event (the popup's "New event"), unlike insertGoogleEvent
+ * which pushes a Grapevine CityEvent. sendUpdates emails any listed attendees.
+ */
+export async function createGoogleEvent(
+  user: User,
+  patch: GcalEventPatch,
+  tz: string,
+): Promise<GcalEvent> {
+  const token = await accessToken(user);
+  const res = await fetch(`${EVENTS_URL}?sendUpdates=all`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(patchToBody(patch, tz)),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) throw await gcalError(res, "create");
+  return toWebEvent((await res.json()) as RawGcalEvent, user);
+}
+
+/**
+ * Patches an event in place. notify=true (used whenever the guest list or
+ * sharing mode changes) makes Google send real invite emails.
+ */
+export async function patchGoogleEvent(
+  user: User,
+  googleEventId: string,
+  patch: GcalEventPatch,
+  tz: string,
+  notify = false,
+): Promise<GcalEvent> {
+  const token = await accessToken(user);
+  const params = notify ? "?sendUpdates=all" : "";
+  const res = await fetch(`${EVENTS_URL}/${encodeURIComponent(googleEventId)}${params}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(patchToBody(patch, tz)),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) throw await gcalError(res, "update");
+  return toWebEvent((await res.json()) as RawGcalEvent, user);
 }
 
 /** Deletes by Google event id. Already-gone (404/410) counts as success. */

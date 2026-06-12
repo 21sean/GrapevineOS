@@ -7,13 +7,17 @@
  * personal ICS feed below (subscribe once, adds/removes follow) or the
  * per-event .ics download.
  */
-import { Router, type Request } from "express";
+import { Router, type Request, type Response } from "express";
 import { sessionUser } from "./auth.js";
 import {
   calendarConnected,
+  createGoogleEvent,
   deleteGoogleEvent,
   disconnectGoogle,
   insertGoogleEvent,
+  listGoogleEvents,
+  patchGoogleEvent,
+  type GcalEventPatch,
 } from "./gcal.js";
 import { icsCalendar } from "./ics.js";
 import { store } from "./store.js";
@@ -50,12 +54,16 @@ calendar.get("/api/calendar/status", async (req, res) => {
   res.json(user ? await status(user) : SIGNED_OUT);
 });
 
-/** Save an event; pushes to Google Calendar too when connected. */
-calendar.post("/api/calendar/events/:id", async (req, res) => {
-  const user = await requireUser(req);
-  if (!user) return res.status(401).json({ error: "not signed in" });
-  const event = await store.eventById(req.params.id);
-  if (!event) return res.status(404).json({ error: "unknown event" });
+/**
+ * Save an event for a user, pushing to Google Calendar when connected.
+ * Shared by the cookie-authed route below and the external agent API.
+ */
+export async function saveEventForUser(
+  user: User,
+  eventId: string,
+): Promise<{ googleSynced: boolean; warning?: string } | { error: string; code: 404 }> {
+  const event = await store.eventById(eventId);
+  if (!event) return { error: "unknown event", code: 404 };
 
   let entry = await store.upsertCalendarEntry(user.id, event.id);
   let warning: string | undefined;
@@ -69,32 +77,184 @@ calendar.post("/api/calendar/events/:id", async (req, res) => {
       warning = String(err).slice(0, 200);
     }
   }
-  res.json({
-    ...(await status(user)),
-    googleSynced: !!entry.googleEventId,
-    ...(warning && { warning }),
-  });
+  return { googleSynced: !!entry.googleEventId, ...(warning && { warning }) };
+}
+
+/**
+ * Remove a saved event, deleting the Google copy when it was synced.
+ * Idempotent; a Google delete failure keeps the entry so a retry can clean up.
+ */
+export async function removeEventForUser(
+  user: User,
+  eventId: string,
+): Promise<{ removed: boolean } | { error: string; code: 502 }> {
+  const entry = (await store.userCalendar(user.id)).find((e) => e.eventId === eventId);
+  if (!entry) return { removed: false }; // already gone — idempotent
+
+  if (entry.googleEventId && calendarConnected(user)) {
+    try {
+      await deleteGoogleEvent(user, entry.googleEventId);
+    } catch (err) {
+      return { error: String(err).slice(0, 200), code: 502 };
+    }
+  }
+  await store.removeCalendarEntry(user.id, eventId);
+  return { removed: true };
+}
+
+/** Save an event; pushes to Google Calendar too when connected. */
+calendar.post("/api/calendar/events/:id", async (req, res) => {
+  const user = await requireUser(req);
+  if (!user) return res.status(401).json({ error: "not signed in" });
+  const result = await saveEventForUser(user, req.params.id);
+  if ("error" in result) return res.status(result.code).json({ error: result.error });
+  res.json({ ...(await status(user)), ...result });
 });
 
 /** Remove a saved event; deletes from Google Calendar when it was synced. */
 calendar.delete("/api/calendar/events/:id", async (req, res) => {
   const user = await requireUser(req);
   if (!user) return res.status(401).json({ error: "not signed in" });
-  const entry = (await store.userCalendar(user.id)).find(
-    (e) => e.eventId === req.params.id,
-  );
-  if (!entry) return res.json(await status(user)); // already gone — idempotent
-
-  if (entry.googleEventId && calendarConnected(user)) {
-    try {
-      await deleteGoogleEvent(user, entry.googleEventId);
-    } catch (err) {
-      // Keep the entry so a retry can still clean up the Google copy.
-      return res.status(502).json({ error: String(err).slice(0, 200) });
-    }
-  }
-  await store.removeCalendarEntry(user.id, req.params.id);
+  const result = await removeEventForUser(user, req.params.id);
+  if ("error" in result) return res.status(result.code).json({ error: result.error });
   res.json(await status(user));
+});
+
+// ---------------------------------------------------------------------------
+// In-app Google Calendar preview — list/create/edit/delete on the user's
+// primary calendar, powering the month/agenda popup.
+// ---------------------------------------------------------------------------
+
+/** Resolves the signed-in, Google-connected user or writes the error itself. */
+async function googleUser(req: Request, res: Response): Promise<User | null> {
+  const user = await requireUser(req);
+  if (!user) {
+    res.status(401).json({ error: "not signed in" });
+    return null;
+  }
+  if (!calendarConnected(user)) {
+    res.status(409).json({ error: "Google Calendar is not connected" });
+    return null;
+  }
+  return user;
+}
+
+/** Sanitize the patch body — only known fields, only sane shapes. */
+function readPatch(body: unknown): GcalEventPatch {
+  const b = (body ?? {}) as Record<string, unknown>;
+  const str = (k: string) => (typeof b[k] === "string" ? (b[k] as string) : undefined);
+  const attendees = Array.isArray(b.attendees)
+    ? (b.attendees as unknown[])
+        .map((a) => a as Record<string, unknown>)
+        .filter((a) => typeof a.email === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.email as string))
+        .slice(0, 100)
+        .map((a) => ({
+          email: (a.email as string).trim(),
+          ...(typeof a.displayName === "string" && { displayName: a.displayName }),
+          ...(typeof a.responseStatus === "string" && { responseStatus: a.responseStatus }),
+        }))
+    : undefined;
+  return {
+    ...(str("title") !== undefined && { title: str("title")!.slice(0, 300) }),
+    ...(str("description") !== undefined && { description: str("description")!.slice(0, 8000) }),
+    ...(str("location") !== undefined && { location: str("location")!.slice(0, 1000) }),
+    ...(str("start") !== undefined && { start: str("start") }),
+    ...(str("end") !== undefined && { end: str("end") }),
+    ...(typeof b.allDay === "boolean" && { allDay: b.allDay }),
+    ...(str("color") !== undefined && { color: str("color") }),
+    ...(typeof b.guestsCanModify === "boolean" && { guestsCanModify: b.guestsCanModify }),
+    ...(attendees !== undefined && { attendees }),
+  };
+}
+
+/**
+ * The preview window. Grapevine-synced saves are tagged with their event id
+ * so the UI can badge them (and un-save on delete).
+ */
+calendar.get("/api/calendar/google/events", async (req, res) => {
+  const user = await googleUser(req, res);
+  if (!user) return;
+  const from = typeof req.query.from === "string" ? req.query.from : "";
+  const to = typeof req.query.to === "string" ? req.query.to : "";
+  if (!Number.isFinite(Date.parse(from)) || !Number.isFinite(Date.parse(to))) {
+    return res.status(400).json({ error: "from & to must be ISO dates" });
+  }
+  try {
+    const [events, entries] = await Promise.all([
+      listGoogleEvents(user, from, to),
+      store.userCalendar(user.id),
+    ]);
+    const grapevine = new Map(
+      entries.filter((e) => e.googleEventId).map((e) => [e.googleEventId!, e.eventId]),
+    );
+    res.json({
+      events: events.map((e) => ({
+        ...e,
+        ...(grapevine.has(e.id) && { grapevineEventId: grapevine.get(e.id) }),
+      })),
+    });
+  } catch (err) {
+    res.status(502).json({ error: String(err).slice(0, 200) });
+  }
+});
+
+/** "New event" in the popup — a free-form event on the user's calendar. */
+calendar.post("/api/calendar/google/events", async (req, res) => {
+  const user = await googleUser(req, res);
+  if (!user) return;
+  const patch = readPatch(req.body);
+  if (!patch.title || !patch.start || !patch.end) {
+    return res.status(400).json({ error: "title, start and end are required" });
+  }
+  try {
+    res.json(await createGoogleEvent(user, patch, (await store.settings()).tz));
+  } catch (err) {
+    res.status(502).json({ error: String(err).slice(0, 200) });
+  }
+});
+
+/**
+ * Edit / invite. Guest-list and sharing-mode changes go out with
+ * sendUpdates=all so invitees get real Google Calendar emails.
+ */
+calendar.patch("/api/calendar/google/events/:gid", async (req, res) => {
+  const user = await googleUser(req, res);
+  if (!user) return;
+  const patch = readPatch(req.body);
+  if (!Object.keys(patch).length) return res.status(400).json({ error: "empty patch" });
+  const notify = patch.attendees !== undefined || patch.guestsCanModify !== undefined;
+  try {
+    res.json(
+      await patchGoogleEvent(
+        user,
+        req.params.gid,
+        patch,
+        (await store.settings()).tz,
+        notify,
+      ),
+    );
+  } catch (err) {
+    res.status(502).json({ error: String(err).slice(0, 200) });
+  }
+});
+
+/**
+ * Remove from Google Calendar. When the event was a Grapevine save, the
+ * calendar entry goes too, so the map's "saved" state stays truthful.
+ */
+calendar.delete("/api/calendar/google/events/:gid", async (req, res) => {
+  const user = await googleUser(req, res);
+  if (!user) return;
+  try {
+    await deleteGoogleEvent(user, req.params.gid);
+    const entry = (await store.userCalendar(user.id)).find(
+      (e) => e.googleEventId === req.params.gid,
+    );
+    if (entry) await store.removeCalendarEntry(user.id, entry.eventId);
+    res.json(await status((await store.userById(user.id)) ?? user));
+  } catch (err) {
+    res.status(502).json({ error: String(err).slice(0, 200) });
+  }
 });
 
 /**
