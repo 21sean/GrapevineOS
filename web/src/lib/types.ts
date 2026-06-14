@@ -162,7 +162,12 @@ export interface User {
   picture: string
   createdAt: string
   lastLoginAt: string
-  prefs?: { filters?: Filters; interests?: Interests; pinnedIds?: string[] }
+  prefs?: {
+    filters?: Filters
+    interests?: Interests
+    pinnedIds?: string[]
+    hiddenIds?: string[]
+  }
 }
 
 /** Server view of the signed-in user's calendar sync state. */
@@ -298,11 +303,25 @@ export interface InboxEmail {
   processed: boolean
 }
 
+/** Orderings for the event list; "relevance" is the personal buzz score. */
+export type SortKey = "relevance" | "date" | "price-asc" | "price-desc" | "alpha"
+
+export const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: "relevance", label: "Relevance" },
+  { value: "date", label: "Date" },
+  { value: "price-asc", label: "Price: low to high" },
+  { value: "price-desc", label: "Price: high to low" },
+  { value: "alpha", label: "Alphabetical" },
+]
+
+/** Farmers markets are volume: show them with everything, alone, or not at all. */
+export type FarmersFilter = "any" | "only" | "hide"
+
 export interface Filters {
   categories: Category[] // empty = all
   liveOnly: boolean
   rareOnly: boolean
-  farmersOnly: boolean // only weekly farmers markets
+  farmers: FarmersFilter
   hidePromoted: boolean
   minRating: number
 }
@@ -311,9 +330,33 @@ export const DEFAULT_FILTERS: Filters = {
   categories: [],
   liveOnly: false,
   rareOnly: false,
-  farmersOnly: false,
+  farmers: "any",
   hidePromoted: true,
   minRating: 0,
+}
+
+/**
+ * Coerce stored filters (localStorage v1 or account prefs written by an older
+ * client) into the current shape — the legacy boolean `farmersOnly` becomes
+ * `farmers: "only"`.
+ */
+export function normalizeFilters(raw: unknown): Filters {
+  const r = (raw ?? {}) as Record<string, unknown> & Partial<Filters>
+  const farmers: FarmersFilter =
+    r.farmers === "only" || r.farmers === "hide" || r.farmers === "any"
+      ? r.farmers
+      : r.farmersOnly === true
+        ? "only"
+        : DEFAULT_FILTERS.farmers
+  return {
+    ...DEFAULT_FILTERS,
+    ...(Array.isArray(r.categories) && { categories: r.categories as Category[] }),
+    ...(typeof r.liveOnly === "boolean" && { liveOnly: r.liveOnly }),
+    ...(typeof r.rareOnly === "boolean" && { rareOnly: r.rareOnly }),
+    ...(typeof r.hidePromoted === "boolean" && { hidePromoted: r.hidePromoted }),
+    ...(typeof r.minRating === "number" && { minRating: r.minRating }),
+    farmers,
+  }
 }
 
 /** A farmers market carries this tag; the "Farmers markets" filter keys off it. */
@@ -325,6 +368,9 @@ export const FARMERS_MARKET_TAG = "farmers market"
 export type AgentAction =
   | { kind: "highlight"; eventIds: string[]; fit?: boolean }
   | { kind: "proposeCalendar"; eventIds: string[]; note?: string }
+  // The agent edited an event server-side (e.g. set_rarity) — the client
+  // swaps in the fresh copy so badges and filters update without a reload.
+  | { kind: "eventPatched"; event: CityEvent }
   | {
       kind: "proposeInterests"
       addLoves: string[]

@@ -79,6 +79,7 @@ export interface UserPrefs {
   filters?: unknown;
   interests?: unknown;
   pinnedIds?: unknown;
+  hiddenIds?: unknown;
 }
 
 /** OAuth tokens from the incremental Google Calendar consent (auth.ts). */

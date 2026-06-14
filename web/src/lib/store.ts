@@ -7,10 +7,11 @@ import type {
   Filters,
   Interests,
   Settings,
+  SortKey,
   Source,
   User,
 } from "./types"
-import { DEFAULT_FILTERS } from "./types"
+import { DEFAULT_FILTERS, normalizeFilters } from "./types"
 
 interface GrapevineState {
   // data
@@ -44,12 +45,17 @@ interface GrapevineState {
   calendarOpen: boolean
   // events the agent pinned on the map; seq bumps so repeat highlights re-fly
   agentHighlight: { ids: string[]; fit: boolean; seq: number } | null
+  // event-list search box (session-only) and sort order (device-local)
+  searchQuery: string
+  sortBy: SortKey
 
   // preferences (persisted)
   filters: Filters
   interests: Interests
   // events the user pinned to the top of the list
   pinnedIds: string[]
+  // events the user hid from the list and map (restorable)
+  hiddenIds: string[]
 
   // actions
   load: () => Promise<void>
@@ -70,10 +76,15 @@ interface GrapevineState {
   setCalendarOpen: (open: boolean) => void
   setAgentHighlight: (ids: string[], fit?: boolean) => void
   clearAgentHighlight: () => void
+  setSearchQuery: (q: string) => void
+  setSortBy: (s: SortKey) => void
   setFilters: (patch: Partial<Filters>) => void
   toggleCategory: (c: Category) => void
   setInterests: (i: Interests) => void
   togglePin: (id: string) => void
+  hideEvent: (id: string) => void
+  unhideEvent: (id: string) => void
+  clearHidden: () => void
   signOut: () => Promise<void>
   upsertEvent: (e: CityEvent) => void
   refreshEvents: () => Promise<void>
@@ -92,8 +103,8 @@ function schedulePrefsSync(get: () => GrapevineState) {
   if (!get().user) return
   clearTimeout(prefsTimer)
   prefsTimer = setTimeout(() => {
-    const { user, filters, interests, pinnedIds } = get()
-    if (user) api.savePrefs({ filters, interests, pinnedIds }).catch(() => {})
+    const { user, filters, interests, pinnedIds, hiddenIds } = get()
+    if (user) api.savePrefs({ filters, interests, pinnedIds, hiddenIds }).catch(() => {})
   }, 800)
 }
 
@@ -123,10 +134,13 @@ export const useGrapevine = create<GrapevineState>()(
       askOpen: false,
       calendarOpen: false,
       agentHighlight: null,
+      searchQuery: "",
+      sortBy: "relevance",
 
       filters: DEFAULT_FILTERS,
       interests: { loves: [], avoids: [] },
       pinnedIds: [],
+      hiddenIds: [],
 
       async load() {
         const [events, settings, sources, me, calendar] = await Promise.all([
@@ -146,9 +160,10 @@ export const useGrapevine = create<GrapevineState>()(
           user: me.user,
           calendar,
           loaded: true,
-          ...(prefs?.filters && { filters: { ...DEFAULT_FILTERS, ...prefs.filters } }),
+          ...(prefs?.filters && { filters: normalizeFilters(prefs.filters) }),
           ...(prefs?.interests && { interests: prefs.interests }),
           ...(prefs?.pinnedIds && { pinnedIds: prefs.pinnedIds }),
+          ...(prefs?.hiddenIds && { hiddenIds: prefs.hiddenIds }),
         })
         // First sign-in from this browser: seed the account with local prefs.
         if (me.user && !prefs) schedulePrefsSync(get)
@@ -196,6 +211,9 @@ export const useGrapevine = create<GrapevineState>()(
 
       clearAgentHighlight: () => set({ agentHighlight: null }),
 
+      setSearchQuery: (searchQuery) => set({ searchQuery }),
+      setSortBy: (sortBy) => set({ sortBy }),
+
       setFilters(patch) {
         set({ filters: { ...get().filters, ...patch } })
         schedulePrefsSync(get)
@@ -221,6 +239,30 @@ export const useGrapevine = create<GrapevineState>()(
           ? cur.filter((x) => x !== id)
           : [id, ...cur]
         set({ pinnedIds })
+        schedulePrefsSync(get)
+      },
+
+      hideEvent(id) {
+        const { hiddenIds, pinnedIds, selectedId } = get()
+        if (hiddenIds.includes(id)) return
+        set({
+          hiddenIds: [id, ...hiddenIds],
+          // hiding and pinning contradict each other — the newer intent wins
+          ...(pinnedIds.includes(id) && {
+            pinnedIds: pinnedIds.filter((x) => x !== id),
+          }),
+          ...(selectedId === id && { selectedId: null, detailOpen: false }),
+        })
+        schedulePrefsSync(get)
+      },
+
+      unhideEvent(id) {
+        set({ hiddenIds: get().hiddenIds.filter((x) => x !== id) })
+        schedulePrefsSync(get)
+      },
+
+      clearHidden() {
+        set({ hiddenIds: [] })
         schedulePrefsSync(get)
       },
 
@@ -252,20 +294,27 @@ export const useGrapevine = create<GrapevineState>()(
     }),
     {
       name: "grapevine-prefs",
-      version: 1,
+      version: 2,
       partialize: (s) => ({
         filters: s.filters,
         interests: s.interests,
         pinnedIds: s.pinnedIds,
+        hiddenIds: s.hiddenIds,
         railWidth: s.railWidth,
         carouselWidth: s.carouselWidth,
         carouselMin: s.carouselMin,
+        sortBy: s.sortBy,
       }),
       // v0 persisted a `trafficOn` toggle; traffic is now always on, so drop
       // the stored value and let the `true` default win.
+      // v2 replaced filters.farmersOnly with the tri-state filters.farmers.
       migrate: (persisted, version) => {
-        if (version < 1 && persisted && typeof persisted === "object") {
-          delete (persisted as Record<string, unknown>).trafficOn
+        const p = persisted as Record<string, unknown> | undefined
+        if (version < 1 && p && typeof p === "object") {
+          delete p.trafficOn
+        }
+        if (version < 2 && p && typeof p === "object" && p.filters) {
+          p.filters = normalizeFilters(p.filters)
         }
         return persisted as GrapevineState
       },

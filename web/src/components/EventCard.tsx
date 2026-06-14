@@ -1,4 +1,5 @@
-import { PinIcon, RepeatIcon } from "lucide-react"
+import { EyeOffIcon, PinIcon, RepeatIcon } from "lucide-react"
+import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { StarRating } from "@/components/StarRating"
 import { useGrapevine } from "@/lib/store"
@@ -15,6 +16,8 @@ export function EventCard({ event }: { event: CityEvent }) {
   const select = useGrapevine((s) => s.select)
   const pinnedIds = useGrapevine((s) => s.pinnedIds)
   const togglePin = useGrapevine((s) => s.togglePin)
+  const hideEvent = useGrapevine((s) => s.hideEvent)
+  const unhideEvent = useGrapevine((s) => s.unhideEvent)
 
   const tz = settings?.tz ?? "UTC"
   const live = isLive(event, now, tz)
@@ -54,6 +57,23 @@ export function EventCard({ event }: { event: CityEvent }) {
           )}
           <button
             type="button"
+            aria-label="Hide event"
+            onClick={(e) => {
+              e.stopPropagation()
+              hideEvent(event.id)
+              toast(`Hidden: ${event.title}`, {
+                description: "It won't show on the map or in the list.",
+                action: { label: "Undo", onClick: () => unhideEvent(event.id) },
+              })
+            }}
+            // gv-pin-btn: index.css keeps this visible on touch screens,
+            // where the hover reveal can never fire
+            className="gv-pin-btn -my-1 flex size-6 items-center justify-center rounded-md text-muted-foreground opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100 hover:bg-background/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            <EyeOffIcon className="size-3.5" />
+          </button>
+          <button
+            type="button"
             aria-label={pinned ? "Unpin event" : "Pin to top"}
             aria-pressed={pinned}
             onClick={(e) => {
@@ -64,9 +84,7 @@ export function EventCard({ event }: { event: CityEvent }) {
               "-my-1 -mr-1 flex size-6 items-center justify-center rounded-md transition hover:bg-background/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
               pinned
                 ? "text-wine"
-                : // gv-pin-btn: index.css keeps this visible on touch screens,
-                  // where the hover reveal below can never fire
-                  "gv-pin-btn text-muted-foreground opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
+                : "gv-pin-btn text-muted-foreground opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
             )}
           >
             <PinIcon className={cn("size-3.5", pinned && "fill-current")} />

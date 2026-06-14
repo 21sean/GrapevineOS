@@ -1,13 +1,31 @@
 import { useState } from "react"
 import {
+  ArrowUpDownIcon,
   ChevronDownIcon,
+  EyeIcon,
   GemIcon,
   MegaphoneOffIcon,
   RadioIcon,
+  SearchIcon,
   SlidersHorizontalIcon,
   SproutIcon,
+  XIcon,
 } from "lucide-react"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
@@ -17,8 +35,21 @@ import { EventCard } from "@/components/EventCard"
 import { useOrderedEvents } from "@/hooks/useOrderedEvents"
 import { activeFilterCount } from "@/lib/score"
 import { useGrapevine } from "@/lib/store"
-import { CATEGORIES, CATEGORY_META, type Category } from "@/lib/types"
+import {
+  CATEGORIES,
+  CATEGORY_META,
+  SORT_OPTIONS,
+  type Category,
+  type FarmersFilter,
+  type SortKey,
+} from "@/lib/types"
 import { cn } from "@/lib/utils"
+
+const FARMERS_OPTIONS: { value: FarmersFilter; label: string }[] = [
+  { value: "any", label: "Show" },
+  { value: "only", label: "Only" },
+  { value: "hide", label: "Hide" },
+]
 
 const RAIL_MIN = 300
 const RAIL_MAX = 560
@@ -28,6 +59,9 @@ export function FilterRail() {
   const setFilters = useGrapevine((s) => s.setFilters)
   const railWidth = useGrapevine((s) => s.railWidth)
   const setRailWidth = useGrapevine((s) => s.setRailWidth)
+  const hiddenCount = useGrapevine((s) => s.hiddenIds.length)
+  const clearHidden = useGrapevine((s) => s.clearHidden)
+  const searchQuery = useGrapevine((s) => s.searchQuery)
 
   // Filters (buzz + categories) tuck into a disclosure that starts collapsed,
   // so the list gets the room by default.
@@ -76,17 +110,9 @@ export function FilterRail() {
             checked={filters.rareOnly}
             onChange={(v) => setFilters({ rareOnly: v })}
           />
-          <ToggleRow
-            icon={
-              <SproutIcon
-                className="size-3.5"
-                style={{ color: CATEGORY_META.market.color }}
-              />
-            }
-            label="Farmers markets"
-            hint="weekly, by neighborhood"
-            checked={filters.farmersOnly}
-            onChange={(v) => setFilters({ farmersOnly: v })}
+          <FarmersRow
+            value={filters.farmers}
+            onChange={(farmers) => setFilters({ farmers })}
           />
           <ToggleRow
             icon={<MegaphoneOffIcon className="size-3.5 text-muted-foreground" />}
@@ -139,6 +165,10 @@ export function FilterRail() {
         </span>
       </div>
 
+      <div className="px-3 py-1">
+        <ListSearchSort />
+      </div>
+
       <ScrollArea className="mr-1 min-h-0 flex-1">
         <div className="flex flex-col gap-2 p-3 pt-1">
           {ordered.map((e) => (
@@ -147,13 +177,26 @@ export function FilterRail() {
           {!ordered.length && (
             <Empty className="py-10">
               <EmptyHeader>
-                <EmptyTitle>Nothing gets through</EmptyTitle>
+                <EmptyTitle>
+                  {searchQuery.trim() ? "No matches" : "Nothing gets through"}
+                </EmptyTitle>
                 <EmptyDescription>
-                  Loosen a filter or lower the buzz bar. The grapevine is
-                  quiet under these settings.
+                  {searchQuery.trim()
+                    ? `Nothing on the vine matches "${searchQuery.trim()}". Try another word or clear the search.`
+                    : "Loosen a filter or lower the buzz bar. The grapevine is quiet under these settings."}
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
+          )}
+          {hiddenCount > 0 && (
+            <button
+              type="button"
+              onClick={clearHidden}
+              className="mt-1 flex items-center justify-center gap-1.5 rounded-md py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <EyeIcon className="size-3.5" />
+              Restore {hiddenCount} hidden event{hiddenCount === 1 ? "" : "s"}
+            </button>
           )}
         </div>
       </ScrollArea>
@@ -170,6 +213,73 @@ export function FilterRail() {
         <span className="h-10 w-1 rounded-full bg-border/80 transition-colors group-hover/resize:bg-ring" />
       </div>
     </aside>
+  )
+}
+
+/** Trigger stays narrow; the dropdown spells the full option out. */
+const SORT_SHORT: Record<SortKey, string> = {
+  relevance: "Relevance",
+  date: "Date",
+  "price-asc": "Price ↑",
+  "price-desc": "Price ↓",
+  alpha: "A–Z",
+}
+
+/**
+ * Search box + sort picker for the event list, shared between the desktop
+ * rail and the phone dock. Search narrows the list (and its count); sort
+ * reorders it — "relevance" is the personal buzz score the list opens with.
+ */
+export function ListSearchSort() {
+  const searchQuery = useGrapevine((s) => s.searchQuery)
+  const setSearchQuery = useGrapevine((s) => s.setSearchQuery)
+  const sortBy = useGrapevine((s) => s.sortBy)
+  const setSortBy = useGrapevine((s) => s.setSortBy)
+
+  return (
+    <div className="flex items-center gap-2">
+      <InputGroup className="flex-1">
+        <InputGroupInput
+          placeholder="Search events…"
+          aria-label="Search events"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setSearchQuery("")
+          }}
+        />
+        <InputGroupAddon>
+          <SearchIcon />
+        </InputGroupAddon>
+        {searchQuery !== "" && (
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton
+              size="icon-xs"
+              aria-label="Clear search"
+              onClick={() => setSearchQuery("")}
+            >
+              <XIcon />
+            </InputGroupButton>
+          </InputGroupAddon>
+        )}
+      </InputGroup>
+
+      <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortKey)}>
+        <SelectTrigger size="sm" className="shrink-0" aria-label="Sort events">
+          <ArrowUpDownIcon className="size-3.5 text-muted-foreground" />
+          <SelectValue>{SORT_SHORT[sortBy]}</SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            {SORT_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+    </div>
   )
 }
 
@@ -222,6 +332,49 @@ export function BuzzAndCategoryFilters() {
           </ToggleGroupItem>
         ))}
       </ToggleGroup>
+    </div>
+  )
+}
+
+/**
+ * Farmers markets are a third of the catalog some weeks, so a plain "only"
+ * switch isn't enough — this row shows them, tours only them, or mutes them.
+ */
+function FarmersRow({
+  value,
+  onChange,
+}: {
+  value: FarmersFilter
+  onChange: (v: FarmersFilter) => void
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="flex items-center gap-2 text-sm">
+        <SproutIcon
+          className="size-3.5"
+          style={{ color: CATEGORY_META.market.color }}
+        />
+        Farmers markets
+      </span>
+      <div className="flex rounded-md border border-border p-0.5">
+        {FARMERS_OPTIONS.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            aria-pressed={value === o.value}
+            onClick={() => onChange(o.value)}
+            className={cn(
+              "rounded-[5px] px-2 py-0.5 text-xs text-muted-foreground transition-colors",
+              value === o.value &&
+                (o.value === "only"
+                  ? "bg-[#56c7ac]/15 text-[#56c7ac]"
+                  : "bg-accent text-foreground"),
+            )}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

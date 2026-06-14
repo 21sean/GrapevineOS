@@ -37,6 +37,7 @@ export const api = {
     filters?: Filters
     interests?: Interests
     pinnedIds?: string[]
+    hiddenIds?: string[]
   }) =>
     fetch("/api/me/prefs", {
       method: "PUT",

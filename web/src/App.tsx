@@ -41,6 +41,8 @@ export function App() {
   const filters = useGrapevine((s) => s.filters)
   const interests = useGrapevine((s) => s.interests)
   const now = useGrapevine((s) => s.now)
+  const hiddenIds = useGrapevine((s) => s.hiddenIds)
+  const tz = useGrapevine((s) => s.settings?.tz)
 
   const [loadError, setLoadError] = useState<string | null>(null)
   const isMobile = useIsMobile()
@@ -83,8 +85,9 @@ export function App() {
 
   // the live tour: advance every CAROUSEL_MS while enabled
   const tourLength = useMemo(
-    () => carouselEvents(events, filters, interests, now).length,
-    [events, filters, interests, now],
+    () =>
+      carouselEvents(events, filters, interests, now, tz, new Set(hiddenIds)).length,
+    [events, filters, interests, now, tz, hiddenIds],
   )
   useEffect(() => {
     if (!carouselOn || tourLength < 2) return

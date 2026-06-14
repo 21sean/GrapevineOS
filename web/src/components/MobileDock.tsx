@@ -1,15 +1,17 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import {
+  EyeIcon,
   GemIcon,
   MegaphoneOffIcon,
   RadioIcon,
   SlidersHorizontalIcon,
   SproutIcon,
 } from "lucide-react"
+import type { FarmersFilter } from "@/lib/types"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Separator } from "@/components/ui/separator"
 import { EventCard } from "@/components/EventCard"
-import { BuzzAndCategoryFilters } from "@/components/FilterRail"
+import { BuzzAndCategoryFilters, ListSearchSort } from "@/components/FilterRail"
 import { useOrderedEvents } from "@/hooks/useOrderedEvents"
 import { activeFilterCount } from "@/lib/score"
 import { useGrapevine } from "@/lib/store"
@@ -45,6 +47,9 @@ export function MobileDock() {
   const filters = useGrapevine((s) => s.filters)
   const setFilters = useGrapevine((s) => s.setFilters)
   const detailOpen = useGrapevine((s) => s.detailOpen)
+  const hiddenCount = useGrapevine((s) => s.hiddenIds.length)
+  const clearHidden = useGrapevine((s) => s.clearHidden)
+  const searchQuery = useGrapevine((s) => s.searchQuery)
 
   const { visible, ordered } = useOrderedEvents()
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -215,13 +220,29 @@ export function MobileDock() {
             <GemIcon className="size-3.5 text-wine" />
             Rare finds
           </Chip>
+          {/* three states, one thumb: show all → only markets → no markets */}
           <Chip
-            active={filters.farmersOnly}
-            activeClass="border-[#56c7ac]/50 bg-[#56c7ac]/15 text-[#56c7ac]"
-            onClick={() => setFilters({ farmersOnly: !filters.farmersOnly })}
+            active={filters.farmers !== "any"}
+            activeClass={
+              filters.farmers === "only"
+                ? "border-[#56c7ac]/50 bg-[#56c7ac]/15 text-[#56c7ac]"
+                : "border-foreground/30 bg-accent text-foreground"
+            }
+            onClick={() => {
+              const next: Record<FarmersFilter, FarmersFilter> = {
+                any: "only",
+                only: "hide",
+                hide: "any",
+              }
+              setFilters({ farmers: next[filters.farmers] })
+            }}
           >
             <SproutIcon className="size-3.5 text-[#56c7ac]" />
-            Farmers markets
+            {filters.farmers === "only"
+              ? "Farmers only"
+              : filters.farmers === "hide"
+                ? "No farmers markets"
+                : "Farmers markets"}
           </Chip>
           <Chip
             active={filters.hidePromoted}
@@ -260,6 +281,10 @@ export function MobileDock() {
 
       <Separator />
 
+      <div className="shrink-0 px-3 pt-2">
+        <ListSearchSort />
+      </div>
+
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <div className="flex flex-col gap-2 p-3 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
           {ordered.map((e) => (
@@ -268,13 +293,26 @@ export function MobileDock() {
           {!ordered.length && (
             <Empty className="py-10">
               <EmptyHeader>
-                <EmptyTitle>Nothing gets through</EmptyTitle>
+                <EmptyTitle>
+                  {searchQuery.trim() ? "No matches" : "Nothing gets through"}
+                </EmptyTitle>
                 <EmptyDescription>
-                  Loosen a filter or lower the buzz bar. The grapevine is
-                  quiet under these settings.
+                  {searchQuery.trim()
+                    ? `Nothing on the vine matches "${searchQuery.trim()}". Try another word or clear the search.`
+                    : "Loosen a filter or lower the buzz bar. The grapevine is quiet under these settings."}
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
+          )}
+          {hiddenCount > 0 && (
+            <button
+              type="button"
+              onClick={clearHidden}
+              className="mt-1 flex items-center justify-center gap-1.5 rounded-md py-2 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <EyeIcon className="size-3.5" />
+              Restore {hiddenCount} hidden event{hiddenCount === 1 ? "" : "s"}
+            </button>
           )}
         </div>
       </div>

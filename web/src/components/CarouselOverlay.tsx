@@ -45,10 +45,12 @@ export function CarouselOverlay() {
 
   const isMobile = useIsMobile()
   const dockState = useGrapevine((s) => s.dockState)
+  const hiddenIds = useGrapevine((s) => s.hiddenIds)
 
   const tour = useMemo(
-    () => carouselEvents(events, filters, interests, now, settings?.tz),
-    [events, filters, interests, now, settings?.tz],
+    () =>
+      carouselEvents(events, filters, interests, now, settings?.tz, new Set(hiddenIds)),
+    [events, filters, interests, now, settings?.tz, hiddenIds],
   )
 
   const idx = tour.length ? carouselIdx % tour.length : 0
