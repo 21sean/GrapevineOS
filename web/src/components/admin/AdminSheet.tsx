@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { InboxTab } from "@/components/admin/InboxTab"
 import { IngestTab } from "@/components/admin/IngestTab"
 import { ModelsTab } from "@/components/admin/ModelsTab"
+import { ProvidersTab } from "@/components/admin/ProvidersTab"
 import { SourcesTab } from "@/components/admin/SourcesTab"
 import { useGrapevine } from "@/lib/store"
 
@@ -30,12 +31,16 @@ export function AdminSheet() {
           <Tabs defaultValue="models">
             <TabsList className="w-full">
               <TabsTrigger value="models">Models</TabsTrigger>
+              <TabsTrigger value="providers">Providers</TabsTrigger>
               <TabsTrigger value="ingest">Ingest</TabsTrigger>
               <TabsTrigger value="inbox">Inbox</TabsTrigger>
               <TabsTrigger value="sources">Sources</TabsTrigger>
             </TabsList>
             <TabsContent value="models" className="pt-4">
               <ModelsTab />
+            </TabsContent>
+            <TabsContent value="providers" className="pt-4">
+              <ProvidersTab />
             </TabsContent>
             <TabsContent value="ingest" className="pt-4">
               <IngestTab />
