@@ -75,10 +75,37 @@ const ICON_SVG = Object.fromEntries(
   ]),
 ) as Record<Category, string>
 
+// Events within ~10 m of each other share one marker (a "stack") — separate
+// pins at the same venue just paint over each other into an unreadable pile.
+function locKey(e: CityEvent): string {
+  return `${e.lng.toFixed(4)},${e.lat.toFixed(4)}`
+}
+
+/** One marker representing every event at a location; idx picks the face. */
+interface Stack {
+  marker: mapboxgl.Marker
+  el: HTMLDivElement
+  iconEl: HTMLSpanElement
+  labelEl: HTMLDivElement
+  countEl: HTMLSpanElement
+  numEl: HTMLSpanElement
+  events: CityEvent[]
+  idx: number
+}
+
+/** Write-if-changed so idle re-decorates (the 30s clock tick) mutate nothing. */
+function setData(el: HTMLElement, key: string, value: string) {
+  if (el.dataset[key] !== value) el.dataset[key] = value
+}
+
+function setText(el: HTMLElement, value: string) {
+  if (el.textContent !== value) el.textContent = value
+}
+
 export function EventMap() {
   const mapRef = useRef<mapboxgl.Map | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const markersRef = useRef(new Map<string, { marker: mapboxgl.Marker; el: HTMLDivElement }>())
+  const stacksRef = useRef(new Map<string, Stack>())
   const userMarkerRef = useRef<mapboxgl.Marker | null>(null)
   const styleReadyRef = useRef(false)
   // Once the user (or the tour) moves the camera, a late settings fetch must
@@ -89,6 +116,7 @@ export function EventMap() {
   const events = useGrapevine((s) => s.events)
   const filters = useGrapevine((s) => s.filters)
   const interests = useGrapevine((s) => s.interests)
+  const hiddenIds = useGrapevine((s) => s.hiddenIds)
   const now = useGrapevine((s) => s.now)
   const selectedId = useGrapevine((s) => s.selectedId)
   const detailOpen = useGrapevine((s) => s.detailOpen)
@@ -100,8 +128,8 @@ export function EventMap() {
   const agentHighlight = useGrapevine((s) => s.agentHighlight)
 
   const visible = useMemo(
-    () => visibleEvents(events, filters, interests, now),
-    [events, filters, interests, now],
+    () => visibleEvents(events, filters, interests, now, settings?.tz, new Set(hiddenIds)),
+    [events, filters, interests, now, settings?.tz, hiddenIds],
   )
 
   // The agent's picks render even when the user's filters would hide them
@@ -117,8 +145,8 @@ export function EventMap() {
     return extras.length ? [...visible, ...extras] : visible
   }, [visible, events, agentIds])
   const tour = useMemo(
-    () => carouselEvents(events, filters, interests, now),
-    [events, filters, interests, now],
+    () => carouselEvents(events, filters, interests, now, settings?.tz, new Set(hiddenIds)),
+    [events, filters, interests, now, settings?.tz, hiddenIds],
   )
 
   // A marker looks "selected" only while its detail sheet is open. Keeping
@@ -162,12 +190,25 @@ export function EventMap() {
 
     // POI-style labels only past neighborhood zoom, so downtown doesn't clutter;
     // markers scale with zoom (via a CSS var that cascades to every .gv-marker).
+    // The var write invalidates style for every marker, and "zoom" fires per
+    // animation frame during flyTo — quantize the scale and skip no-op writes
+    // so a 3s tour flight costs a handful of recalcs instead of ~200.
+    let lastScale = ""
+    let lastLabels: boolean | undefined
     const applyZoom = () => {
       const zoom = map.getZoom()
       const el = containerRef.current
       if (!el) return
-      el.classList.toggle("gv-labels-on", zoom >= LABEL_MIN_ZOOM)
-      el.style.setProperty("--gv-marker-scale", markerScaleForZoom(zoom).toFixed(3))
+      const labels = zoom >= LABEL_MIN_ZOOM
+      if (labels !== lastLabels) {
+        el.classList.toggle("gv-labels-on", labels)
+        lastLabels = labels
+      }
+      const scale = markerScaleForZoom(zoom).toFixed(2)
+      if (scale !== lastScale) {
+        el.style.setProperty("--gv-marker-scale", scale)
+        lastScale = scale
+      }
     }
     map.on("zoom", applyZoom)
     applyZoom()
@@ -182,8 +223,8 @@ export function EventMap() {
     mapRef.current = map
     return () => {
       styleReadyRef.current = false
-      markersRef.current.forEach(({ marker }) => marker.remove())
-      markersRef.current.clear()
+      stacksRef.current.forEach(({ marker }) => marker.remove())
+      stacksRef.current.clear()
       userMarkerRef.current = null
       map.remove()
       mapRef.current = null
@@ -209,54 +250,155 @@ export function EventMap() {
     }
   }, [settings])
 
-  // --- markers: diff by id so pulses don't restart on unrelated renders ---
+  // --- camera focus (also drives which face a stack shows during the tour) ---
+  const focus: CityEvent | undefined = carouselOn
+    ? tour[tour.length ? carouselIdx % tour.length : 0]
+    : visible.find((e) => e.id === selectedId) ??
+      events.find((e) => e.id === selectedId)
+  const focusId = focus?.id
+  const focusSeq = carouselOn ? carouselIdx : -1
+
+  // Latest decorate inputs for the stack pager handlers, which live in plain
+  // DOM listeners outside React's render cycle.
+  const decorCtxRef = useRef({ now, activeId, agentIds })
+  decorCtxRef.current = { now, activeId, agentIds }
+  // Snap a stack's face to the selected/toured/highlighted event only when
+  // that target changes — never on unrelated re-runs, so a face the user
+  // paged to by hand isn't yanked back by the next clock tick.
+  const lastTargetRef = useRef<string | null>(null)
+  const lastAgentSeqRef = useRef(0)
+
+  // --- markers: one stack per location, diffed by location key ---
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
-    const wanted = new Map(rendered.map((e) => [e.id, e]))
 
-    for (const [id, { marker }] of markersRef.current) {
-      if (!wanted.has(id)) {
-        marker.remove()
-        markersRef.current.delete(id)
-      }
-    }
-
+    const groups = new Map<string, CityEvent[]>()
     for (const e of rendered) {
-      const existing = markersRef.current.get(e.id)
-      if (existing) {
-        decorate(existing.el, e, now, activeId, agentIds)
-        continue
-      }
-      // Mapbox owns the outer element (positions it via inline transform);
-      // visuals + scale/pulse animations live on an inner element so they
-      // never fight that transform. Styling the mapbox element directly is
-      // what pushed every marker out of place and re-triggered transitions
-      // on each animation frame.
-      const root = document.createElement("div")
-      const el = document.createElement("div")
-      el.className = "gv-marker"
-      const icon = document.createElement("span")
-      icon.className = "gv-marker-icon"
-      const label = document.createElement("div")
-      label.className = "gv-marker-label"
-      el.append(icon, label)
-      root.appendChild(el)
-      decorate(el, e, now, activeId, agentIds)
-      root.addEventListener("click", (ev) => {
-        ev.stopPropagation()
-        select(e.id)
-      })
-      const marker = new mapboxgl.Marker({
-        element: root,
-        anchor: "center",
-        offset: [0, -MARKER_LIFT],
-      })
-        .setLngLat([e.lng, e.lat])
-        .addTo(map)
-      markersRef.current.set(e.id, { marker, el })
+      const k = locKey(e)
+      const g = groups.get(k)
+      if (g) g.push(e)
+      else groups.set(k, [e])
     }
-  }, [rendered, now, activeId, select, agentIds])
+
+    for (const [key, stack] of stacksRef.current) {
+      if (!groups.has(key)) {
+        stack.marker.remove()
+        stacksRef.current.delete(key)
+      }
+    }
+
+    const target = carouselOn ? focusId : selectedId
+    const targetChanged = target !== lastTargetRef.current
+    lastTargetRef.current = target ?? null
+    const agentSeq = agentHighlight?.seq ?? 0
+    const agentChanged = agentSeq !== lastAgentSeqRef.current
+    lastAgentSeqRef.current = agentSeq
+
+    for (const [key, group] of groups) {
+      let stack = stacksRef.current.get(key)
+      if (!stack) {
+        // Mapbox owns the outer element (positions it via inline transform);
+        // visuals + scale/pulse animations live on an inner element so they
+        // never fight that transform. Styling the mapbox element directly is
+        // what pushed every marker out of place and re-triggered transitions
+        // on each animation frame.
+        const root = document.createElement("div")
+        const el = document.createElement("div")
+        el.className = "gv-marker"
+        const iconEl = document.createElement("span")
+        iconEl.className = "gv-marker-icon"
+        const countEl = document.createElement("span")
+        countEl.className = "gv-marker-count"
+        const labelEl = document.createElement("div")
+        labelEl.className = "gv-marker-label"
+        const pager = document.createElement("div")
+        pager.className = "gv-stack-pager"
+        const prev = document.createElement("button")
+        prev.type = "button"
+        prev.className = "gv-stack-btn"
+        prev.textContent = "‹"
+        prev.setAttribute("aria-label", "Previous event at this spot")
+        const numEl = document.createElement("span")
+        numEl.className = "gv-stack-num"
+        const next = document.createElement("button")
+        next.type = "button"
+        next.className = "gv-stack-btn"
+        next.textContent = "›"
+        next.setAttribute("aria-label", "Next event at this spot")
+        pager.append(prev, numEl, next)
+        el.append(iconEl, countEl, labelEl, pager)
+        root.appendChild(el)
+
+        const marker = new mapboxgl.Marker({
+          element: root,
+          anchor: "center",
+          offset: [0, -MARKER_LIFT],
+        })
+          .setLngLat([group[0].lng, group[0].lat])
+          .addTo(map)
+        const created: Stack = {
+          marker,
+          el,
+          iconEl,
+          labelEl,
+          countEl,
+          numEl,
+          events: group,
+          idx: 0,
+        }
+
+        const cycle = (dir: number) => {
+          const n = created.events.length
+          if (n < 2) return
+          created.idx = (created.idx + dir + n) % n
+          const ctx = decorCtxRef.current
+          decorateStack(created, ctx.now, ctx.activeId, ctx.agentIds)
+          // Sheet open means the user is inspecting this venue — retarget it.
+          // Sheet closed, paging is a silent preview: no camera move, no popup.
+          const st = useGrapevine.getState()
+          if (st.detailOpen) st.select(created.events[created.idx].id)
+        }
+        root.addEventListener("click", (ev) => {
+          ev.stopPropagation()
+          select(created.events[created.idx].id)
+        })
+        // pager clicks page the stack; they must never fall through to select
+        pager.addEventListener("click", (ev) => ev.stopPropagation())
+        prev.addEventListener("click", () => cycle(-1))
+        next.addEventListener("click", () => cycle(1))
+
+        stack = created
+        stacksRef.current.set(key, stack)
+      } else {
+        // keep whichever event this stack is showing across list refreshes
+        const shownId = stack.events[stack.idx]?.id
+        stack.events = group
+        const keep = group.findIndex((e) => e.id === shownId)
+        stack.idx = keep >= 0 ? keep : 0
+        stack.marker.setLngLat([group[0].lng, group[0].lat])
+      }
+
+      if (targetChanged && target) {
+        const i = group.findIndex((e) => e.id === target)
+        if (i >= 0) stack.idx = i
+      } else if (agentChanged && agentIds.size) {
+        const i = group.findIndex((e) => agentIds.has(e.id))
+        if (i >= 0) stack.idx = i
+      }
+      decorateStack(stack, now, activeId, agentIds)
+    }
+  }, [
+    rendered,
+    now,
+    activeId,
+    selectedId,
+    focusId,
+    carouselOn,
+    select,
+    agentIds,
+    agentHighlight?.seq,
+  ])
 
   // --- traffic visibility (layer created lazily on first enable) ---
   useEffect(() => {
@@ -286,13 +428,6 @@ export function EventMap() {
   }, [userPos])
 
   // --- camera: carousel tour or manual selection ---
-  const focus: CityEvent | undefined = carouselOn
-    ? tour[tour.length ? carouselIdx % tour.length : 0]
-    : visible.find((e) => e.id === selectedId) ??
-      events.find((e) => e.id === selectedId)
-
-  const focusId = focus?.id
-  const focusSeq = carouselOn ? carouselIdx : -1
   useEffect(() => {
     const map = mapRef.current
     if (!map || !focus) return
@@ -360,22 +495,30 @@ export function EventMap() {
   return <div ref={containerRef} className="gv-map size-full" />
 }
 
-function decorate(
-  el: HTMLDivElement,
-  e: CityEvent,
+/** Paint a stack's marker as the event at `idx` (its current face). */
+function decorateStack(
+  stack: Stack,
   now: Date,
   selectedId: string | null,
   agentIds?: Set<string>,
 ) {
-  el.style.setProperty("--marker-color", CATEGORY_META[e.category].color)
-  el.dataset.live = String(isLive(e, now))
-  el.dataset.selected = String(e.id === selectedId)
-  el.dataset.agent = String(agentIds?.has(e.id) ?? false)
+  const e = stack.events[stack.idx]
+  if (!e) return
+  const { el } = stack
+  const color = CATEGORY_META[e.category].color
+  if (el.dataset.color !== color) {
+    el.style.setProperty("--marker-color", color)
+    el.dataset.color = color
+  }
+  setData(el, "live", String(isLive(e, now)))
+  setData(el, "selected", String(e.id === selectedId))
+  setData(el, "agent", String(agentIds?.has(e.id) ?? false))
+  setData(el, "stack", String(stack.events.length > 1))
   if (el.dataset.category !== e.category) {
     el.dataset.category = e.category
-    const icon = el.querySelector<HTMLSpanElement>(".gv-marker-icon")
-    if (icon) icon.innerHTML = ICON_SVG[e.category]
+    stack.iconEl.innerHTML = ICON_SVG[e.category]
   }
-  const label = el.querySelector<HTMLDivElement>(".gv-marker-label")
-  if (label && label.textContent !== e.title) label.textContent = e.title
+  setText(stack.labelEl, e.title)
+  setText(stack.countEl, stack.events.length > 1 ? String(stack.events.length) : "")
+  setText(stack.numEl, `${stack.idx + 1}/${stack.events.length}`)
 }

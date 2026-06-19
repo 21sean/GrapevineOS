@@ -204,6 +204,80 @@
   opacity: 1;
 }
 
+/* ---------- stacked markers (several events at one venue) ---------- */
+
+/* count badge: always-on hint that this dot is a pile, not one event */
+.gv-marker-count {
+  display: none;
+  position: absolute;
+  top: -7px;
+  right: -8px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 9999px;
+  background: oklch(0.96 0.005 260);
+  color: oklch(0.2 0.03 285);
+  font-family: "DIN Pro", "DIN Offc Pro", "Helvetica Neue", Arial, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 15px;
+  text-align: center;
+  box-shadow: 0 1px 4px oklch(0 0 0 / 45%);
+  pointer-events: none;
+}
+
+.gv-marker[data-stack="true"] .gv-marker-count {
+  display: block;
+}
+
+/* pager: ‹ 2/5 › riding above the dot; cycles which event the dot shows */
+.gv-stack-pager {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 5px);
+  left: 50%;
+  transform: translateX(-50%);
+  align-items: center;
+  gap: 1px;
+  padding: 1px 2px;
+  border-radius: 7px;
+  background: color-mix(in oklab, var(--background) 82%, transparent);
+  border: 1px solid oklch(1 0 0 / 12%);
+  box-shadow: 0 2px 8px oklch(0 0 0 / 45%);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+
+/* show alongside labels, or whenever the stack is being inspected */
+.gv-marker[data-stack="true"]:is(.gv-labels-on *, [data-selected="true"], :hover)
+  .gv-stack-pager {
+  display: flex;
+}
+
+.gv-stack-btn {
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  color: oklch(0.96 0.005 260);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.gv-stack-btn:hover {
+  background: oklch(1 0 0 / 14%);
+}
+
+.gv-stack-num {
+  min-width: 24px;
+  text-align: center;
+  font-family: "DIN Pro", "DIN Offc Pro", "Helvetica Neue", Arial, sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  color: oklch(0.96 0.005 260 / 85%);
+}
+
 /* live events breathe lantern-gold — the signature */
 .gv-marker[data-live="true"] {
   background: var(--marker-color);
@@ -288,6 +362,12 @@
   /* the pin button hides behind hover on desktop; there is no hover here */
   .gv-pin-btn {
     opacity: 0.7;
+  }
+  /* stack pager arrows need a real fingertip target */
+  .gv-stack-btn {
+    width: 24px;
+    height: 22px;
+    font-size: 15px;
   }
 }
 
