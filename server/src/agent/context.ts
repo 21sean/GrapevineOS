@@ -324,6 +324,29 @@ export function vetEventIds(v: unknown, ctx: AgentCtx): string[] {
   return [...new Set(v.map(String).filter((id) => ctx.byId.has(id)))];
 }
 
+export const RARITIES = ["common", "notable", "rare"] as const;
+
+/**
+ * Write an event's rarity to the DB (this powers the app's "Rare finds"
+ * filter) and patch the request snapshot so later tool calls see it.
+ */
+export async function setEventRarity(
+  id: unknown,
+  rarity: unknown,
+  ctx: AgentCtx,
+): Promise<{ event: CityEvent; changed: boolean } | { error: string }> {
+  const r = String(rarity ?? "").toLowerCase() as CityEvent["rarity"];
+  if (!(RARITIES as readonly string[]).includes(r))
+    return { error: `rarity must be one of: ${RARITIES.join(", ")}` };
+  const hit = ctx.byId.get(String(id));
+  if (!hit) return { error: "unknown event id — use ids from the digest or search results" };
+  if (hit.e.rarity === r) return { event: hit.e, changed: false };
+  const updated = await store.updateEvent(hit.e.id, { rarity: r });
+  if (!updated) return { error: "event no longer exists" };
+  hit.e = updated;
+  return { event: updated, changed: true };
+}
+
 // ---------------------------------------------------------------------------
 // System prompt
 // ---------------------------------------------------------------------------
@@ -376,6 +399,9 @@ How to answer:
 - If the user states a durable taste ("I hate EDM", "more comedy please"), call
   update_interests using ONLY these topics: ${INTEREST_TOPICS.join(", ")}.
   Durable tastes only — not one-off queries.
+- If an event is plainly a one-off or annual special (parade, fireworks, race,
+  big festival) but the digest doesn't say "rare", call set_rarity to fix it —
+  rarity powers the app's Rare finds filter. Fix mislabels; don't churn.
 - If nothing matches, say so and suggest the closest alternative from the digest.
 - The digest is the only source of local events. For everything else — artist
   background, venue details, weather, "is this festival any good" — call

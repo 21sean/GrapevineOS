@@ -48,6 +48,7 @@ import {
   parseLngLat,
   searchEvents,
   searchShape,
+  setEventRarity,
   vetTopics,
   type ChatContext,
   type SearchParams,
@@ -509,6 +510,23 @@ agent.get("/api/ext/v1/events/:id", extAuth, async (req, res) => {
     const result = getEvent(String(req.params.id), ctx);
     if ("error" in result) return res.status(404).json(result);
     res.json(result);
+  } catch (err) {
+    res.status(502).json({ error: String(err) });
+  }
+});
+
+/** Correct an event's rarity (drives the app's "Rare finds" filter). */
+agent.post("/api/ext/v1/events/:id/rarity", extAuth, async (req, res) => {
+  try {
+    const ctx = await buildCtx();
+    const result = await setEventRarity(req.params.id, req.body?.rarity, ctx);
+    if ("error" in result) return res.status(400).json(result);
+    res.json({
+      id: result.event.id,
+      title: result.event.title,
+      rarity: result.event.rarity,
+      changed: result.changed,
+    });
   } catch (err) {
     res.status(502).json({ error: String(err) });
   }

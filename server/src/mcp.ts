@@ -25,8 +25,10 @@ import {
   getEvent,
   INTEREST_TOPICS,
   parseLngLat,
+  RARITIES,
   searchEvents,
   searchShape,
+  setEventRarity,
   vetTopics,
   type SearchParams,
 } from "./agent/context.js";
@@ -104,6 +106,19 @@ const TOOLS = [
       type: "object",
       properties: { event_id: { type: "string" } },
       required: ["event_id"],
+    },
+  },
+  {
+    name: "set_event_rarity",
+    description:
+      "Set an event's rarity in the database (applies immediately). rare = one-off or annual specials (parades, fireworks, races, big festivals); notable = uncommon but repeats; common = weekly/regular. Rarity drives the app's Rare finds filter.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        event_id: { type: "string" },
+        rarity: { type: "string", enum: [...RARITIES] },
+      },
+      required: ["event_id", "rarity"],
     },
   },
   {
@@ -195,6 +210,16 @@ async function callTool(name: string, args: Record<string, unknown>) {
           ? await saveEventForUser(user, id)
           : await removeEventForUser(user, id);
       return "error" in result ? fail(result.error) : ok(result);
+    }
+    case "set_event_rarity": {
+      const result = await setEventRarity(args.event_id, args.rarity, ctx);
+      if ("error" in result) return fail(result.error);
+      return ok({
+        id: result.event.id,
+        title: result.event.title,
+        rarity: result.event.rarity,
+        changed: result.changed,
+      });
     }
     case "update_interests": {
       const user = await boundUser();

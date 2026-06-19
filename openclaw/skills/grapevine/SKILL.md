@@ -56,6 +56,19 @@ GET /api/ext/v1/events/:id
 
 Adds description, address, ticket_url, buzz rationale, and coordinates.
 
+## Fix an event's rarity
+
+```
+curl -s -X POST "$GRAPEVINE_URL/api/ext/v1/events/:id/rarity" \
+  -H "X-Agent-Key: $GRAPEVINE_AGENT_KEY" -H "Content-Type: application/json" \
+  -d '{"rarity":"rare"}'
+```
+
+`rarity` is one of `rare` (one-off or annual specials: parades, fireworks,
+races, big festivals), `notable` (uncommon but repeats), `common`
+(weekly/regular). This drives the app's "Rare finds" filter — correct clear
+mislabels only; the write applies immediately.
+
 ## Drive ETA
 
 ```

@@ -129,6 +129,10 @@ export function useAgentChat() {
                 { ...a, kind: "interests" as const, state: "pending" as const },
               ],
             }))
+          } else if (a.kind === "eventPatched") {
+            // Server already committed the edit (e.g. set_rarity) — swap the
+            // fresh copy in so badges and filters reflect it immediately.
+            useGrapevine.getState().upsertEvent(a.event)
           }
           break
         }

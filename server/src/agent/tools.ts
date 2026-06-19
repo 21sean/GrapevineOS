@@ -16,9 +16,11 @@ import { z } from "zod";
 import { CATEGORIES, type Category } from "../types.js";
 import {
   INTEREST_TOPICS,
+  RARITIES,
   getEta,
   getEvent,
   searchEvents,
+  setEventRarity,
   vetEventIds,
   vetTopics,
   type AgentCtx,
@@ -200,6 +202,38 @@ export function makeTools(ctx: AgentCtx, chat: ChatContext) {
     },
   );
 
+  const setRarityTool = tool(
+    async (input, config) => {
+      const result = await setEventRarity(input.event_id, input.rarity, ctx);
+      if ("error" in result) return JSON.stringify(result);
+      // The DB is already updated; tell the browser so badges and the
+      // "Rare finds" filter reflect it without a reload.
+      emit(config, {
+        type: "action",
+        action: { kind: "eventPatched", event: result.event },
+      });
+      return JSON.stringify({
+        ok: true,
+        id: result.event.id,
+        title: result.event.title,
+        rarity: result.event.rarity,
+        note: result.changed ? "saved" : "already had this rarity",
+      });
+    },
+    {
+      name: "set_rarity",
+      description:
+        "Correct an event's rarity in the database (applies immediately, no confirmation). " +
+        "rare = one-off or annual specials (parades, fireworks, races, big festivals); " +
+        "notable = uncommon but repeats; common = weekly/regular. Rarity drives the app's " +
+        "Rare finds filter, so fix events that are clearly mislabeled.",
+      schema: z.object({
+        event_id: z.string(),
+        rarity: z.enum(RARITIES),
+      }),
+    },
+  );
+
   const updateInterestsTool = tool(
     async (input, config) => {
       const addLoves = vetTopics(input.add_loves);
@@ -245,6 +279,7 @@ export function makeTools(ctx: AgentCtx, chat: ChatContext) {
     readPageTool,
     showOnMapTool,
     proposeCalendarTool,
+    setRarityTool,
     updateInterestsTool,
   ];
 }
@@ -275,6 +310,8 @@ export function toolLabel(name: string, args: Record<string, unknown>): string {
       return "Pinning the map";
     case "propose_calendar":
       return "Drafting a calendar save";
+    case "set_rarity":
+      return args.rarity ? `Marking as ${String(args.rarity)}` : "Updating rarity";
     case "update_interests":
       return "Noting your taste";
     default:
@@ -298,6 +335,9 @@ export function toolDetail(name: string, content: unknown): string | undefined {
     }
     if (name === "get_eta" && typeof parsed.minutes === "number") {
       return `${parsed.minutes} min`;
+    }
+    if (name === "set_rarity" && parsed.ok) {
+      return String(parsed.rarity);
     }
     if (parsed.error) return "failed";
   } catch {
