@@ -34,6 +34,8 @@ interface GrapevineState {
   userPos: [number, number] | null
   // width of the left event-list rail, in px (device-local, resizable)
   railWidth: number
+  // width of the event-detail side panel, in px (device-local, resizable)
+  detailWidth: number
   // "happening now" carousel card: minimized + resizable width (device-local)
   carouselMin: boolean
   carouselWidth: number
@@ -69,6 +71,7 @@ interface GrapevineState {
   setTraffic: (on: boolean) => void
   setUserPos: (pos: [number, number] | null) => void
   setRailWidth: (px: number) => void
+  setDetailWidth: (px: number) => void
   setCarouselMin: (v: boolean) => void
   setCarouselWidth: (px: number) => void
   setDockState: (s: "peek" | "half" | "full") => void
@@ -128,6 +131,7 @@ export const useGrapevine = create<GrapevineState>()(
       trafficOn: true,
       userPos: null,
       railWidth: 340,
+      detailWidth: 448,
       carouselMin: false,
       carouselWidth: 440,
       dockState: "peek",
@@ -192,6 +196,7 @@ export const useGrapevine = create<GrapevineState>()(
       setTraffic: (trafficOn) => set({ trafficOn }),
       setUserPos: (userPos) => set({ userPos }),
       setRailWidth: (railWidth) => set({ railWidth }),
+      setDetailWidth: (detailWidth) => set({ detailWidth }),
       setCarouselMin: (carouselMin) => set({ carouselMin }),
       setCarouselWidth: (carouselWidth) => set({ carouselWidth }),
       setDockState: (dockState) => set({ dockState }),
@@ -301,6 +306,7 @@ export const useGrapevine = create<GrapevineState>()(
         pinnedIds: s.pinnedIds,
         hiddenIds: s.hiddenIds,
         railWidth: s.railWidth,
+        detailWidth: s.detailWidth,
         carouselWidth: s.carouselWidth,
         carouselMin: s.carouselMin,
         sortBy: s.sortBy,
