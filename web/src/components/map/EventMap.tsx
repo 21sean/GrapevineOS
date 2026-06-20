@@ -3,8 +3,13 @@ import { renderToStaticMarkup } from "react-dom/server"
 import mapboxgl from "mapbox-gl"
 import "mapbox-gl/dist/mapbox-gl.css"
 import { useGrapevine } from "@/lib/store"
-import { carouselEvents, visibleEvents } from "@/lib/score"
-import { isLive, lightPresetForTime } from "@/lib/time"
+import {
+  selectLightPreset,
+  selectLiveIds,
+  selectRendered,
+  selectTour,
+  selectVisible,
+} from "@/lib/derived"
 import { CATEGORY_META, type Category, type CityEvent } from "@/lib/types"
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN as string
@@ -93,7 +98,8 @@ interface Stack {
   idx: number
 }
 
-/** Write-if-changed so idle re-decorates (the 30s clock tick) mutate nothing. */
+/** Write-if-changed so full-set walks (selection, liveness flips) only touch
+ *  the markers whose decoration actually moved. */
 function setData(el: HTMLElement, key: string, value: string) {
   if (el.dataset[key] !== value) el.dataset[key] = value
 }
@@ -114,10 +120,6 @@ export function EventMap() {
 
   const settings = useGrapevine((s) => s.settings)
   const events = useGrapevine((s) => s.events)
-  const filters = useGrapevine((s) => s.filters)
-  const interests = useGrapevine((s) => s.interests)
-  const hiddenIds = useGrapevine((s) => s.hiddenIds)
-  const now = useGrapevine((s) => s.now)
   const selectedId = useGrapevine((s) => s.selectedId)
   const detailOpen = useGrapevine((s) => s.detailOpen)
   const carouselOn = useGrapevine((s) => s.carouselOn)
@@ -127,26 +129,20 @@ export function EventMap() {
   const select = useGrapevine((s) => s.select)
   const agentHighlight = useGrapevine((s) => s.agentHighlight)
 
-  const visible = useMemo(
-    () => visibleEvents(events, filters, interests, now, settings?.tz, new Set(hiddenIds)),
-    [events, filters, interests, now, settings?.tz, hiddenIds],
-  )
+  // Shared memoized selectors: one computation feeds the map, list, and
+  // carousel, and each keeps its previous reference when a recompute lands on
+  // the same result — so a 30s tick that changes nothing skips the marker
+  // effect below entirely.
+  const visible = useGrapevine(selectVisible)
+  const rendered = useGrapevine(selectRendered)
+  const tour = useGrapevine(selectTour)
+  // Liveness as a stable Set of ids: markers need "is this event live", not
+  // the raw clock, and the set's identity only changes when liveness flips.
+  const liveIds = useGrapevine(selectLiveIds)
 
-  // The agent's picks render even when the user's filters would hide them
-  // (e.g. hidePromoted) — a recommendation with no pin is a broken answer.
   const agentIds = useMemo(
     () => new Set(agentHighlight?.ids ?? []),
     [agentHighlight],
-  )
-  const rendered = useMemo(() => {
-    if (!agentIds.size) return visible
-    const shown = new Set(visible.map((e) => e.id))
-    const extras = events.filter((e) => agentIds.has(e.id) && !shown.has(e.id))
-    return extras.length ? [...visible, ...extras] : visible
-  }, [visible, events, agentIds])
-  const tour = useMemo(
-    () => carouselEvents(events, filters, interests, now, settings?.tz, new Set(hiddenIds)),
-    [events, filters, interests, now, settings?.tz, hiddenIds],
   )
 
   // A marker looks "selected" only while its detail sheet is open. Keeping
@@ -157,13 +153,11 @@ export function EventMap() {
 
   // Map lighting tracks the wall clock in the city's own timezone — Pacific for
   // San Diego — so the basemap moves through dawn/day/dusk/night with real time
-  // instead of sitting on a fixed preset. `now` ticks every 30s, but the memo
-  // only yields a new string when the hour crosses a boundary, so downstream
-  // effects stay idle in between. Falls back to LA time until settings arrive.
-  const lightPreset = useMemo(
-    () => lightPresetForTime(now, settings?.tz ?? "America/Los_Angeles"),
-    [now, settings?.tz],
-  )
+  // instead of sitting on a fixed preset. The clock ticks every 30s, but the
+  // selector yields the same string until the hour crosses a boundary, so this
+  // component doesn't re-render for it. Falls back to LA time until settings
+  // arrive.
+  const lightPreset = useGrapevine(selectLightPreset)
   // Latest preset for the init/style.load handlers, which run outside render.
   // Seeded from the mount-time value; kept current by the sync effect below.
   const lightPresetRef = useRef(lightPreset)
@@ -259,9 +253,12 @@ export function EventMap() {
   const focusSeq = carouselOn ? carouselIdx : -1
 
   // Latest decorate inputs for the stack pager handlers, which live in plain
-  // DOM listeners outside React's render cycle.
-  const decorCtxRef = useRef({ now, activeId, agentIds })
-  decorCtxRef.current = { now, activeId, agentIds }
+  // DOM listeners outside React's render cycle. Synced in an effect (not
+  // during render); listeners only fire after effects have run.
+  const decorCtxRef = useRef({ liveIds, activeId, agentIds })
+  useEffect(() => {
+    decorCtxRef.current = { liveIds, activeId, agentIds }
+  }, [liveIds, activeId, agentIds])
   // Snap a stack's face to the selected/toured/highlighted event only when
   // that target changes — never on unrelated re-runs, so a face the user
   // paged to by hand isn't yanked back by the next clock tick.
@@ -353,7 +350,7 @@ export function EventMap() {
           if (n < 2) return
           created.idx = (created.idx + dir + n) % n
           const ctx = decorCtxRef.current
-          decorateStack(created, ctx.now, ctx.activeId, ctx.agentIds)
+          decorateStack(created, ctx.liveIds, ctx.activeId, ctx.agentIds)
           // Sheet open means the user is inspecting this venue — retarget it.
           // Sheet closed, paging is a silent preview: no camera move, no popup.
           const st = useGrapevine.getState()
@@ -386,11 +383,11 @@ export function EventMap() {
         const i = group.findIndex((e) => agentIds.has(e.id))
         if (i >= 0) stack.idx = i
       }
-      decorateStack(stack, now, activeId, agentIds)
+      decorateStack(stack, liveIds, activeId, agentIds)
     }
   }, [
     rendered,
-    now,
+    liveIds,
     activeId,
     selectedId,
     focusId,
@@ -498,7 +495,7 @@ export function EventMap() {
 /** Paint a stack's marker as the event at `idx` (its current face). */
 function decorateStack(
   stack: Stack,
-  now: Date,
+  liveIds: ReadonlySet<string>,
   selectedId: string | null,
   agentIds?: Set<string>,
 ) {
@@ -510,7 +507,7 @@ function decorateStack(
     el.style.setProperty("--marker-color", color)
     el.dataset.color = color
   }
-  setData(el, "live", String(isLive(e, now)))
+  setData(el, "live", String(liveIds.has(e.id)))
   setData(el, "selected", String(e.id === selectedId))
   setData(el, "agent", String(agentIds?.has(e.id) ?? false))
   setData(el, "stack", String(stack.events.length > 1))

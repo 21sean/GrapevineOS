@@ -667,7 +667,9 @@ function EventChip({ id, label }: { id: string; label: string }) {
   const event = useGrapevine((s) => s.events.find((e) => e.id === id))
   const select = useGrapevine((s) => s.select)
   const tz = useGrapevine((s) => s.settings?.tz) ?? "UTC"
-  const now = useGrapevine((s) => s.now)
+  // A string, not the raw clock: chips in a long transcript re-render only
+  // when their printed time actually changes.
+  const range = useGrapevine((s) => (event ? timeRange(event, tz, s.now) : ""))
 
   useEffect(() => {
     if (!event && !refreshedOnce) {
@@ -689,7 +691,7 @@ function EventChip({ id, label }: { id: string; label: string }) {
       />
       <span className="truncate">{event.title}</span>
       <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-        {timeRange(event, tz, now)}
+        {range}
       </span>
     </button>
   )

@@ -30,6 +30,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
+import { useClock } from "@/hooks/useClock"
 import { api } from "@/lib/api"
 import { nextOccurrence } from "@/lib/recurrence"
 import { matchesFilters } from "@/lib/score"
@@ -55,7 +56,8 @@ export function AccountDialog({
   const filters = useGrapevine((s) => s.filters)
   const interests = useGrapevine((s) => s.interests)
   const settings = useGrapevine((s) => s.settings)
-  const now = useGrapevine((s) => s.now)
+  // Frozen while the dialog is closed — no tick re-renders in the background.
+  const now = useClock(open)
   const select = useGrapevine((s) => s.select)
   const setFilters = useGrapevine((s) => s.setFilters)
   const setInterestsOpen = useGrapevine((s) => s.setInterestsOpen)

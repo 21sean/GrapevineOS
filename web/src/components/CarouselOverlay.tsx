@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react"
+import { useRef } from "react"
 import {
   ChevronDownIcon,
   ChevronLeftIcon,
@@ -12,7 +12,7 @@ import { StarRating } from "@/components/StarRating"
 import { DOCK_PEEK } from "@/components/MobileDock"
 import { useEta } from "@/hooks/useEta"
 import { useIsMobile } from "@/hooks/useIsMobile"
-import { carouselEvents } from "@/lib/score"
+import { selectTour } from "@/lib/derived"
 import { useGrapevine } from "@/lib/store"
 import { isLive, timeRange } from "@/lib/time"
 import { CATEGORY_META } from "@/lib/types"
@@ -28,11 +28,6 @@ const MOBILE_BOTTOM = `calc(env(safe-area-inset-bottom) + ${DOCK_PEEK + 12}px)`
 const SWIPE_COMMIT = 48
 
 export function CarouselOverlay() {
-  const events = useGrapevine((s) => s.events)
-  const filters = useGrapevine((s) => s.filters)
-  const interests = useGrapevine((s) => s.interests)
-  const now = useGrapevine((s) => s.now)
-  const settings = useGrapevine((s) => s.settings)
   const carouselOn = useGrapevine((s) => s.carouselOn)
   const carouselIdx = useGrapevine((s) => s.carouselIdx)
   const setCarousel = useGrapevine((s) => s.setCarousel)
@@ -45,17 +40,20 @@ export function CarouselOverlay() {
 
   const isMobile = useIsMobile()
   const dockState = useGrapevine((s) => s.dockState)
-  const hiddenIds = useGrapevine((s) => s.hiddenIds)
 
-  const tour = useMemo(
-    () =>
-      carouselEvents(events, filters, interests, now, settings?.tz, new Set(hiddenIds)),
-    [events, filters, interests, now, settings?.tz, hiddenIds],
-  )
+  // Shared with the map and App; keeps its reference across clock ticks that
+  // don't change the tour, so this card doesn't re-render for them.
+  const tour = useGrapevine(selectTour)
 
   const idx = tour.length ? carouselIdx % tour.length : 0
   const event = tour[idx]
   const eta = useEta(carouselOn ? event : null)
+  // Derived primitives instead of the raw clock: a tick re-renders the card
+  // only when the live flag or the printed time range actually changes.
+  const live = useGrapevine((s) => (event ? isLive(event, s.now) : false))
+  const range = useGrapevine((s) =>
+    event ? timeRange(event, s.settings?.tz ?? "UTC", s.now) : "",
+  )
 
   // Touch: a horizontal flick on the card is the mobile prev/next. The card
   // follows the finger (damped) for feedback, then springs back.
@@ -143,7 +141,6 @@ export function CarouselOverlay() {
   if (isMobile && dockState !== "peek") return null
 
   const meta = CATEGORY_META[event.category]
-  const live = isLive(event, now)
 
   const status = live ? (
     <>
@@ -259,9 +256,7 @@ export function CarouselOverlay() {
             style={{ background: meta.color }}
           />
           <span className="truncate">{event.venue}</span>
-          <span className="shrink-0 font-mono text-xs">
-            {timeRange(event, settings?.tz ?? "UTC", now)}
-          </span>
+          <span className="shrink-0 font-mono text-xs">{range}</span>
         </div>
 
         <div className="flex items-center justify-between">

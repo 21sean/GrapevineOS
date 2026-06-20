@@ -13,7 +13,7 @@ import type {
 } from "./types"
 import { DEFAULT_FILTERS, normalizeFilters } from "./types"
 
-interface GrapevineState {
+export interface GrapevineState {
   // data
   events: CityEvent[]
   settings: Settings | null

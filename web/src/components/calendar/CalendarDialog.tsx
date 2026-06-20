@@ -36,6 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
+import { useClock } from "@/hooks/useClock"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { api } from "@/lib/api"
 import { useGrapevine } from "@/lib/store"
@@ -88,7 +89,8 @@ export function CalendarDialog() {
   const setOpen = useGrapevine((s) => s.setCalendarOpen)
   const user = useGrapevine((s) => s.user)
   const calendar = useGrapevine((s) => s.calendar)
-  const now = useGrapevine((s) => s.now)
+  // Frozen while the popup is closed — no tick re-renders in the background.
+  const now = useClock(open)
   const isMobile = useIsMobile()
 
   const [view, setView] = useState<View>("agenda")

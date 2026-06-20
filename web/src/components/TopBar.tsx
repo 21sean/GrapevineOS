@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import {
   CalendarDaysIcon,
   HeartIcon,
@@ -13,25 +13,21 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { selectLiveCount } from "@/lib/derived"
 import { useGrapevine } from "@/lib/store"
-import { isLive } from "@/lib/time"
 import { cn } from "@/lib/utils"
 
 export function TopBar() {
-  const settings = useGrapevine((s) => s.settings)
-  const events = useGrapevine((s) => s.events)
-  const now = useGrapevine((s) => s.now)
+  const city = useGrapevine((s) => s.settings?.city)
+  // A number, not (events, now): the bar re-renders when the count changes,
+  // not twice a minute for every clock tick.
+  const liveCount = useGrapevine(selectLiveCount)
   const setInterestsOpen = useGrapevine((s) => s.setInterestsOpen)
   const setAdminOpen = useGrapevine((s) => s.setAdminOpen)
   const setAskOpen = useGrapevine((s) => s.setAskOpen)
   const setCalendarOpen = useGrapevine((s) => s.setCalendarOpen)
   const user = useGrapevine((s) => s.user)
   const [accountOpen, setAccountOpen] = useState(false)
-
-  const liveCount = useMemo(
-    () => events.filter((e) => isLive(e, now, settings?.tz)).length,
-    [events, now, settings?.tz],
-  )
 
   return (
     // Safe-area maxes keep the pills clear of the notch and rounded corners
@@ -44,7 +40,7 @@ export function TopBar() {
         {/* the city is ambient context — the live count earns the phone space */}
         <Separator orientation="vertical" className="!h-4 max-sm:hidden" />
         <span className="text-sm text-muted-foreground max-sm:hidden">
-          {settings?.city}
+          {city}
         </span>
         <Separator orientation="vertical" className="!h-4" />
         <span className="inline-flex items-center gap-1.5 font-mono text-xs whitespace-nowrap">

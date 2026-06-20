@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react"
+import { lazy, Suspense, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Toaster } from "@/components/ui/sonner"
@@ -13,7 +13,7 @@ import { EventMap } from "@/components/map/EventMap"
 import { MobileDock } from "@/components/MobileDock"
 import { TopBar } from "@/components/TopBar"
 import { useIsMobile } from "@/hooks/useIsMobile"
-import { carouselEvents } from "@/lib/score"
+import { selectTour } from "@/lib/derived"
 import { useGrapevine } from "@/lib/store"
 
 // Operator-only chrome — load its chunk on first open instead of shipping it
@@ -37,12 +37,9 @@ export function App() {
   const carouselOn = useGrapevine((s) => s.carouselOn)
   const adminOpen = useGrapevine((s) => s.adminOpen)
   const calendarOpen = useGrapevine((s) => s.calendarOpen)
-  const events = useGrapevine((s) => s.events)
-  const filters = useGrapevine((s) => s.filters)
-  const interests = useGrapevine((s) => s.interests)
-  const now = useGrapevine((s) => s.now)
-  const hiddenIds = useGrapevine((s) => s.hiddenIds)
-  const tz = useGrapevine((s) => s.settings?.tz)
+  // Length only — App must not re-render (and fan out to the whole tree) on
+  // every clock tick just because the tour's membership was recomputed.
+  const tourLength = useGrapevine((s) => selectTour(s).length)
 
   const [loadError, setLoadError] = useState<string | null>(null)
   const isMobile = useIsMobile()
@@ -84,11 +81,6 @@ export function App() {
   }, [load, tick, setUserPos])
 
   // the live tour: advance every CAROUSEL_MS while enabled
-  const tourLength = useMemo(
-    () =>
-      carouselEvents(events, filters, interests, now, tz, new Set(hiddenIds)).length,
-    [events, filters, interests, now, tz, hiddenIds],
-  )
   useEffect(() => {
     if (!carouselOn || tourLength < 2) return
     const timer = setInterval(() => {

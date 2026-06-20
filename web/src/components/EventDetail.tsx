@@ -32,6 +32,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { StarRating } from "@/components/StarRating"
+import { useClock } from "@/hooks/useClock"
 import { useEta } from "@/hooks/useEta"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { api } from "@/lib/api"
@@ -46,12 +47,15 @@ const DETAIL_MIN = 360
 const DETAIL_MAX = 640
 
 export function EventDetail() {
-  const events = useGrapevine((s) => s.events)
-  const selectedId = useGrapevine((s) => s.selectedId)
+  // Subscribe to the selected event itself, not the whole list — unrelated
+  // event refreshes and selections of other panels don't re-render this one.
+  const event = useGrapevine((s) => s.events.find((e) => e.id === s.selectedId))
   const detailOpen = useGrapevine((s) => s.detailOpen)
   const setDetailOpen = useGrapevine((s) => s.setDetailOpen)
   const settings = useGrapevine((s) => s.settings)
-  const now = useGrapevine((s) => s.now)
+  // Tick only while open: the countdown ("Starts in 12 min") should update
+  // live, but a closed panel shouldn't re-render twice a minute.
+  const now = useClock(detailOpen)
   const userPos = useGrapevine((s) => s.userPos)
   const upsertEvent = useGrapevine((s) => s.upsertEvent)
   const user = useGrapevine((s) => s.user)
@@ -66,7 +70,6 @@ export function EventDetail() {
   const [calBusy, setCalBusy] = useState(false)
   const isMobile = useIsMobile()
 
-  const event = events.find((e) => e.id === selectedId)
   const eta = useEta(detailOpen ? event : null)
   if (!event) return null
 

@@ -1,3 +1,4 @@
+import { memo } from "react"
 import { EyeOffIcon, PinIcon, RepeatIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
@@ -8,25 +9,25 @@ import { isLive, timeRange } from "@/lib/time"
 import { CATEGORY_META, type CityEvent } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
-export function EventCard({ event }: { event: CityEvent }) {
-  const now = useGrapevine((s) => s.now)
-  const settings = useGrapevine((s) => s.settings)
-  const selectedId = useGrapevine((s) => s.selectedId)
-  const detailOpen = useGrapevine((s) => s.detailOpen)
+// memo + per-card derived subscriptions: selecting, pinning, or a clock tick
+// re-renders only the card whose *own* pixels change, not the whole list.
+// Every selector below returns a primitive, so zustand's Object.is check
+// swallows store writes that don't move this card.
+export const EventCard = memo(function EventCard({ event }: { event: CityEvent }) {
   const select = useGrapevine((s) => s.select)
-  const pinnedIds = useGrapevine((s) => s.pinnedIds)
   const togglePin = useGrapevine((s) => s.togglePin)
   const hideEvent = useGrapevine((s) => s.hideEvent)
   const unhideEvent = useGrapevine((s) => s.unhideEvent)
 
-  const tz = settings?.tz ?? "UTC"
-  const live = isLive(event, now, tz)
-  const repeats = recurrenceSummary(event.recurrence)
-  const meta = CATEGORY_META[event.category]
+  const live = useGrapevine((s) => isLive(event, s.now, s.settings?.tz ?? "UTC"))
+  const range = useGrapevine((s) => timeRange(event, s.settings?.tz ?? "UTC", s.now))
   // Highlight only while the detail is actually open, so closing it clears the
   // card the same moment it clears the map marker.
-  const active = detailOpen && selectedId === event.id
-  const pinned = pinnedIds.includes(event.id)
+  const active = useGrapevine((s) => s.detailOpen && s.selectedId === event.id)
+  const pinned = useGrapevine((s) => s.pinnedIds.includes(event.id))
+
+  const repeats = recurrenceSummary(event.recurrence)
+  const meta = CATEGORY_META[event.category]
 
   return (
     // A card-as-button (rather than a real <button>) so the pin toggle can be a
@@ -97,7 +98,7 @@ export function EventCard({ event }: { event: CityEvent }) {
           <RepeatIcon className="size-3 shrink-0" aria-label={`Repeats: ${repeats}`} />
         )}
         <span className="truncate">
-          {timeRange(event, tz, now)} · {event.venue}
+          {range} · {event.venue}
         </span>
       </span>
 
@@ -124,4 +125,4 @@ export function EventCard({ event }: { event: CityEvent }) {
       </div>
     </div>
   )
-}
+})

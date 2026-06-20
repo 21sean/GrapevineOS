@@ -110,19 +110,19 @@ export function sortEvents(
   const sorted = [...events]
   if (sort === "date") {
     // next occurrence, not anchor start — recurring events sort by when
-    // they actually happen next
-    sorted.sort(
-      (a, b) =>
-        new Date(nextOccurrence(a, now, tz).start).getTime() -
-        new Date(nextOccurrence(b, now, tz).start).getTime(),
+    // they actually happen next. Keyed once per event, not per comparison.
+    const startMs = new Map(
+      events.map((e) => [e, Date.parse(nextOccurrence(e, now, tz).start)] as const),
     )
+    sorted.sort((a, b) => startMs.get(a)! - startMs.get(b)!)
   } else if (sort === "alpha") {
     sorted.sort((a, b) => a.title.localeCompare(b.title))
   } else {
     const dir = sort === "price-asc" ? 1 : -1
+    const price = new Map(events.map((e) => [e, priceValue(e)] as const))
     sorted.sort((a, b) => {
-      const pa = priceValue(a)
-      const pb = priceValue(b)
+      const pa = price.get(a) as number | null
+      const pb = price.get(b) as number | null
       if (pa === null || pb === null) {
         return pa === pb ? 0 : pa === null ? 1 : -1
       }
@@ -140,21 +140,27 @@ export function visibleEvents(
   tz?: string,
   hidden?: ReadonlySet<string>,
 ): CityEvent[] {
-  return events
-    .filter((e) => !hidden?.has(e.id) && matchesFilters(e, f, interests, now, tz))
-    .sort((a, b) => scoreEvent(b, interests, now, tz) - scoreEvent(a, interests, now, tz))
+  // Score each event once, then sort by the cached number — scoring inside
+  // the comparator would re-run isLive/nextOccurrence O(n log n) times.
+  const scored: [number, CityEvent][] = []
+  for (const e of events) {
+    if (hidden?.has(e.id)) continue
+    if (!matchesFilters(e, f, interests, now, tz)) continue
+    scored.push([scoreEvent(e, interests, now, tz), e])
+  }
+  scored.sort((a, b) => b[0] - a[0])
+  return scored.map(([, e]) => e)
 }
 
-/** Events the carousel should tour: live first, else starting soon — by score. */
+/**
+ * Events the carousel should tour: live first, else starting soon — by score.
+ * Takes the already filtered+ranked list (see selectVisible in derived.ts).
+ */
 export function carouselEvents(
-  events: CityEvent[],
-  f: Filters,
-  interests: Interests,
+  visible: CityEvent[],
   now: Date,
   tz?: string,
-  hidden?: ReadonlySet<string>,
 ): CityEvent[] {
-  const visible = visibleEvents(events, f, interests, now, tz, hidden)
   const live = visible.filter((e) => isLive(e, now, tz))
   if (live.length >= 2) return live.slice(0, 7)
   const soon = visible.filter(

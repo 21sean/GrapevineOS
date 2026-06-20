@@ -31,8 +31,23 @@ const DAY_INDEX: Record<string, number> = {
 }
 const WD_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
+// Parsing is memoized by rule string: the same handful of RRULEs is asked for
+// on every clock tick, filter pass, and card render, so each distinct rule is
+// parsed exactly once per session.
+const ruleCache = new Map<string, ParsedRRule | null>()
+
 export function parseRRule(input?: string | null): ParsedRRule | null {
   if (!input) return null
+  let rule = ruleCache.get(input)
+  if (rule === undefined) {
+    if (ruleCache.size >= 1000) ruleCache.clear() // backstop; rules are few
+    rule = parseRRuleFresh(input)
+    ruleCache.set(input, rule)
+  }
+  return rule
+}
+
+function parseRRuleFresh(input: string): ParsedRRule | null {
   const parts = new Map<string, string>()
   for (const chunk of input.replace(/^RRULE:/i, "").split(";")) {
     const eq = chunk.indexOf("=")
@@ -147,6 +162,20 @@ function* occurrenceStarts(
 }
 
 /**
+ * nextOccurrence cache. An answer is the first occurrence whose end is still
+ * ahead of `now`, so it stays correct for every instant from when it was
+ * computed until that occurrence ends (forever for one-offs and finished
+ * series). Within that window callers get the *same object* back, which lets
+ * selector-based subscribers bail out by reference instead of re-rendering.
+ */
+interface OccWindow {
+  occ: { start: string; end: string }
+  validFrom: number
+  validTo: number
+}
+const occCache = new Map<string, OccWindow>()
+
+/**
  * The occurrence a recurring event should present at `now`: the one that is
  * live if any, otherwise the next upcoming one. One-off events (no rule) return
  * their own start/end unchanged. A finished bounded series returns its last
@@ -157,23 +186,40 @@ export function nextOccurrence(
   now: Date,
   tz?: string,
 ): { start: string; end: string } {
+  const key = `${e.start}|${e.end}|${e.recurrence ?? ""}|${tz ?? ""}`
+  const nowMs = now.getTime()
+  const hit = occCache.get(key)
+  if (hit && nowMs >= hit.validFrom && nowMs <= hit.validTo) return hit.occ
+
   const rule = parseRRule(e.recurrence)
   const anchorMs = Date.parse(e.start)
-  if (!rule || Number.isNaN(anchorMs)) return { start: e.start, end: e.end }
-
-  const duration = Math.max(0, Date.parse(e.end) - anchorMs)
-  const nowMs = now.getTime()
-  const at = (ms: number) => ({
-    start: new Date(ms).toISOString(),
-    end: new Date(ms + duration).toISOString(),
-  })
-
-  let last = anchorMs
-  for (const ms of occurrenceStarts(anchorMs, rule, tz)) {
-    last = ms
-    if (ms + duration >= nowMs) return at(ms)
+  let win: OccWindow
+  if (!rule || Number.isNaN(anchorMs)) {
+    win = { occ: { start: e.start, end: e.end }, validFrom: -Infinity, validTo: Infinity }
+  } else {
+    const duration = Math.max(0, Date.parse(e.end) - anchorMs)
+    const at = (ms: number) => ({
+      start: new Date(ms).toISOString(),
+      end: new Date(ms + duration).toISOString(),
+    })
+    let last = anchorMs
+    let found: number | undefined
+    for (const ms of occurrenceStarts(anchorMs, rule, tz)) {
+      last = ms
+      if (ms + duration >= nowMs) {
+        found = ms
+        break
+      }
+    }
+    win =
+      found !== undefined
+        ? { occ: at(found), validFrom: nowMs, validTo: found + duration }
+        : // series over — every later `now` lands on the final occurrence
+          { occ: at(last), validFrom: nowMs, validTo: Infinity }
   }
-  return at(last)
+  if (occCache.size >= 5000) occCache.clear()
+  occCache.set(key, win)
+  return win.occ
 }
 
 /** Short human label for a rule, e.g. "Weekly on Sat", "Every 2 weeks". */
