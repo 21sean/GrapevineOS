@@ -5,10 +5,13 @@ import {
   DownloadIcon,
   ExternalLinkIcon,
   EyeOffIcon,
+  FootprintsIcon,
   MapPinIcon,
   NavigationIcon,
   RepeatIcon,
   SparklesIcon,
+  ThumbsDownIcon,
+  ThumbsUpIcon,
   XIcon,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -39,12 +42,68 @@ import { api } from "@/lib/api"
 import { useGrapevine } from "@/lib/store"
 import { fmtTime, isLive, statusLabel } from "@/lib/time"
 import { nextOccurrence, recurrenceSummary } from "@/lib/recurrence"
-import { CATEGORY_META } from "@/lib/types"
+import { CATEGORY_META, REACTION_META, type Reaction } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 // Desktop panel width bounds; the default (448) lives in the store.
 const DETAIL_MIN = 360
 const DETAIL_MAX = 640
+
+const REACTION_BUTTONS: { value: Reaction; icon: typeof ThumbsUpIcon }[] = [
+  { value: "going", icon: FootprintsIcon },
+  { value: "went", icon: ThumbsUpIcon },
+  { value: "not_for_me", icon: ThumbsDownIcon },
+]
+
+/**
+ * The feedback loop's input: one tap files "going" / "went — great" / "not
+ * for me". Tapping the active one clears it. The score reacts instantly —
+ * this event moves, and its tags teach the ranking about lookalikes.
+ */
+function ReactionRow({ eventId }: { eventId: string }) {
+  const reaction = useGrapevine((s) => s.reactions[eventId])
+  const setReaction = useGrapevine((s) => s.setReaction)
+  const user = useGrapevine((s) => s.user)
+
+  function pick(r: Reaction) {
+    const next = reaction === r ? null : r
+    setReaction(eventId, next)
+    if (next) {
+      toast.success(`Noted: ${REACTION_META[next].label}`, {
+        description: `${REACTION_META[next].blurb}${user ? "" : " — sign in to keep this across devices"}`,
+      })
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="font-mono text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
+        Your take
+      </span>
+      <div className="flex gap-2">
+        {REACTION_BUTTONS.map(({ value, icon: Icon }) => (
+          <Button
+            key={value}
+            variant={reaction === value ? "secondary" : "outline"}
+            size="sm"
+            aria-pressed={reaction === value}
+            onClick={() => pick(value)}
+            className={cn(
+              "flex-1",
+              reaction === value &&
+                (value === "not_for_me"
+                  ? "border-destructive/40 text-destructive"
+                  : "border-live/40 text-live"),
+            )}
+          >
+            <Icon data-icon="inline-start" />
+            {REACTION_META[value].label}
+          </Button>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 export function EventDetail() {
   // Subscribe to the selected event itself, not the whole list — unrelated
@@ -176,6 +235,24 @@ export function EventDetail() {
 
   const body = (
     <>
+      {/* scraped og:image as a hero; dominant color holds the space while it
+          loads, and a load failure collapses the whole banner */}
+      {event.imageUrl && (
+        <div
+          className="relative -mb-2 h-40 shrink-0 overflow-hidden"
+          style={event.imageColor ? { backgroundColor: event.imageColor } : undefined}
+        >
+          <img
+            src={event.imageUrl}
+            alt=""
+            onError={(e) => {
+              e.currentTarget.parentElement!.style.display = "none"
+            }}
+            className="h-full w-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent" />
+        </div>
+      )}
       <SheetHeader className="gap-2 pr-16">
         <span
           className="font-mono text-[11px] tracking-[0.18em] uppercase"
@@ -257,6 +334,8 @@ export function EventDetail() {
             ))}
           </div>
         )}
+
+        <ReactionRow eventId={event.id} />
 
         <Separator />
 

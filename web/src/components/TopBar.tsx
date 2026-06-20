@@ -2,6 +2,7 @@ import { useState } from "react"
 import {
   CalendarDaysIcon,
   HeartIcon,
+  NewspaperIcon,
   Settings2Icon,
   SparklesIcon,
 } from "lucide-react"
@@ -26,6 +27,7 @@ export function TopBar() {
   const setAdminOpen = useGrapevine((s) => s.setAdminOpen)
   const setAskOpen = useGrapevine((s) => s.setAskOpen)
   const setCalendarOpen = useGrapevine((s) => s.setCalendarOpen)
+  const setWeekOpen = useGrapevine((s) => s.setWeekOpen)
   const user = useGrapevine((s) => s.user)
   const [accountOpen, setAccountOpen] = useState(false)
 
@@ -91,6 +93,20 @@ export function TopBar() {
             </Button>
           </TooltipTrigger>
           <TooltipContent>Tune what floats to the top</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="rounded-full"
+              aria-label="Your week"
+              onClick={() => setWeekOpen(true)}
+            >
+              <NewspaperIcon />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Your week — top picks by your taste</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>

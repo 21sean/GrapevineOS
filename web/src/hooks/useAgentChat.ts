@@ -1,7 +1,8 @@
 import { useCallback, useRef, useState } from "react"
+import { toast } from "sonner"
 import { api } from "@/lib/api"
 import { useGrapevine } from "@/lib/store"
-import type { AgentFrame } from "@/lib/types"
+import { DEFAULT_FILTERS, normalizeFilters, type AgentFrame } from "@/lib/types"
 
 /**
  * Owns one session's "Ask Grapevine" transcript for display. Conversation
@@ -133,6 +134,25 @@ export function useAgentChat() {
             // Server already committed the edit (e.g. set_rarity) — swap the
             // fresh copy in so badges and filters reflect it immediately.
             useGrapevine.getState().upsertEvent(a.event)
+          } else if (a.kind === "setFilters") {
+            // The agent reshaped the map — apply immediately, offer undo.
+            const s = useGrapevine.getState()
+            const prior = s.filters
+            const base = a.reset ? DEFAULT_FILTERS : prior
+            s.setFilters(normalizeFilters({ ...base, ...a.patch }))
+            toast(a.note ? `Filters: ${a.note}` : "Map filters updated", {
+              description: "Ask Grapevine changed what's on your map.",
+              action: {
+                label: "Undo",
+                onClick: () => useGrapevine.getState().setFilters(prior),
+              },
+            })
+          } else if (a.kind === "calendarSaved") {
+            // Server already saved — sync the local "saved" badges.
+            void useGrapevine.getState().refreshCalendar()
+            toast.success(
+              `Saved ${a.eventIds.length} event${a.eventIds.length === 1 ? "" : "s"} to your calendar`,
+            )
           }
           break
         }

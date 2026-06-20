@@ -1,7 +1,15 @@
-import { carouselEvents, matchesSearch, sortEvents, visibleEvents } from "./score"
-import { isLive, lightPresetForTime, type LightPreset } from "./time"
+import {
+  carouselEvents,
+  interestTerms,
+  matchesSearch,
+  scoreEvent,
+  sortEvents,
+  visibleEvents,
+} from "./score"
+import { nextOccurrence } from "./recurrence"
+import { isLive, lightPresetForTime, localDay, type LightPreset } from "./time"
 import type { GrapevineState } from "./store"
-import type { CityEvent } from "./types"
+import type { CityEvent, Reaction } from "./types"
 
 /**
  * Store-level derived data, memoized once for all subscribers.
@@ -46,11 +54,49 @@ const selectHidden = memoSelector(
   (s) => new Set(s.hiddenIds),
 )
 
+const sameAffinity = (a: ReadonlyMap<string, number>, b: ReadonlyMap<string, number>) => {
+  if (a.size !== b.size) return false
+  for (const [k, v] of b) if (a.get(k) !== v) return false
+  return true
+}
+
+/** How hard one reaction teaches each of the event's tags. */
+const REACTION_TAG_WEIGHT: Record<Reaction, number> = {
+  going: 1,
+  went: 1.5, // "went — great" is the strongest taste evidence there is
+  not_for_me: -1.5,
+}
+
+/**
+ * The learned half of the feedback loop: reactions → per-tag weights over the
+ * events' own vocabulary (not the fixed 26-topic list). Two "went — great"
+ * jazz nights make every jazz event score higher from then on.
+ */
+export const selectTagAffinity = memoSelector(
+  (s) => [s.events, s.reactions],
+  (s) => {
+    const byId = new Map(s.events.map((e) => [e.id, e]))
+    const affinity = new Map<string, number>()
+    for (const [id, reaction] of Object.entries(s.reactions)) {
+      const e = byId.get(id)
+      if (!e) continue
+      for (const t of interestTerms(e)) {
+        affinity.set(t, (affinity.get(t) ?? 0) + REACTION_TAG_WEIGHT[reaction])
+      }
+    }
+    return affinity as ReadonlyMap<string, number>
+  },
+  sameAffinity,
+)
+
 /** Filtered + relevance-ranked events: the map's markers, the list's base. */
 export const selectVisible = memoSelector(
-  (s) => [s.events, s.filters, s.interests, s.now, s.settings?.tz, s.hiddenIds],
+  (s) => [s.events, s.filters, s.interests, s.now, s.settings?.tz, s.hiddenIds, s.reactions],
   (s) =>
-    visibleEvents(s.events, s.filters, s.interests, s.now, s.settings?.tz, selectHidden(s)),
+    visibleEvents(s.events, s.filters, s.interests, s.now, s.settings?.tz, selectHidden(s), {
+      reactions: s.reactions,
+      tagAffinity: selectTagAffinity(s),
+    }),
   sameList,
 )
 
@@ -103,6 +149,51 @@ export const selectRendered = memoSelector(
     return extras.length ? [...visible, ...extras] : visible
   },
   sameList,
+)
+
+export interface WeekDay {
+  day: string // YYYY-MM-DD city-local
+  events: CityEvent[]
+}
+
+/**
+ * "Your week": the next 7 days, top picks per day by the personal score —
+ * interests, reactions, and learned tag affinity included; the user's current
+ * map filters deliberately NOT (the digest answers "what's worth it", not
+ * "what's on screen"). Promoted junk and "not for me" events never make it.
+ */
+export const selectWeekPicks = memoSelector(
+  (s) => [s.events, s.interests, s.reactions, s.hiddenIds, s.now, s.settings?.tz],
+  (s) => {
+    const tz = s.settings?.tz
+    const hidden = selectHidden(s)
+    const taste = { reactions: s.reactions, tagAffinity: selectTagAffinity(s) }
+    const horizon = s.now.getTime() + 7 * 86_400_000
+    const byDay = new Map<string, [number, CityEvent][]>()
+    for (const e of s.events) {
+      if (hidden.has(e.id) || e.promoted) continue
+      if (s.reactions[e.id] === "not_for_me") continue
+      const occ = nextOccurrence(e, s.now, tz)
+      if (Date.parse(occ.end) < s.now.getTime()) continue
+      if (Date.parse(occ.start) > horizon) continue
+      const score = scoreEvent(e, s.interests, s.now, tz, taste)
+      if (score === -Infinity) continue
+      const day = localDay(occ.start, tz)
+      const list = byDay.get(day) ?? []
+      list.push([score, e])
+      byDay.set(day, list)
+    }
+    const days: WeekDay[] = [...byDay.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([day, list]) => ({
+        day,
+        events: list
+          .sort((a, b) => b[0] - a[0])
+          .slice(0, 3)
+          .map(([, e]) => e),
+      }))
+    return days
+  },
 )
 
 /** Ids of events live right now, across all events (not just visible). */

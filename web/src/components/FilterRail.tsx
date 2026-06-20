@@ -1,6 +1,7 @@
 import { useState } from "react"
 import {
   ArrowUpDownIcon,
+  CalendarRangeIcon,
   ChevronDownIcon,
   EyeIcon,
   GemIcon,
@@ -9,6 +10,7 @@ import {
   SearchIcon,
   SlidersHorizontalIcon,
   SproutIcon,
+  TicketIcon,
   XIcon,
 } from "lucide-react"
 import {
@@ -110,6 +112,12 @@ export function FilterRail() {
             checked={filters.rareOnly}
             onChange={(v) => setFilters({ rareOnly: v })}
           />
+          <ToggleRow
+            icon={<TicketIcon className="size-3.5 text-live" />}
+            label="Free only"
+            checked={filters.freeOnly}
+            onChange={(v) => setFilters({ freeOnly: v })}
+          />
           <FarmersRow
             value={filters.farmers}
             onChange={(farmers) => setFilters({ farmers })}
@@ -120,6 +128,7 @@ export function FilterRail() {
             checked={filters.hidePromoted}
             onChange={(v) => setFilters({ hidePromoted: v })}
           />
+          <DateWindowRow />
         </div>
 
         <div className="flex flex-col gap-3">
@@ -375,6 +384,52 @@ function FarmersRow({
           </button>
         ))}
       </div>
+    </div>
+  )
+}
+
+/**
+ * The date window has no picker of its own — Ask Grapevine sets it ("free
+ * stuff this weekend") via set_filters. This row surfaces it while active so
+ * the narrowed map is explainable and one click wide again.
+ */
+function DateWindowRow() {
+  const dateFrom = useGrapevine((s) => s.filters.dateFrom)
+  const dateTo = useGrapevine((s) => s.filters.dateTo)
+  const setFilters = useGrapevine((s) => s.setFilters)
+  if (!dateFrom && !dateTo) return null
+
+  // "2026-07-11" → "Jul 11", local-date safe (noon dodges TZ backslide)
+  const label = (d: string) =>
+    new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(
+      new Date(`${d}T12:00:00`),
+    )
+  const text =
+    dateFrom && dateTo
+      ? dateFrom === dateTo
+        ? label(dateFrom)
+        : `${label(dateFrom)} – ${label(dateTo)}`
+      : dateFrom
+        ? `from ${label(dateFrom)}`
+        : `through ${label(dateTo!)}`
+
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="flex items-center gap-2 text-sm">
+        <CalendarRangeIcon className="size-3.5 text-wine" />
+        Dates
+      </span>
+      <span className="flex items-center gap-1 rounded-md border border-wine/40 bg-wine/10 py-0.5 pr-1 pl-2 text-xs">
+        {text}
+        <button
+          type="button"
+          aria-label="Clear date filter"
+          onClick={() => setFilters({ dateFrom: null, dateTo: null })}
+          className="flex size-4 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+        >
+          <XIcon className="size-3" />
+        </button>
+      </span>
     </div>
   )
 }

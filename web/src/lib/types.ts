@@ -45,6 +45,21 @@ export interface CityEvent {
   ratingRationale?: string
   promoted: boolean
   rarity: Rarity
+  /** og:image scraped from the ticket/source page at ingest. */
+  imageUrl?: string
+  /** Dominant color of that image, "#rrggbb" — paints before/without it. */
+  imageColor?: string
+}
+
+// ---------- reactions (the per-user feedback loop) ----------
+
+/** One tap of feedback; feeds the personal score and teaches tag affinity. */
+export type Reaction = "going" | "went" | "not_for_me"
+
+export const REACTION_META: Record<Reaction, { label: string; blurb: string }> = {
+  going: { label: "Going", blurb: "boosts this and events like it" },
+  went: { label: "Went — great", blurb: "teaches your taste" },
+  not_for_me: { label: "Not for me", blurb: "sinks this and events like it" },
 }
 
 export interface Settings {
@@ -321,24 +336,33 @@ export interface Filters {
   categories: Category[] // empty = all
   liveOnly: boolean
   rareOnly: boolean
+  freeOnly: boolean
   farmers: FarmersFilter
   hidePromoted: boolean
   minRating: number
+  /** YYYY-MM-DD city-local window over each event's next occurrence; null = open. */
+  dateFrom: string | null
+  dateTo: string | null
 }
 
 export const DEFAULT_FILTERS: Filters = {
   categories: [],
   liveOnly: false,
   rareOnly: false,
+  freeOnly: false,
   farmers: "any",
   hidePromoted: true,
   minRating: 0,
+  dateFrom: null,
+  dateTo: null,
 }
+
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/
 
 /**
  * Coerce stored filters (localStorage v1 or account prefs written by an older
  * client) into the current shape — the legacy boolean `farmersOnly` becomes
- * `farmers: "only"`.
+ * `farmers: "only"`; freeOnly and the date window default off.
  */
 export function normalizeFilters(raw: unknown): Filters {
   const r = (raw ?? {}) as Record<string, unknown> & Partial<Filters>
@@ -348,13 +372,18 @@ export function normalizeFilters(raw: unknown): Filters {
       : r.farmersOnly === true
         ? "only"
         : DEFAULT_FILTERS.farmers
+  const day = (v: unknown): string | null =>
+    typeof v === "string" && DAY_RE.test(v) ? v : null
   return {
     ...DEFAULT_FILTERS,
     ...(Array.isArray(r.categories) && { categories: r.categories as Category[] }),
     ...(typeof r.liveOnly === "boolean" && { liveOnly: r.liveOnly }),
     ...(typeof r.rareOnly === "boolean" && { rareOnly: r.rareOnly }),
+    ...(typeof r.freeOnly === "boolean" && { freeOnly: r.freeOnly }),
     ...(typeof r.hidePromoted === "boolean" && { hidePromoted: r.hidePromoted }),
     ...(typeof r.minRating === "number" && { minRating: r.minRating }),
+    dateFrom: day(r.dateFrom),
+    dateTo: day(r.dateTo),
     farmers,
   }
 }
@@ -371,6 +400,11 @@ export type AgentAction =
   // The agent edited an event server-side (e.g. set_rarity) — the client
   // swaps in the fresh copy so badges and filters update without a reload.
   | { kind: "eventPatched"; event: CityEvent }
+  // set_filters: reshape the user's live map. Applied immediately with an
+  // undo toast; `reset` clears to defaults before merging the patch.
+  | { kind: "setFilters"; reset?: boolean; patch: Partial<Filters>; note?: string }
+  // save_calendar already wrote server-side — refresh the saved set locally.
+  | { kind: "calendarSaved"; eventIds: string[] }
   | {
       kind: "proposeInterests"
       addLoves: string[]

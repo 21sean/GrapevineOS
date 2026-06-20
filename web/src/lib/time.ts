@@ -56,6 +56,16 @@ export function fmtTime(iso: string, tz: string): string {
   return fmt(iso, tz, { hour: "numeric", minute: "2-digit" })
 }
 
+/** "2026-07-11" in the city's timezone — string-comparable. */
+export function localDay(iso: string, tz?: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    ...(tz && { timeZone: tz }),
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(iso))
+}
+
 function sameDay(a: Date, b: Date, tz: string): boolean {
   const key = (d: Date) =>
     new Intl.DateTimeFormat("en-CA", { timeZone: tz, dateStyle: "short" }).format(d)

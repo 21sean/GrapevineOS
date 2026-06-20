@@ -29,6 +29,11 @@ const CalendarDialog = lazy(() =>
   })),
 )
 
+// "Your week" digest — most sessions never open it.
+const WeekDigest = lazy(() =>
+  import("@/components/WeekDigest").then((m) => ({ default: m.WeekDigest })),
+)
+
 export function App() {
   const loaded = useGrapevine((s) => s.loaded)
   const load = useGrapevine((s) => s.load)
@@ -37,6 +42,7 @@ export function App() {
   const carouselOn = useGrapevine((s) => s.carouselOn)
   const adminOpen = useGrapevine((s) => s.adminOpen)
   const calendarOpen = useGrapevine((s) => s.calendarOpen)
+  const weekOpen = useGrapevine((s) => s.weekOpen)
   // Length only — App must not re-render (and fan out to the whole tree) on
   // every clock tick just because the tour's membership was recomputed.
   const tourLength = useGrapevine((s) => selectTour(s).length)
@@ -50,6 +56,8 @@ export function App() {
   if (adminOpen && !adminEverOpened) setAdminEverOpened(true)
   const [calendarEverOpened, setCalendarEverOpened] = useState(false)
   if (calendarOpen && !calendarEverOpened) setCalendarEverOpened(true)
+  const [weekEverOpened, setWeekEverOpened] = useState(false)
+  if (weekOpen && !weekEverOpened) setWeekEverOpened(true)
 
   useEffect(() => {
     load().catch((err) => setLoadError(String(err)))
@@ -65,9 +73,21 @@ export function App() {
     } else if (params.get("calendar") === "failed") {
       toast.error("Google Calendar didn't connect. Try again from your account.")
     }
-    if (params.has("auth") || params.has("calendar")) {
+    // push-notification deep links: ?event=<id> selects it, ?digest=week
+    // opens the weekly digest
+    const eventParam = params.get("event")
+    if (eventParam) useGrapevine.getState().select(eventParam)
+    if (params.get("digest") === "week") useGrapevine.getState().setWeekOpen(true)
+    if (
+      params.has("auth") ||
+      params.has("calendar") ||
+      params.has("event") ||
+      params.has("digest")
+    ) {
       params.delete("auth")
       params.delete("calendar")
+      params.delete("event")
+      params.delete("digest")
       const qs = params.toString()
       window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname)
     }
@@ -115,6 +135,11 @@ export function App() {
             {(calendarOpen || calendarEverOpened) && (
               <Suspense fallback={null}>
                 <CalendarDialog />
+              </Suspense>
+            )}
+            {(weekOpen || weekEverOpened) && (
+              <Suspense fallback={null}>
+                <WeekDigest />
               </Suspense>
             )}
           </>

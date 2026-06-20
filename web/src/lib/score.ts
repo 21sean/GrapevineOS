@@ -4,13 +4,31 @@ import {
   type CityEvent,
   type Filters,
   type Interests,
+  type Reaction,
   type SortKey,
 } from "./types"
-import { hasEnded, isLive, minutesUntilStart } from "./time"
+import { hasEnded, isLive, localDay, minutesUntilStart } from "./time"
 import { nextOccurrence } from "./recurrence"
 
-function interestTerms(e: CityEvent): string[] {
+export function interestTerms(e: CityEvent): string[] {
   return [...e.tags.map((t) => t.toLowerCase()), e.category]
+}
+
+/**
+ * What the feedback loop has learned: the user's own reactions plus the
+ * per-tag affinity derived from them (see selectTagAffinity in derived.ts).
+ * Both are optional — a fresh browser scores exactly as before.
+ */
+export interface Taste {
+  reactions?: Readonly<Record<string, Reaction>>
+  tagAffinity?: ReadonlyMap<string, number>
+}
+
+/** How hard one reaction pulls the event itself. */
+const REACTION_SELF_BOOST: Record<Reaction, number> = {
+  going: 3, // committed — keep it in sight
+  went: 0.5, // past tense; mostly teaches the tags
+  not_for_me: -8, // sinks below everything with a pulse
 }
 
 /** True for the weekly neighborhood farmers markets (tagged at ingest). */
@@ -21,12 +39,15 @@ export function isFarmersMarket(e: CityEvent): boolean {
 /**
  * Personal relevance score. Buzz rating is the backbone; live events and
  * rare one-offs float up; promoted junk sinks; interests tilt the rest.
+ * Reactions layer on top: the event's own reaction moves it directly, and
+ * learned tag affinity ("went — great" at two jazz shows) tilts lookalikes.
  */
 export function scoreEvent(
   e: CityEvent,
   interests: Interests,
   now: Date,
   tz?: string,
+  taste?: Taste,
 ): number {
   const terms = interestTerms(e)
   if (terms.some((t) => interests.avoids.includes(t))) return -Infinity
@@ -43,12 +64,25 @@ export function scoreEvent(
   const loved = terms.filter((t) => interests.loves.includes(t)).length
   s += Math.min(loved * 2, 4)
   if (e.free) s += 0.3
+
+  const reaction = taste?.reactions?.[e.id]
+  if (reaction) s += REACTION_SELF_BOOST[reaction]
+  if (taste?.tagAffinity) {
+    // capped like loves, so a pile of reactions can't drown the buzz backbone
+    const learned = terms.reduce((sum, t) => sum + (taste.tagAffinity!.get(t) ?? 0), 0)
+    s += Math.max(-3, Math.min(3, learned))
+  }
   return s
 }
 
 /** Badge count for collapsed filter disclosures, so active filters aren't invisible. */
 export function activeFilterCount(f: Filters): number {
-  return f.categories.length + (f.minRating > 0 ? 1 : 0)
+  return (
+    f.categories.length +
+    (f.minRating > 0 ? 1 : 0) +
+    (f.freeOnly ? 1 : 0) +
+    (f.dateFrom || f.dateTo ? 1 : 0)
+  )
 }
 
 export function matchesFilters(
@@ -62,10 +96,18 @@ export function matchesFilters(
   if (f.hidePromoted && e.promoted) return false
   if (f.liveOnly && !isLive(e, now, tz)) return false
   if (f.rareOnly && e.rarity !== "rare") return false
+  if (f.freeOnly && !e.free) return false
   if (f.farmers === "only" && !isFarmersMarket(e)) return false
   if (f.farmers === "hide" && isFarmersMarket(e)) return false
   if (f.minRating > 0 && e.rating < f.minRating) return false
   if (f.categories.length && !f.categories.includes(e.category)) return false
+  if (f.dateFrom || f.dateTo) {
+    // window over the next occurrence, city-local — same rule the agent's
+    // search_events uses server-side
+    const occ = nextOccurrence(e, now, tz)
+    if (f.dateFrom && localDay(occ.end, tz) < f.dateFrom) return false
+    if (f.dateTo && localDay(occ.start, tz) > f.dateTo) return false
+  }
   if (interestTerms(e).some((t) => interests.avoids.includes(t))) return false
   return true
 }
@@ -139,6 +181,7 @@ export function visibleEvents(
   now: Date,
   tz?: string,
   hidden?: ReadonlySet<string>,
+  taste?: Taste,
 ): CityEvent[] {
   // Score each event once, then sort by the cached number — scoring inside
   // the comparator would re-run isLive/nextOccurrence O(n log n) times.
@@ -146,7 +189,7 @@ export function visibleEvents(
   for (const e of events) {
     if (hidden?.has(e.id)) continue
     if (!matchesFilters(e, f, interests, now, tz)) continue
-    scored.push([scoreEvent(e, interests, now, tz), e])
+    scored.push([scoreEvent(e, interests, now, tz, taste), e])
   }
   scored.sort((a, b) => b[0] - a[0])
   return scored.map(([, e]) => e)

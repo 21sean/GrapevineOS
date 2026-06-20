@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import {
+  BellIcon,
   CalendarIcon,
   CheckIcon,
   ClipboardPasteIcon,
@@ -30,8 +31,10 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
+import { Switch } from "@/components/ui/switch"
 import { useClock } from "@/hooks/useClock"
 import { api } from "@/lib/api"
+import { currentSubscription, disablePush, enablePush, pushSupported } from "@/lib/push"
 import { nextOccurrence } from "@/lib/recurrence"
 import { matchesFilters } from "@/lib/score"
 import { useGrapevine } from "@/lib/store"
@@ -75,6 +78,20 @@ export function AccountDialog({
   const [disconnecting, setDisconnecting] = useState(false)
   const [copied, setCopied] = useState(false)
 
+  // Web Push state for THIS browser (subscriptions are per-device). Support
+  // is knowable synchronously; the subscription itself resolves in the effect.
+  const [pushState, setPushState] = useState<{
+    supported: boolean
+    subscribed: boolean
+    reminders: boolean
+    weeklyDigest: boolean
+  } | null>(() =>
+    pushSupported()
+      ? null
+      : { supported: false, subscribed: false, reminders: false, weeklyDigest: false },
+  )
+  const [pushBusy, setPushBusy] = useState(false)
+
   // Fresh search each time the dialog opens (render-phase reset, per React docs).
   const [wasOpen, setWasOpen] = useState(open)
   if (open !== wasOpen) {
@@ -92,6 +109,56 @@ export function AccountDialog({
       })
       .catch(() => setHistoryError(true))
   }, [open])
+
+  useEffect(() => {
+    if (!open || !pushSupported()) return
+    let cancelled = false
+    void (async () => {
+      const sub = await currentSubscription().catch(() => null)
+      const status = sub ? await api.pushStatus(sub.endpoint).catch(() => null) : null
+      if (cancelled) return
+      setPushState({
+        supported: true,
+        subscribed: !!status?.subscribed,
+        reminders: !!status?.subscribed && status.reminders,
+        weeklyDigest: !!status?.subscribed && status.weeklyDigest,
+      })
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [open])
+
+  async function togglePush(kind: "reminders" | "weeklyDigest", value: boolean) {
+    if (!pushState || pushBusy) return
+    const next = { ...pushState, [kind]: value }
+    setPushBusy(true)
+    try {
+      if (value && !pushState.subscribed) {
+        // first toggle on this device: permission prompt + subscribe
+        await enablePush({ reminders: next.reminders, weeklyDigest: next.weeklyDigest })
+        next.subscribed = true
+        toast.success("Notifications on for this browser")
+      } else if (!next.reminders && !next.weeklyDigest) {
+        await disablePush()
+        next.subscribed = false
+      } else {
+        const sub = await currentSubscription()
+        if (sub)
+          await api.pushPrefs(sub.endpoint, {
+            reminders: next.reminders,
+            weeklyDigest: next.weeklyDigest,
+          })
+      }
+      setPushState(next)
+    } catch (err) {
+      toast.error("Couldn't update notifications", {
+        description: String(err instanceof Error ? err.message : err).slice(0, 140),
+      })
+    } finally {
+      setPushBusy(false)
+    }
+  }
 
   const tz = settings?.tz ?? "America/Los_Angeles"
 
@@ -384,6 +451,56 @@ export function AccountDialog({
                 a .ics file.
               </p>
             </div>
+          </section>
+
+          {/* notifications (per-browser Web Push) */}
+          <section>
+            <SectionHeader
+              icon={<BellIcon className="size-3.5" />}
+              title="Notifications"
+            />
+            {pushState && !pushState.supported ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                This browser doesn't support Web Push notifications.
+              </p>
+            ) : (
+              <div className="mt-2 flex flex-col gap-2">
+                <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border px-3 py-2">
+                  <span className="min-w-0">
+                    <span className="block text-[13px] font-medium">
+                      Event reminders
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      A nudge 45 minutes before a saved event starts
+                    </span>
+                  </span>
+                  <Switch
+                    checked={!!pushState?.reminders}
+                    disabled={!pushState || pushBusy}
+                    onCheckedChange={(v) => void togglePush("reminders", v)}
+                  />
+                </label>
+                <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border px-3 py-2">
+                  <span className="min-w-0">
+                    <span className="block text-[13px] font-medium">
+                      Weekly digest
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      "Your week" top picks, Sunday evening
+                    </span>
+                  </span>
+                  <Switch
+                    checked={!!pushState?.weeklyDigest}
+                    disabled={!pushState || pushBusy}
+                    onCheckedChange={(v) => void togglePush("weeklyDigest", v)}
+                  />
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Notifications are per-browser. Reminders follow your saved
+                  events; the digest is ranked by your interests and reactions.
+                </p>
+              </div>
+            )}
           </section>
 
           {/* taste */}

@@ -12,6 +12,7 @@ import type {
   IngestRecord,
   Interests,
   McpInfo,
+  Reaction,
   Settings,
   Source,
   User,
@@ -67,6 +68,62 @@ export const api = {
   rate: (id: string) =>
     fetch(`/api/events/${id}/rate`, { method: "POST" }).then((r) =>
       json<CityEvent>(r),
+    ),
+
+  /** The signed-in user's reactions (going / went / not for me). */
+  reactions: () =>
+    fetch("/api/reactions").then((r) =>
+      json<{ reactions: { eventId: string; reaction: Reaction }[] }>(r),
+    ),
+
+  setReaction: (id: string, reaction: Reaction | null) =>
+    fetch(`/api/events/${encodeURIComponent(id)}/reaction`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reaction }),
+    }).then((r) => json<{ ok: boolean }>(r)),
+
+  // ---------- web push (reminders + weekly digest) ----------
+
+  pushKey: () => fetch("/api/push/key").then((r) => json<{ publicKey: string }>(r)),
+
+  pushStatus: (endpoint: string) =>
+    fetch("/api/push/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint }),
+    }).then((r) =>
+      json<{ subscribed: boolean; reminders: boolean; weeklyDigest: boolean }>(r),
+    ),
+
+  pushSubscribe: (
+    subscription: PushSubscriptionJSON,
+    prefs?: { reminders?: boolean; weeklyDigest?: boolean },
+  ) =>
+    fetch("/api/push/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subscription, ...prefs }),
+    }).then((r) => json<{ ok: boolean }>(r)),
+
+  pushPrefs: (endpoint: string, prefs: { reminders?: boolean; weeklyDigest?: boolean }) =>
+    fetch("/api/push/prefs", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint, ...prefs }),
+    }).then((r) => json<{ ok: boolean }>(r)),
+
+  pushUnsubscribe: (endpoint: string) =>
+    fetch("/api/push/subscribe", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint }),
+    }).then((r) => json<{ ok: boolean }>(r)),
+
+  /** Scrape og:images for catalog events that never got artwork. */
+  backfillImages: () =>
+    fetch("/api/ingest/backfill-images", { method: "POST" }).then((r) =>
+      json<{ scanned: number; enriched: number }>(r),
     ),
 
   ollamaHealth: () =>

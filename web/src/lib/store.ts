@@ -6,6 +6,7 @@ import type {
   CityEvent,
   Filters,
   Interests,
+  Reaction,
   Settings,
   SortKey,
   Source,
@@ -45,6 +46,8 @@ export interface GrapevineState {
   askOpen: boolean
   // in-app Google Calendar popup
   calendarOpen: boolean
+  // "Your week" personalized digest panel
+  weekOpen: boolean
   // events the agent pinned on the map; seq bumps so repeat highlights re-fly
   agentHighlight: { ids: string[]; fit: boolean; seq: number } | null
   // event-list search box (session-only) and sort order (device-local)
@@ -58,6 +61,9 @@ export interface GrapevineState {
   pinnedIds: string[]
   // events the user hid from the list and map (restorable)
   hiddenIds: string[]
+  // per-event feedback ("going" / "went — great" / "not for me"); server-backed
+  // when signed in, this browser otherwise
+  reactions: Record<string, Reaction>
 
   // actions
   load: () => Promise<void>
@@ -77,6 +83,8 @@ export interface GrapevineState {
   setDockState: (s: "peek" | "half" | "full") => void
   setAskOpen: (open: boolean) => void
   setCalendarOpen: (open: boolean) => void
+  setWeekOpen: (open: boolean) => void
+  setReaction: (id: string, reaction: Reaction | null) => void
   setAgentHighlight: (ids: string[], fit?: boolean) => void
   clearAgentHighlight: () => void
   setSearchQuery: (q: string) => void
@@ -137,6 +145,7 @@ export const useGrapevine = create<GrapevineState>()(
       dockState: "peek",
       askOpen: false,
       calendarOpen: false,
+      weekOpen: false,
       agentHighlight: null,
       searchQuery: "",
       sortBy: "relevance",
@@ -145,6 +154,7 @@ export const useGrapevine = create<GrapevineState>()(
       interests: { loves: [], avoids: [] },
       pinnedIds: [],
       hiddenIds: [],
+      reactions: {},
 
       async load() {
         const [events, settings, sources, me, calendar] = await Promise.all([
@@ -157,6 +167,15 @@ export const useGrapevine = create<GrapevineState>()(
         // Signed in: account prefs win over what this browser had locally,
         // so filters/interests follow the user across devices.
         const prefs = me.user?.prefs
+        // Reactions live in their own table; the account copy is the truth.
+        const reactions = me.user
+          ? await api
+              .reactions()
+              .then((r) =>
+                Object.fromEntries(r.reactions.map((x) => [x.eventId, x.reaction])),
+              )
+              .catch(() => null)
+          : null
         set({
           events,
           settings,
@@ -168,6 +187,7 @@ export const useGrapevine = create<GrapevineState>()(
           ...(prefs?.interests && { interests: prefs.interests }),
           ...(prefs?.pinnedIds && { pinnedIds: prefs.pinnedIds }),
           ...(prefs?.hiddenIds && { hiddenIds: prefs.hiddenIds }),
+          ...(reactions && { reactions }),
         })
         // First sign-in from this browser: seed the account with local prefs.
         if (me.user && !prefs) schedulePrefsSync(get)
@@ -207,6 +227,18 @@ export const useGrapevine = create<GrapevineState>()(
       },
 
       setCalendarOpen: (calendarOpen) => set({ calendarOpen }),
+
+      setWeekOpen: (weekOpen) => set({ weekOpen }),
+
+      setReaction(id, reaction) {
+        const next = { ...get().reactions }
+        if (reaction) next[id] = reaction
+        else delete next[id]
+        set({ reactions: next })
+        // Fire-and-forget like prefs: local state is the source of truth
+        // while the tab is open; signed-out reactions stay in this browser.
+        if (get().user) api.setReaction(id, reaction).catch(() => {})
+      },
 
       setAgentHighlight(ids, fit = true) {
         set({
@@ -305,6 +337,7 @@ export const useGrapevine = create<GrapevineState>()(
         interests: s.interests,
         pinnedIds: s.pinnedIds,
         hiddenIds: s.hiddenIds,
+        reactions: s.reactions,
         railWidth: s.railWidth,
         detailWidth: s.detailWidth,
         carouselWidth: s.carouselWidth,

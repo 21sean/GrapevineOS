@@ -6,6 +6,7 @@ import {
   RadioIcon,
   SlidersHorizontalIcon,
   SproutIcon,
+  TicketIcon,
 } from "lucide-react"
 import type { FarmersFilter } from "@/lib/types"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
@@ -219,6 +220,14 @@ export function MobileDock() {
           >
             <GemIcon className="size-3.5 text-wine" />
             Rare finds
+          </Chip>
+          <Chip
+            active={filters.freeOnly}
+            activeClass="border-live/50 bg-live/15 text-live"
+            onClick={() => setFilters({ freeOnly: !filters.freeOnly })}
+          >
+            <TicketIcon className="size-3.5 text-live" />
+            Free
           </Chip>
           {/* three states, one thumb: show all → only markets → no markets */}
           <Chip

@@ -193,7 +193,27 @@ export function CarouselOverlay() {
           : "bottom-6 left-1/2 max-w-[calc(100vw-2rem)] -translate-x-1/2",
       )}
     >
-      <div className="flex flex-col gap-2 p-4 pb-3">
+      {/* scraped artwork as a dimmed backdrop; dominant color while it loads */}
+      {event.imageUrl && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={
+            event.imageColor
+              ? { backgroundColor: `${event.imageColor}40` }
+              : undefined
+          }
+        >
+          <img
+            src={event.imageUrl}
+            alt=""
+            onError={(e) => (e.currentTarget.style.display = "none")}
+            className="h-full w-full object-cover opacity-25"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-background/85 via-background/50 to-background/30" />
+        </div>
+      )}
+      <div className="relative flex flex-col gap-2 p-4 pb-3">
         <div className="flex items-center justify-between">
           <span className="flex items-center gap-2 font-mono text-[11px] tracking-[0.18em] uppercase">
             {status}
@@ -271,7 +291,7 @@ export function CarouselOverlay() {
       {carouselOn && (
         <div
           key={`${event.id}-${carouselIdx}`}
-          className="h-0.5 bg-live/90 motion-reduce:hidden"
+          className="relative h-0.5 bg-live/90 motion-reduce:hidden"
           style={{ animation: `gv-progress ${CAROUSEL_MS}ms linear forwards` }}
         />
       )}
