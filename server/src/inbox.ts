@@ -14,6 +14,7 @@
  */
 import { db } from "./db.js";
 import type { Tables } from "./db-types.js";
+import { enrichEventImages } from "./images.js";
 import { extractEvents } from "./ingest.js";
 import { store } from "./store.js";
 
@@ -48,6 +49,7 @@ async function processEmail(row: RawEmail): Promise<{ extracted: number; added: 
     .update({ processed_at: new Date().toISOString(), ingest_id: ingest.id, error: null })
     .eq("id", row.id)
     .throwOnError();
+  if (added.length) void enrichEventImages(added).catch(() => {});
   return { extracted: events.length, added: added.length };
 }
 

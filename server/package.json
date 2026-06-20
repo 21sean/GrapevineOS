@@ -21,13 +21,18 @@
     "dotenv": "^16.4.7",
     "duck-duck-scrape": "^2.2.7",
     "express": "^5.1.0",
+    "jpeg-js": "^0.4.4",
     "jsdom": "^29.1.1",
+    "pngjs": "^7.0.0",
+    "web-push": "^3.6.7",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
     "@types/jsdom": "^28.0.3",
     "@types/node": "^24.0.0",
+    "@types/pngjs": "^6.0.5",
+    "@types/web-push": "^3.6.4",
     "tsx": "^4.19.2",
     "typescript": "~5.8.0"
   }

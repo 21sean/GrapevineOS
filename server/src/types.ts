@@ -37,6 +37,31 @@ export interface CityEvent {
   ratingRationale?: string;
   promoted: boolean; // paid/sponsored spam detection
   rarity: Rarity;
+  /** og:image scraped from the ticket/source page at ingest (see images.ts). */
+  imageUrl?: string;
+  /** Dominant color of that image, "#rrggbb" — the paint-before-load fallback. */
+  imageColor?: string;
+}
+
+/** Per-user feedback on one event — the signal that teaches the ranking. */
+export type Reaction = "going" | "went" | "not_for_me";
+
+export const REACTIONS: Reaction[] = ["going", "went", "not_for_me"];
+
+export interface ReactionEntry {
+  eventId: string;
+  reaction: Reaction;
+}
+
+/** One browser that enabled Web Push for a user. */
+export interface PushSub {
+  id: string;
+  userId: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  reminders: boolean;
+  weeklyDigest: boolean;
 }
 
 export interface Settings {

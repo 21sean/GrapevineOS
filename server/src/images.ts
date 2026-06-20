@@ -1,0 +1,167 @@
+/**
+ * Event artwork, the no-paid-APIs way: events are text-only out of the LLM,
+ * but most ticket/source pages carry an og:image. After ingest we fetch each
+ * event's ticketUrl, lift the social-preview image, and store its URL plus a
+ * dominant color — the color paints cards before (or without) the image, so
+ * nothing flashes white on a slow network.
+ *
+ * Decoding stays pure-JS (jpeg-js / pngjs) and sampled, so a poster costs a
+ * few ms; webp/avif and oversized files just skip the color and keep the URL.
+ * Everything here is best-effort: an event without artwork is still an event.
+ */
+import jpeg from "jpeg-js";
+import { PNG } from "pngjs";
+import { store } from "./store.js";
+import type { CityEvent } from "./types.js";
+
+const PAGE_TIMEOUT_MS = 12_000;
+const IMAGE_TIMEOUT_MS = 12_000;
+const MAX_HTML_BYTES = 500_000; // og tags live in <head> — no need for the body
+const MAX_IMAGE_BYTES = 8_000_000;
+const CONCURRENCY = 3;
+
+const UA =
+  "Mozilla/5.0 (compatible; GrapevineBot/0.1; +https://github.com/grapevine) " +
+  "AppleWebKit/537.36 (KHTML, like Gecko)";
+
+async function fetchText(url: string, maxBytes: number, timeoutMs: number): Promise<string> {
+  const res = await fetch(url, {
+    signal: AbortSignal.timeout(timeoutMs),
+    headers: { "User-Agent": UA, Accept: "text/html" },
+    redirect: "follow",
+  });
+  if (!res.ok || !res.body) throw new Error(`${res.status}`);
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (size < maxBytes) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    size += value.length;
+  }
+  reader.cancel().catch(() => {});
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+/** og:image / twitter:image / link rel=image_src, resolved against the page. */
+export function extractImageUrl(html: string, pageUrl: string): string | null {
+  const metas = [
+    /<meta[^>]+(?:property|name)=["'](?:og:image(?::secure_url)?|twitter:image(?::src)?)["'][^>]*content=["']([^"']+)["']/i,
+    // content-before-property attribute order
+    /<meta[^>]+content=["']([^"']+)["'][^>]*(?:property|name)=["'](?:og:image(?::secure_url)?|twitter:image(?::src)?)["']/i,
+    /<link[^>]+rel=["']image_src["'][^>]*href=["']([^"']+)["']/i,
+  ];
+  for (const re of metas) {
+    const m = re.exec(html);
+    if (!m) continue;
+    const raw = m[1].replace(/&amp;/g, "&").trim();
+    try {
+      const url = new URL(raw, pageUrl);
+      if (url.protocol === "http:" || url.protocol === "https:") return url.href;
+    } catch {
+      /* malformed url in the tag — try the next pattern */
+    }
+  }
+  return null;
+}
+
+/**
+ * Average color of a jpeg/png, sampled on a grid — close enough to "dominant"
+ * for a background wash, without a clustering pass. Null for formats the
+ * pure-JS decoders don't speak (webp, avif, gif).
+ */
+export function dominantColor(bytes: Buffer, contentType: string): string | null {
+  let pixels: { data: Buffer | Uint8Array; width: number; height: number };
+  try {
+    if (/jpe?g/i.test(contentType) || (bytes[0] === 0xff && bytes[1] === 0xd8)) {
+      pixels = jpeg.decode(bytes, { maxMemoryUsageInMB: 128, formatAsRGBA: true });
+    } else if (/png/i.test(contentType) || bytes.subarray(1, 4).toString() === "PNG") {
+      pixels = PNG.sync.read(bytes);
+    } else {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+  const { data, width, height } = pixels;
+  if (!width || !height) return null;
+  // ~4k samples regardless of image size
+  const step = Math.max(1, Math.floor(Math.sqrt((width * height) / 4096)));
+  let r = 0,
+    g = 0,
+    b = 0,
+    n = 0;
+  for (let y = 0; y < height; y += step) {
+    for (let x = 0; x < width; x += step) {
+      const i = (y * width + x) * 4;
+      if (data[i + 3] < 128) continue; // transparent pixels say nothing
+      r += data[i];
+      g += data[i + 1];
+      b += data[i + 2];
+      n++;
+    }
+  }
+  if (!n) return null;
+  const hex = (v: number) => Math.round(v / n).toString(16).padStart(2, "0");
+  return `#${hex(r)}${hex(g)}${hex(b)}`;
+}
+
+async function fetchImage(url: string): Promise<{ bytes: Buffer; contentType: string } | null> {
+  const res = await fetch(url, {
+    signal: AbortSignal.timeout(IMAGE_TIMEOUT_MS),
+    headers: { "User-Agent": UA, Accept: "image/*" },
+    redirect: "follow",
+  });
+  if (!res.ok) return null;
+  const contentType = res.headers.get("content-type") ?? "";
+  const length = Number(res.headers.get("content-length") ?? 0);
+  if (length > MAX_IMAGE_BYTES) return null;
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (buf.length > MAX_IMAGE_BYTES) return null;
+  return { bytes: buf, contentType };
+}
+
+/** Scrape one event's page; returns the patch that was written (or null). */
+async function enrichOne(
+  e: CityEvent,
+): Promise<{ imageUrl: string; imageColor?: string } | null> {
+  if (!e.ticketUrl) return null;
+  const html = await fetchText(e.ticketUrl, MAX_HTML_BYTES, PAGE_TIMEOUT_MS).catch(() => null);
+  if (!html) return null;
+  const imageUrl = extractImageUrl(html, e.ticketUrl);
+  if (!imageUrl) return null;
+  const img = await fetchImage(imageUrl).catch(() => null);
+  const color = img ? dominantColor(img.bytes, img.contentType) : null;
+  const patch = { imageUrl, ...(color && { imageColor: color }) };
+  await store.updateEvent(e.id, patch);
+  return patch;
+}
+
+/**
+ * Fire-and-forget artwork pass over freshly ingested events. Never throws —
+ * ingest already succeeded; this only decorates it.
+ */
+export async function enrichEventImages(events: CityEvent[]): Promise<number> {
+  const queue = events.filter((e) => e.ticketUrl && !e.imageUrl);
+  let enriched = 0;
+  const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
+    for (let e = queue.shift(); e; e = queue.shift()) {
+      try {
+        if (await enrichOne(e)) enriched++;
+      } catch {
+        /* page down, image gone — the event stays text-only */
+      }
+    }
+  });
+  await Promise.all(workers);
+  if (enriched) console.log(`[grapevine] images: ${enriched}/${events.length} events got artwork`);
+  return enriched;
+}
+
+/** Backfill artwork for the whole catalog (admin action / one-off). */
+export async function backfillImages(): Promise<{ scanned: number; enriched: number }> {
+  const events = (await store.events()).filter((e) => e.ticketUrl && !e.imageUrl);
+  const enriched = await enrichEventImages(events);
+  return { scanned: events.length, enriched };
+}

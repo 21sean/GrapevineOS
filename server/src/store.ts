@@ -17,6 +17,9 @@ import type {
   CityEvent,
   GoogleTokens,
   IngestRecord,
+  PushSub,
+  Reaction,
+  ReactionEntry,
   Settings,
   Source,
   User,
@@ -65,6 +68,8 @@ function rowToEvent(r: Tables<"events">): CityEvent {
     ratingRationale: r.rating_rationale ?? undefined,
     promoted: r.promoted,
     rarity: r.rarity,
+    imageUrl: r.image_url ?? undefined,
+    imageColor: r.image_color ?? undefined,
   };
 }
 
@@ -97,6 +102,8 @@ function eventToRow(e: CityEvent): TablesInsert<"events"> {
     rating_rationale: e.ratingRationale ?? null,
     promoted: e.promoted,
     rarity: e.rarity,
+    image_url: e.imageUrl ?? null,
+    image_color: e.imageColor ?? null,
     dedupe_key: eventKey(e),
   };
 }
@@ -136,6 +143,18 @@ function rowToCalendarEntry(r: Tables<"calendar_entries">): CalendarEntry {
     eventId: r.event_id,
     googleEventId: r.google_event_id ?? undefined,
     addedAt: r.added_at,
+  };
+}
+
+function rowToPushSub(r: Tables<"push_subscriptions">): PushSub {
+  return {
+    id: r.id,
+    userId: r.user_id,
+    endpoint: r.endpoint,
+    p256dh: r.p256dh,
+    auth: r.auth,
+    reminders: r.reminders,
+    weeklyDigest: r.weekly_digest,
   };
 }
 
@@ -246,6 +265,8 @@ export const store = {
         }),
         ...(patch.promoted !== undefined && { promoted: patch.promoted }),
         ...(patch.rarity !== undefined && { rarity: patch.rarity }),
+        ...(patch.imageUrl !== undefined && { image_url: patch.imageUrl ?? null }),
+        ...(patch.imageColor !== undefined && { image_color: patch.imageColor ?? null }),
       })
       .eq("id", id)
       .select()
@@ -598,6 +619,138 @@ export const store = {
     if ((await this.chatThreadOwner(threadId)) !== userId) return false;
     await db.from("chat_threads").delete().eq("id", threadId).throwOnError();
     return true;
+  },
+
+  // ---------- reactions (per-user event feedback) ----------
+
+  async userReactions(userId: string): Promise<ReactionEntry[]> {
+    const { data } = await db
+      .from("event_reactions")
+      .select("event_id, reaction")
+      .eq("user_id", userId)
+      .throwOnError();
+    return data.map((r) => ({ eventId: r.event_id, reaction: r.reaction }));
+  },
+
+  /** Set (upsert) or clear (null) a user's reaction to an event. */
+  async setReaction(userId: string, eventId: string, reaction: Reaction | null): Promise<void> {
+    if (!reaction) {
+      await db
+        .from("event_reactions")
+        .delete()
+        .eq("user_id", userId)
+        .eq("event_id", eventId)
+        .throwOnError();
+      return;
+    }
+    await db
+      .from("event_reactions")
+      .upsert(
+        { user_id: userId, event_id: eventId, reaction },
+        { onConflict: "user_id,event_id" },
+      )
+      .throwOnError();
+  },
+
+  // ---------- web push ----------
+
+  async pushKeys(): Promise<{ publicKey: string; privateKey: string } | null> {
+    const { data } = await db
+      .from("push_keys")
+      .select("*")
+      .eq("id", 1)
+      .maybeSingle()
+      .throwOnError();
+    return data ? { publicKey: data.public_key, privateKey: data.private_key } : null;
+  },
+
+  /** First writer wins — a concurrent boot race keeps one stable key pair. */
+  async savePushKeys(keys: { publicKey: string; privateKey: string }): Promise<void> {
+    await db
+      .from("push_keys")
+      .upsert(
+        { id: 1, public_key: keys.publicKey, private_key: keys.privateKey },
+        { onConflict: "id", ignoreDuplicates: true },
+      )
+      .throwOnError();
+  },
+
+  async upsertPushSub(
+    sub: Omit<PushSub, "id" | "reminders" | "weeklyDigest"> &
+      Partial<Pick<PushSub, "reminders" | "weeklyDigest">>,
+  ): Promise<void> {
+    await db
+      .from("push_subscriptions")
+      .upsert(
+        {
+          user_id: sub.userId,
+          endpoint: sub.endpoint,
+          p256dh: sub.p256dh,
+          auth: sub.auth,
+          ...(sub.reminders !== undefined && { reminders: sub.reminders }),
+          ...(sub.weeklyDigest !== undefined && { weekly_digest: sub.weeklyDigest }),
+        },
+        { onConflict: "endpoint" },
+      )
+      .throwOnError();
+  },
+
+  async updatePushSubPrefs(
+    userId: string,
+    endpoint: string,
+    prefs: Partial<Pick<PushSub, "reminders" | "weeklyDigest">>,
+  ): Promise<void> {
+    await db
+      .from("push_subscriptions")
+      .update({
+        ...(prefs.reminders !== undefined && { reminders: prefs.reminders }),
+        ...(prefs.weeklyDigest !== undefined && { weekly_digest: prefs.weeklyDigest }),
+      })
+      .eq("user_id", userId)
+      .eq("endpoint", endpoint)
+      .throwOnError();
+  },
+
+  /** Scoped to the user so nobody can unsubscribe someone else's endpoint. */
+  async deletePushSub(userId: string, endpoint: string): Promise<void> {
+    await db
+      .from("push_subscriptions")
+      .delete()
+      .eq("user_id", userId)
+      .eq("endpoint", endpoint)
+      .throwOnError();
+  },
+
+  /** Endpoint died (410/404 from the push service) — drop it everywhere. */
+  async deletePushEndpoint(endpoint: string): Promise<void> {
+    await db.from("push_subscriptions").delete().eq("endpoint", endpoint).throwOnError();
+  },
+
+  async pushSubsForUser(userId: string): Promise<PushSub[]> {
+    const { data } = await db
+      .from("push_subscriptions")
+      .select("*")
+      .eq("user_id", userId)
+      .throwOnError();
+    return data.map(rowToPushSub);
+  },
+
+  async allPushSubs(): Promise<PushSub[]> {
+    const { data } = await db.from("push_subscriptions").select("*").throwOnError();
+    return data.map(rowToPushSub);
+  },
+
+  /**
+   * Idempotency gate for scheduled sends: true exactly once per key, even
+   * when two ticks (or two server instances) race — the primary key decides.
+   */
+  async tryMarkSent(key: string): Promise<boolean> {
+    const { data } = await db
+      .from("push_sends")
+      .upsert({ key }, { onConflict: "key", ignoreDuplicates: true })
+      .select()
+      .throwOnError();
+    return data.length > 0;
   },
 
   // ---------- sessions ----------

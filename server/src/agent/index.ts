@@ -31,6 +31,7 @@ import { modelSupportsTools, ollamaBase } from "../ollama.js";
 import {
   buildCliPrompt,
   cliChat,
+  cliSupportsTools,
   detectProviders,
   providerInfo,
   pushCliTranscript,
@@ -224,7 +225,9 @@ agent.post("/api/agent/chat", async (req, res) => {
       });
     }
 
-    const chat = body.context ?? {};
+    // sessionUser comes from the cookie, never from the wire — overwrite
+    // whatever a crafted request may have put in context.
+    const chat: ChatContext = { ...(body.context ?? {}), sessionUser: user ?? undefined };
     const ctx = await buildCtx(coercePos(chat.userPos));
     const graph = buildAgentGraph({
       ctx,
@@ -368,15 +371,20 @@ async function cliChatTurn(opts: {
     return null;
   }
 
+  const withTools = cliSupportsTools(provider);
   send({
     type: "notice",
     code: "cli-mode",
-    message: `${info.name} answers from the event digest only — map pinning, ETAs, and calendar saves need the local Ollama agent.`,
+    message: withTools
+      ? `${info.name} answers with Grapevine's own MCP tools (event search, details, ETAs, calendar saves on the linked account) — live map pinning still needs the local Ollama agent.`
+      : `${info.name} answers from the event digest only — map pinning, ETAs, and calendar saves need the local Ollama agent.`,
   });
   send({ type: "status", label: `Asking ${info.name}…` });
 
   const ctx = await buildCtx(coercePos(chat.userPos));
-  const prompt = buildCliPrompt(buildSystemPrompt(ctx, chat, false), threadId, message);
+  const prompt = buildCliPrompt(buildSystemPrompt(ctx, chat, withTools), threadId, message, {
+    tools: withTools,
+  });
   const raw = await cliChat(
     provider,
     prompt,

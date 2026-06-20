@@ -156,6 +156,45 @@ export type Database = {
           },
         ]
       }
+      event_reactions: {
+        Row: {
+          created_at: string
+          event_id: string
+          reaction: Database["public"]["Enums"]["event_reaction"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          reaction: Database["public"]["Enums"]["event_reaction"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          reaction?: Database["public"]["Enums"]["event_reaction"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_reactions_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_reactions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       events: {
         Row: {
           address: string | null
@@ -165,6 +204,8 @@ export type Database = {
           description: string
           ends_at: string
           id: string
+          image_color: string | null
+          image_url: string | null
           is_free: boolean
           lat: number
           lng: number
@@ -192,6 +233,8 @@ export type Database = {
           description?: string
           ends_at: string
           id: string
+          image_color?: string | null
+          image_url?: string | null
           is_free?: boolean
           lat: number
           lng: number
@@ -219,6 +262,8 @@ export type Database = {
           description?: string
           ends_at?: string
           id?: string
+          image_color?: string | null
+          image_url?: string | null
           is_free?: boolean
           lat?: number
           lng?: number
@@ -304,6 +349,83 @@ export type Database = {
           subject?: string | null
         }
         Relationships: []
+      }
+      push_keys: {
+        Row: {
+          created_at: string
+          id: number
+          private_key: string
+          public_key: string
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          private_key: string
+          public_key: string
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          private_key?: string
+          public_key?: string
+        }
+        Relationships: []
+      }
+      push_sends: {
+        Row: {
+          key: string
+          sent_at: string
+        }
+        Insert: {
+          key: string
+          sent_at?: string
+        }
+        Update: {
+          key?: string
+          sent_at?: string
+        }
+        Relationships: []
+      }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          p256dh: string
+          reminders: boolean
+          user_id: string
+          weekly_digest: boolean
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          p256dh: string
+          reminders?: boolean
+          user_id: string
+          weekly_digest?: boolean
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          p256dh?: string
+          reminders?: boolean
+          user_id?: string
+          weekly_digest?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_subscriptions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       raw_emails: {
         Row: {
@@ -505,6 +627,7 @@ export type Database = {
         | "festival"
         | "community"
       event_rarity: "common" | "notable" | "rare"
+      event_reaction: "going" | "went" | "not_for_me"
       event_source_kind: "seed" | "newsletter" | "manual"
       ingest_kind: "email" | "manual"
     }
@@ -644,6 +767,7 @@ export const Constants = {
         "community",
       ],
       event_rarity: ["common", "notable", "rare"],
+      event_reaction: ["going", "went", "not_for_me"],
       event_source_kind: ["seed", "newsletter", "manual"],
       ingest_kind: ["email", "manual"],
     },

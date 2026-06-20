@@ -13,6 +13,7 @@
 import { tool } from "@langchain/core/tools";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { z } from "zod";
+import { saveEventForUser } from "../calendar.js";
 import { CATEGORIES, type Category } from "../types.js";
 import {
   INTEREST_TOPICS,
@@ -202,6 +203,115 @@ export function makeTools(ctx: AgentCtx, chat: ChatContext) {
     },
   );
 
+  const setFiltersTool = tool(
+    async (input, config) => {
+      // Only forward the knobs the model actually set — the client merges the
+      // patch into its current filters (or resets first when asked).
+      const patch: Record<string, unknown> = {
+        ...(input.categories !== undefined && { categories: input.categories }),
+        ...(input.live_only !== undefined && { liveOnly: input.live_only }),
+        ...(input.rare_only !== undefined && { rareOnly: input.rare_only }),
+        ...(input.free_only !== undefined && { freeOnly: input.free_only }),
+        ...(input.farmers !== undefined && { farmers: input.farmers }),
+        ...(input.hide_promoted !== undefined && { hidePromoted: input.hide_promoted }),
+        ...(input.min_buzz !== undefined && {
+          minRating: Math.min(5, Math.max(0, input.min_buzz)),
+        }),
+        ...(input.date_from !== undefined && { dateFrom: input.date_from }),
+        ...(input.date_to !== undefined && { dateTo: input.date_to }),
+      };
+      if (!input.reset && Object.keys(patch).length === 0) {
+        return JSON.stringify({ error: "set at least one filter (or reset:true)" });
+      }
+      emit(config, {
+        type: "action",
+        action: {
+          kind: "setFilters",
+          reset: Boolean(input.reset),
+          patch,
+          ...(input.note ? { note: String(input.note).slice(0, 120) } : {}),
+        },
+      });
+      return JSON.stringify({
+        ok: true,
+        applied: { reset: Boolean(input.reset), ...patch },
+        note: "The user's map and list now show only matching events. They see a notice and can undo.",
+      });
+    },
+    {
+      name: "set_filters",
+      description:
+        'Change the filters on the user\'s live map ("free stuff this weekend", "only music", "hide farmers markets"). ' +
+        "Only pass the knobs the user asked about; the rest keep their values. reset:true clears everything back to defaults first.",
+      schema: z.object({
+        reset: z.boolean().describe("Clear all filters to defaults before applying").optional(),
+        categories: z
+          .array(z.enum(CATEGORIES as [Category, ...Category[]]))
+          .describe("Show only these categories; [] shows all")
+          .optional(),
+        live_only: z.boolean().optional(),
+        rare_only: z.boolean().describe("Only rare one-offs (parades, festivals)").optional(),
+        free_only: z.boolean().optional(),
+        farmers: z.enum(["any", "only", "hide"]).describe("Farmers-market volume control").optional(),
+        hide_promoted: z.boolean().optional(),
+        min_buzz: z.number().describe("1-5 local-buzz floor; 0 clears it").optional(),
+        date_from: z
+          .string()
+          .nullable()
+          .describe("YYYY-MM-DD inclusive — only events occurring on/after; null clears")
+          .optional(),
+        date_to: z
+          .string()
+          .nullable()
+          .describe("YYYY-MM-DD inclusive — only events occurring on/before; null clears")
+          .optional(),
+        note: z.string().describe('Short label shown to the user, e.g. "Free this weekend"').optional(),
+      }),
+    },
+  );
+
+  const saveCalendarTool = tool(
+    async (input, config) => {
+      const user = chat.sessionUser;
+      if (!user) {
+        return JSON.stringify({
+          error: "user is signed out — use propose_calendar so they can sign in and confirm",
+        });
+      }
+      const ids = vetEventIds(input.event_ids, ctx);
+      if (!ids.length)
+        return JSON.stringify({
+          error: "no valid event ids — use ids from the digest or search results",
+        });
+      const saved: string[] = [];
+      let googleSynced = 0;
+      for (const id of ids) {
+        const result = await saveEventForUser(user, id);
+        if ("error" in result) continue;
+        saved.push(id);
+        if (result.googleSynced) googleSynced++;
+      }
+      if (!saved.length) return JSON.stringify({ error: "nothing could be saved" });
+      emit(config, {
+        type: "action",
+        action: { kind: "calendarSaved", eventIds: saved },
+      });
+      return JSON.stringify({
+        ok: true,
+        saved,
+        google_synced: googleSynced,
+        note: "Saved to the user's Grapevine calendar" + (googleSynced ? " and Google Calendar" : ""),
+      });
+    },
+    {
+      name: "save_calendar",
+      description:
+        "Save events to the user's calendar RIGHT NOW (Google Calendar too when connected). " +
+        "Only after the user clearly asked to save — otherwise use propose_calendar and let them confirm.",
+      schema: z.object({ event_ids: z.array(z.string()) }),
+    },
+  );
+
   const setRarityTool = tool(
     async (input, config) => {
       const result = await setEventRarity(input.event_id, input.rarity, ctx);
@@ -278,7 +388,9 @@ export function makeTools(ctx: AgentCtx, chat: ChatContext) {
     webSearchTool,
     readPageTool,
     showOnMapTool,
+    setFiltersTool,
     proposeCalendarTool,
+    saveCalendarTool,
     setRarityTool,
     updateInterestsTool,
   ];
@@ -308,8 +420,12 @@ export function toolLabel(name: string, args: Record<string, unknown>): string {
     }
     case "show_on_map":
       return "Pinning the map";
+    case "set_filters":
+      return args.note ? `Filtering: ${String(args.note).slice(0, 50)}` : "Updating map filters";
     case "propose_calendar":
       return "Drafting a calendar save";
+    case "save_calendar":
+      return "Saving to your calendar";
     case "set_rarity":
       return args.rarity ? `Marking as ${String(args.rarity)}` : "Updating rarity";
     case "update_interests":
@@ -338,6 +454,12 @@ export function toolDetail(name: string, content: unknown): string | undefined {
     }
     if (name === "set_rarity" && parsed.ok) {
       return String(parsed.rarity);
+    }
+    if (name === "save_calendar" && parsed.ok) {
+      return `${parsed.saved.length} saved`;
+    }
+    if (name === "set_filters" && parsed.ok) {
+      return "applied";
     }
     if (parsed.error) return "failed";
   } catch {

@@ -8,7 +8,7 @@
 import { eta, geocode } from "../mapbox.js";
 import { nextOccurrence, recurrenceSummary } from "../recurrence.js";
 import { store } from "../store.js";
-import { CATEGORIES, type CityEvent, type Settings } from "../types.js";
+import { CATEGORIES, type CityEvent, type Settings, type User } from "../types.js";
 
 /** Mirror of web/src/lib/types.ts INTEREST_TOPICS — keep in sync. */
 export const INTEREST_TOPICS = [
@@ -44,6 +44,9 @@ export interface ChatContext {
   interests?: { loves?: string[]; avoids?: string[] };
   savedEventIds?: string[];
   signedIn?: boolean;
+  /** Set server-side from the session cookie (never trusted from the wire) —
+   * lets tools like save_calendar write on the user's behalf. */
+  sessionUser?: User;
 }
 
 export async function buildCtx(userPos?: [number, number]): Promise<AgentCtx> {
@@ -392,10 +395,20 @@ How to answer:
 - Any time your answer names one or more events, you MUST call show_on_map with
   their ids before writing the answer — saying you pinned the map without
   calling the tool leaves the map unchanged and breaks the user's trust.
+- When the user asks to narrow or reshape the whole map — "show me free stuff
+  this weekend", "only music", "hide the farmers markets" — call set_filters:
+  it changes the user's actual map filters (and says so on screen). Pair it
+  with show_on_map when you also recommend specific events. Use reset:true
+  first when the user asks for a clean slate ("show everything again").
 - For "can I make it" / travel questions, call get_eta and report minutes.
 - For "plan my day/night": pick 2-4 events whose times don't clash, check get_eta
   between stops, lay out the timeline, then call propose_calendar with the ids.
   The user confirms saves — never claim something is saved.
+- Calendar saves: propose_calendar shows a card the user confirms. But when the
+  user has *already said* to save — "add it to my calendar", "yes, book those",
+  answering a proposal with "do it" — call save_calendar with the ids: it saves
+  immediately and the app confirms on screen. save_calendar only works signed
+  in; if it reports the user is signed out, fall back to propose_calendar.
 - If the user states a durable taste ("I hate EDM", "more comedy please"), call
   update_interests using ONLY these topics: ${INTEREST_TOPICS.join(", ")}.
   Durable tastes only — not one-off queries.

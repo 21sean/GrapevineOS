@@ -8,12 +8,15 @@
  * answer back. Detection is filesystem/env-based (where each CLI caches its
  * credentials), never a paid model call.
  *
- * Trade-off vs the LangGraph agent: no tools (map pinning, ETAs, calendar
- * proposals) — answers come from the same event digest baked into the prompt.
+ * Trade-off vs the LangGraph agent: no *UI* tools (map pinning, filter
+ * changes, in-chat proposals). Claude Code narrows the gap by connecting back
+ * to this server's own MCP endpoint (/mcp), which restores event search,
+ * details, ETAs, and calendar saves; Codex and Gemini read MCP config from
+ * user-global files we won't touch, so they stay digest-only.
  */
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -223,6 +226,17 @@ export function providerInfo(id: CliProviderId): CliProviderInfo {
 
 const CLI_TIMEOUT_MS = 110_000; // under the route's 120s deadline
 
+/** CLIs we can point at Grapevine's own MCP endpoint per-invocation. */
+export function cliSupportsTools(id: CliProviderId): boolean {
+  return id === "claude";
+}
+
+/** Where a CLI on this machine reaches the MCP server (same express app). */
+function mcpEndpoint(): string {
+  const base = process.env.MCP_PUBLIC_URL ?? `http://localhost:${process.env.PORT ?? 8787}`;
+  return `${base.replace(/\/$/, "")}/mcp`;
+}
+
 export async function cliChat(
   id: CliProviderId,
   prompt: string,
@@ -230,13 +244,45 @@ export async function cliChat(
 ): Promise<string> {
   switch (id) {
     case "claude": {
-      const r = await run("claude", ["-p", "--output-format", "text"], {
-        stdin: prompt,
-        timeoutMs: CLI_TIMEOUT_MS,
-        signal,
-      });
-      if (r.code !== 0) throw cliError("claude", r);
-      return r.stdout.trim();
+      // --mcp-config via a temp file (inline JSON quoting is fragile under
+      // shell:true on Windows); --strict-mcp-config keeps the user's own MCP
+      // servers out; --allowedTools mcp__grapevine pre-approves only ours.
+      const dir = await mkdtemp(path.join(os.tmpdir(), "grapevine-claude-"));
+      const cfgFile = path.join(dir, "mcp.json");
+      await writeFile(
+        cfgFile,
+        JSON.stringify({
+          mcpServers: {
+            grapevine: {
+              type: "http",
+              url: mcpEndpoint(),
+              ...(process.env.AGENT_API_KEY && {
+                headers: { "X-Agent-Key": process.env.AGENT_API_KEY },
+              }),
+            },
+          },
+        }),
+      );
+      try {
+        const r = await run(
+          "claude",
+          [
+            "-p",
+            "--output-format",
+            "text",
+            "--mcp-config",
+            cfgFile,
+            "--strict-mcp-config",
+            "--allowedTools",
+            "mcp__grapevine",
+          ],
+          { stdin: prompt, timeoutMs: CLI_TIMEOUT_MS, signal },
+        );
+        if (r.code !== 0) throw cliError("claude", r);
+        return r.stdout.trim();
+      } finally {
+        rm(dir, { recursive: true, force: true }).catch(() => {});
+      }
     }
     case "codex": {
       // --output-last-message is the stable way to get just the final answer
@@ -305,13 +351,31 @@ export function pushCliTranscript(threadId: string, user: string, assistant: str
   }
 }
 
+/** Reality check for CLI sessions that get MCP tools: the in-app UI tools the
+ * system prompt describes don't exist there — remap to the MCP toolbox. */
+const CLI_TOOLS_NOTE = `Tools in this session: you are connected to the "grapevine" MCP server —
+search_events, get_event, get_eta, list_saved_events, save_event, unsave_event,
+set_event_rarity, update_interests. The in-app tools mentioned above
+(show_on_map, set_filters, propose_calendar, save_calendar, search_web,
+read_page) do NOT exist here: never claim to have pinned the map or changed
+filters. Recommend events in text with the [Title](event:id) grammar, use
+search_events/get_event beyond the digest, get_eta for travel questions, and
+save_event/unsave_event only when the user explicitly asks (saves land on the
+linked Grapevine account).`;
+
 /** System prompt + rolling transcript + the new message, as one CLI prompt. */
-export function buildCliPrompt(system: string, threadId: string, message: string): string {
+export function buildCliPrompt(
+  system: string,
+  threadId: string,
+  message: string,
+  opts?: { tools?: boolean },
+): string {
   const history = cliTranscript(threadId)
     .map((x) => `User: ${x.user}\nGrapevine: ${x.assistant}`)
     .join("\n\n");
   return [
     system,
+    opts?.tools ? CLI_TOOLS_NOTE : "",
     history ? `Conversation so far:\n\n${history}` : "",
     `User: ${message}`,
     "Reply as Grapevine — plain text (with the [Title](event:id) link grammar), no preamble, no code fences.",
