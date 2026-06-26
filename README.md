@@ -192,6 +192,13 @@ paid APIs.
 [![runtime: Transformers.js (ONNX)](https://img.shields.io/badge/runtime-Transformers.js_·_ONNX-1f2937)](https://github.com/huggingface/transformers.js)
 &nbsp;![local · no paid APIs](https://img.shields.io/badge/local-no_paid_APIs-0b3b2e)
 
+<p align="center">
+  <img src="docs/guardrails.png" width="900" alt="Guardrails, defense in depth: a user message passes an input rail (Llama Prompt Guard 2, 86M ONNX) that blocks on malicious ≥ 0.80; benign messages enter the LangGraph agent (identity-pinned system prompt, agent and tools nodes); a content rail re-checks untrusted tool output and withholds indirect-injection hits; a deterministic output persona guard replaces identity leaks before the reply reaches the browser. Every rail fails safe.">
+</p>
+
+<details>
+<summary>Diagram source (Mermaid)</summary>
+
 ```mermaid
 flowchart TB
     U([👤 User message]) --> IR
@@ -234,6 +241,8 @@ flowchart TB
     class SYS,AGENT,TOOLS model;
     class U,OUT io;
 ```
+
+</details>
 
 Four layers, each covering the gap the previous one leaves
 (`server/src/agent/guardrails.ts`):
@@ -301,6 +310,67 @@ external assistants two ways:
   `GET eta`, `GET/POST/DELETE calendar[...]`, `POST interests`. A
   ready-to-install [OpenClaw](https://openclaw.ai) skill documenting all of
   it lives at `openclaw/skills/grapevine/SKILL.md`.
+
+## Interest learning (the feedback loop)
+
+Ranking isn't a static formula - it's a loop. Every event the user reacts to
+("going", "went - great", "not for me") reweights the tags of *that kind of
+event*, so taste is learned from behavior in the events' own open vocabulary,
+not just the fixed 26-topic interest picker. The score feeds every surface;
+what those surfaces show shapes the next reaction.
+
+```mermaid
+flowchart LR
+    U([👤 User])
+
+    subgraph SIGNALS["🎛️ Taste signals"]
+        INT["Interests<br/>loves / avoids · 26 topics"]
+        RX["Reactions (one tap)<br/>going · went - great · not for me"]
+    end
+
+    AG["🤖 Ask Grapevine<br/>update_interests"] -. "proposes<br/>user confirms" .-> INT
+
+    subgraph LEARN["🧠 Learning"]
+        AFF["Tag affinity - open vocabulary<br/>reaction weight × event tags<br/>+1 going · +1.5 went · −1.5 not for me"]
+    end
+
+    subgraph SCORE["⚖️ Personal score (per event)"]
+        S["buzz ×2 backbone<br/>+ loves match (cap +4)<br/>+ tag affinity (cap ±3)<br/>+ this-event reaction (+3 / −8)<br/>avoids -> −∞"]
+    end
+
+    RANK["🗺️ Ranked surfaces<br/>map · list · Your week · Sunday push"]
+
+    U -->|picks| INT
+    U -->|taps| RX
+    INT --> S
+    RX -->|teaches lookalikes| AFF --> S
+    RX -->|moves the event itself| S
+    S --> RANK
+    RANK -->|"what surfaces next"| U
+
+    classDef signal fill:#0b3b2e,stroke:#6ee7b7,color:#d1fae5;
+    classDef learn fill:#1f2937,stroke:#93c5fd,color:#e5edff;
+    classDef score fill:#7b1e3c,stroke:#e0b3c2,color:#fff;
+    classDef io fill:#3b2f0b,stroke:#e7d66e,color:#faf3d1;
+    class INT,RX signal;
+    class AFF,AG learn;
+    class S score;
+    class U,RANK io;
+```
+
+Design choices, briefly:
+
+- **Reactions are typed, not thumbs.** "Going" is intent (boost now, +3),
+  "went - great" is the strongest taste evidence (teaches tags hardest, +1.5×),
+  "not for me" is both a mute (−8 on the event) and negative evidence (−1.5×
+  on its tags). One tap each, from the event detail panel.
+- **Learned weights are capped** (±3, same ceiling as explicit loves) so a
+  burst of reactions tilts the buzz backbone instead of replacing it - the
+  editorial signal from newsletters stays the spine of the ranking.
+- **Everything reranks client-side, instantly** (`web/src/lib/score.ts`,
+  `selectTagAffinity` in `web/src/lib/derived.ts`); reactions persist per
+  account in Postgres (`event_reactions`, deny-all RLS) and mirror into the
+  server-side scorer (`server/src/digest.ts`) that writes the Sunday push.
 
 ## App tour
 
