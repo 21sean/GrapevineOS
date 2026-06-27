@@ -319,6 +319,13 @@ event*, so taste is learned from behavior in the events' own open vocabulary,
 not just the fixed 26-topic interest picker. The score feeds every surface;
 what those surfaces show shapes the next reaction.
 
+<p align="center">
+  <img src="docs/interest-learning.png" width="900" alt="Interest-learning feedback loop: a user's picks and one-tap reactions feed taste signals; reactions reweight open-vocabulary tag affinities; a per-event personal score (buzz backbone plus loves match, tag affinity, and this-event reaction, with avoids excluded) ranks every surface - map, list, your week, and the Sunday push - and what those surfaces show shapes the next tap. Ask Grapevine can propose interest changes for the user to confirm.">
+</p>
+
+<details>
+<summary>Diagram source (Mermaid)</summary>
+
 ```mermaid
 flowchart LR
     U([👤 User])
@@ -357,6 +364,8 @@ flowchart LR
     class S score;
     class U,RANK io;
 ```
+
+</details>
 
 Design choices, briefly:
 
@@ -424,6 +433,41 @@ nothing to redeploy when your laptop's address changes, and it catches up on
 anything that arrived while the machine was asleep. If the Supabase insert
 ever fails, the worker dead-letters the raw email to the `RAW_EMAILS` KV
 namespace (30-day TTL) so nothing is lost.
+
+<p align="center">
+  <img src="docs/email-worker.png" width="900" alt="Email ingestion pipeline: newsletters sent to a catch-all address hit Cloudflare Email Routing, then a Cloudflare Email Worker parses each message (the To: line becomes the source tag) and writes one idempotent row to the Supabase raw_emails table, which the local server polls for unprocessed rows. If the insert fails the worker dead-letters the raw email to a Cloudflare KV store with a 30-day TTL; an optional push mode can POST straight to the API for instant processing.">
+</p>
+
+<details>
+<summary>Diagram source (Mermaid)</summary>
+
+```mermaid
+flowchart LR
+    NL([📨 Newsletters<br/>*@your-domain]) --> ROUTE
+
+    subgraph CF["☁️ Cloudflare"]
+        ROUTE["Email Routing<br/>catch-all · To: = source tag"] --> WORKER["Email Worker<br/>workers/email-ingest<br/>PostalMime parse + email_key"]
+        KV[("RAW_EMAILS KV<br/>dead letter · 30-day TTL")]
+    end
+
+    WORKER ==>|"INSERT · ignore-duplicates"| RAW[("Supabase raw_emails")]
+    WORKER -.->|"on insert failure"| KV
+    WORKER -.->|"optional · INGEST_URL"| PUSH["POST /api/ingest/inbound"]
+
+    RAW -->|"poll: processed_at IS NULL"| SRV(["🖥️ Local server"])
+    PUSH -.-> SRV
+
+    classDef cf fill:#f38020,stroke:#b45f18,color:#fff;
+    classDef store fill:#1f2937,stroke:#3ecf8e,color:#e5edff;
+    classDef io fill:#0b3b2e,stroke:#6ee7b7,color:#d1fae5;
+    classDef dead fill:#3a0d1a,stroke:#e0688c,color:#ffd9e2;
+    class ROUTE,WORKER cf;
+    class RAW store;
+    class KV dead;
+    class NL,SRV,PUSH io;
+```
+
+</details>
 
 **Point the catch-all at the worker** (Cloudflare dashboard, your zone):
 
