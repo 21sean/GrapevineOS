@@ -15,7 +15,7 @@ import type {
   ChatMessage,
   ChatThreadMeta,
   CityEvent,
-  GoogleTokens,
+  GoogleCalendarGrant,
   IngestRecord,
   PushSub,
   Reaction,
@@ -109,30 +109,23 @@ function eventToRow(e: CityEvent): TablesInsert<"events"> {
 }
 
 type UserRow = Tables<"users"> & {
-  user_google_tokens: Tables<"user_google_tokens"> | null;
+  // join carries only non-secret metadata — the refresh token stays in Vault
+  user_google_calendar: Pick<Tables<"user_google_calendar">, "scope"> | null;
 };
 
-const USER_SELECT = "*, user_google_tokens(*)" as const;
+const USER_SELECT = "*, user_google_calendar(scope)" as const;
 
 function rowToUser(r: UserRow): User {
-  const t = r.user_google_tokens;
+  const g = r.user_google_calendar;
   return {
     id: r.id,
-    googleId: r.google_id,
     email: r.email,
     name: r.name,
     picture: r.picture,
     createdAt: r.created_at,
     lastLoginAt: r.last_login_at,
     prefs: (r.prefs ?? {}) as UserPrefs,
-    ...(t && {
-      google: {
-        accessToken: t.access_token,
-        refreshToken: t.refresh_token,
-        expiresAt: new Date(t.expires_at).getTime(),
-        scope: t.scope,
-      } satisfies GoogleTokens,
-    }),
+    ...(g && { googleCalendar: { scope: g.scope } satisfies GoogleCalendarGrant }),
     feedToken: r.feed_token ?? undefined,
   };
 }
@@ -371,19 +364,23 @@ export const store = {
 
   // ---------- users ----------
 
-  /** Find-or-create by Google id; refreshes profile fields on every login. */
-  async upsertUser(p: Pick<User, "googleId" | "email" | "name" | "picture">): Promise<User> {
+  /**
+   * JIT profile upsert keyed on the verified auth.users id. The DB trigger
+   * on auth.users normally creates this row at signup; this covers a request
+   * racing that trigger and refreshes profile fields as a side effect.
+   */
+  async upsertProfile(p: Pick<User, "id" | "email" | "name" | "picture">): Promise<User> {
     const { data } = await db
       .from("users")
       .upsert(
         {
-          google_id: p.googleId,
+          id: p.id,
           email: p.email,
           name: p.name,
           picture: p.picture,
           last_login_at: new Date().toISOString(),
         },
-        { onConflict: "google_id" },
+        { onConflict: "id" },
       )
       .select(USER_SELECT)
       .single()
@@ -426,22 +423,32 @@ export const store = {
     return data ? rowToUser(data as UserRow) : undefined;
   },
 
-  /** Stores (or clears, with null) the user's Google Calendar OAuth grant. */
-  async setGoogleTokens(userId: string, tokens: GoogleTokens | null): Promise<void> {
-    if (!tokens) {
-      await db.from("user_google_tokens").delete().eq("user_id", userId).throwOnError();
-      return;
-    }
+  /**
+   * Stores the user's Google Calendar refresh token in Supabase Vault via
+   * the service-role-only RPC (encrypted at rest, never a plaintext column).
+   */
+  async setGoogleCalendarToken(userId: string, refreshToken: string, scope: string): Promise<void> {
     await db
-      .from("user_google_tokens")
-      .upsert({
-        user_id: userId,
-        access_token: tokens.accessToken,
-        refresh_token: tokens.refreshToken,
-        expires_at: new Date(tokens.expiresAt).toISOString(),
-        scope: tokens.scope,
+      .rpc("google_calendar_set", {
+        p_user_id: userId,
+        p_refresh_token: refreshToken,
+        p_scope: scope,
       })
       .throwOnError();
+  },
+
+  /** Decrypts the stored refresh token, or null when not connected. */
+  async googleCalendarToken(userId: string): Promise<{ refreshToken: string; scope: string } | null> {
+    const { data } = await db
+      .rpc("google_calendar_get", { p_user_id: userId })
+      .throwOnError();
+    const row = data?.[0];
+    return row ? { refreshToken: row.refresh_token, scope: row.scope } : null;
+  },
+
+  /** Drops the grant; a DB trigger scrubs the Vault secret with it. */
+  async clearGoogleCalendarToken(userId: string): Promise<void> {
+    await db.rpc("google_calendar_clear", { p_user_id: userId }).throwOnError();
   },
 
   /** Mints the unguessable ICS-feed token on first use, then reuses it. */
@@ -753,41 +760,4 @@ export const store = {
     return data.length > 0;
   },
 
-  // ---------- sessions ----------
-
-  /** Creates a session and returns the raw token for the cookie. */
-  async createSession(userId: string, ttlMs: number): Promise<string> {
-    const token = crypto.randomBytes(32).toString("hex");
-    await db
-      .from("sessions")
-      .insert({
-        token_hash: hashToken(token),
-        user_id: userId,
-        expires_at: new Date(Date.now() + ttlMs).toISOString(),
-      })
-      .throwOnError();
-    // Opportunistic cleanup, same as the JSON store; pg_cron also purges daily.
-    await db.from("sessions").delete().lt("expires_at", new Date().toISOString());
-    return token;
-  },
-
-  async deleteSession(token: string): Promise<void> {
-    await db.from("sessions").delete().eq("token_hash", hashToken(token)).throwOnError();
-  },
-
-  async sessionUser(token: string): Promise<User | null> {
-    const { data } = await db
-      .from("sessions")
-      .select("expires_at, users(*, user_google_tokens(*))")
-      .eq("token_hash", hashToken(token))
-      .gt("expires_at", new Date().toISOString())
-      .maybeSingle()
-      .throwOnError();
-    const user = data?.users as unknown as UserRow | null | undefined;
-    return user ? rowToUser(user) : null;
-  },
 };
-
-function hashToken(token: string): string {
-  return crypto.createHash("sha256").update(token).digest("hex");
-}

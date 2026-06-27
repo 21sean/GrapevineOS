@@ -10,6 +10,7 @@
 import { Router, type Request, type Response } from "express";
 import { sessionUser } from "./auth.js";
 import {
+  CALENDAR_SCOPE,
   calendarConnected,
   createGoogleEvent,
   deleteGoogleEvent,
@@ -256,6 +257,48 @@ calendar.delete("/api/calendar/google/events/:gid", async (req, res) => {
     res.status(502).json({ error: String(err).slice(0, 200) });
   }
 });
+
+/**
+ * Connect Google Calendar. The browser runs the incremental-consent OAuth
+ * through Supabase (signInWithOAuth with the calendar.events scope +
+ * access_type=offline) and posts the provider_refresh_token from the
+ * resulting session here; we move it straight into Vault. The token is
+ * stored for the *verified* session user — nothing in the body picks the
+ * account.
+ */
+calendar.post("/api/calendar/google/connect", async (req, res) => {
+  const user = await requireUser(req);
+  if (!user) return res.status(401).json({ error: "not signed in" });
+  const refreshToken = typeof req.body?.refreshToken === "string" ? req.body.refreshToken : "";
+  const scope = typeof req.body?.scope === "string" ? req.body.scope : CALENDAR_SCOPE;
+  if (!refreshToken) return res.status(400).json({ error: "refreshToken required" });
+  try {
+    await store.setGoogleCalendarToken(user.id, refreshToken, scope);
+  } catch (err) {
+    return res.status(502).json({ error: String(err).slice(0, 200) });
+  }
+  const fresh = (await store.userById(user.id)) ?? user;
+  // Events saved before Google was connected only lived in the ICS feed —
+  // push them to the newly connected calendar so both sides match.
+  await backfillGoogleCalendar(fresh);
+  res.json(await status(fresh));
+});
+
+async function backfillGoogleCalendar(user: User): Promise<void> {
+  const tz = (await store.settings()).tz;
+  const events = await store.events();
+  for (const entry of await store.userCalendar(user.id)) {
+    if (entry.googleEventId) continue;
+    const event = events.find((e) => e.id === entry.eventId);
+    if (!event) continue;
+    try {
+      const googleEventId = await insertGoogleEvent(user, event, tz);
+      await store.upsertCalendarEntry(user.id, entry.eventId, { googleEventId });
+    } catch (err) {
+      console.error(`[calendar] backfill ${entry.eventId}:`, String(err).slice(0, 160));
+    }
+  }
+}
 
 /**
  * Drop the Google grant. Synced copies stay on the user's calendar (we can't

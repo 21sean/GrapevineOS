@@ -480,35 +480,6 @@ export type Database = {
           },
         ]
       }
-      sessions: {
-        Row: {
-          created_at: string
-          expires_at: string
-          token_hash: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          expires_at: string
-          token_hash: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          expires_at?: string
-          token_hash?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "sessions_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       sources: {
         Row: {
           active: boolean
@@ -539,34 +510,28 @@ export type Database = {
         }
         Relationships: []
       }
-      user_google_tokens: {
+      user_google_calendar: {
         Row: {
-          access_token: string
-          expires_at: string
-          refresh_token: string
           scope: string
+          secret_id: string
           updated_at: string
           user_id: string
         }
         Insert: {
-          access_token: string
-          expires_at: string
-          refresh_token: string
           scope?: string
+          secret_id: string
           updated_at?: string
           user_id: string
         }
         Update: {
-          access_token?: string
-          expires_at?: string
-          refresh_token?: string
           scope?: string
+          secret_id?: string
           updated_at?: string
           user_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "user_google_tokens_user_id_fkey"
+            foreignKeyName: "user_google_calendar_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: true
             referencedRelation: "users"
@@ -579,7 +544,6 @@ export type Database = {
           created_at: string
           email: string
           feed_token: string | null
-          google_id: string
           id: string
           last_login_at: string
           name: string
@@ -590,8 +554,7 @@ export type Database = {
           created_at?: string
           email: string
           feed_token?: string | null
-          google_id: string
-          id?: string
+          id: string
           last_login_at?: string
           name?: string
           picture?: string
@@ -601,7 +564,6 @@ export type Database = {
           created_at?: string
           email?: string
           feed_token?: string | null
-          google_id?: string
           id?: string
           last_login_at?: string
           name?: string
@@ -615,7 +577,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      google_calendar_clear: { Args: { p_user_id: string }; Returns: undefined }
+      google_calendar_get: {
+        Args: { p_user_id: string }
+        Returns: {
+          refresh_token: string
+          scope: string
+        }[]
+      }
+      google_calendar_set: {
+        Args: { p_refresh_token: string; p_scope?: string; p_user_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       event_category:

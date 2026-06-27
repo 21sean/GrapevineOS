@@ -1,3 +1,4 @@
+import { accessToken } from "./supabase"
 import type {
   AgentFrame,
   CalendarStatus,
@@ -26,13 +27,26 @@ async function json<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>
 }
 
+/**
+ * fetch + the Supabase access token as a Bearer header. The Express API
+ * verifies it against the project's JWKS; requests without a session go out
+ * bare and hit the public endpoints exactly as before.
+ */
+async function fetch(input: string, init?: RequestInit): Promise<Response> {
+  const token = await accessToken()
+  return globalThis.fetch(input, {
+    ...init,
+    headers: {
+      ...(init?.headers ?? {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  })
+}
+
 export const api = {
   events: () => fetch("/api/events").then((r) => json<CityEvent[]>(r)),
 
   me: () => fetch("/api/me").then((r) => json<{ user: User | null }>(r)),
-
-  logout: () =>
-    fetch("/auth/logout", { method: "POST" }).then((r) => json<{ ok: boolean }>(r)),
 
   savePrefs: (prefs: {
     filters?: Filters
@@ -271,6 +285,14 @@ export const api = {
     fetch(`/api/calendar/events/${id}`, { method: "DELETE" }).then((r) =>
       json<CalendarStatus>(r),
     ),
+
+  /** Hand the provider_refresh_token from the OAuth return to the server. */
+  calendarConnect: (refreshToken: string, scope?: string) =>
+    fetch("/api/calendar/google/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken, ...(scope && { scope }) }),
+    }).then((r) => json<CalendarStatus>(r)),
 
   calendarDisconnect: () =>
     fetch("/api/calendar/google/disconnect", { method: "POST" }).then((r) =>

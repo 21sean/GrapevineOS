@@ -44,6 +44,8 @@ export interface GrapevineState {
   dockState: "peek" | "half" | "full"
   // "Ask Grapevine" agent overlay
   askOpen: boolean
+  // provider picker ("Sign in with Google / GitHub")
+  signInOpen: boolean
   // in-app Google Calendar popup
   calendarOpen: boolean
   // "Your week" personalized digest panel
@@ -82,6 +84,7 @@ export interface GrapevineState {
   setCarouselWidth: (px: number) => void
   setDockState: (s: "peek" | "half" | "full") => void
   setAskOpen: (open: boolean) => void
+  setSignInOpen: (open: boolean) => void
   setCalendarOpen: (open: boolean) => void
   setWeekOpen: (open: boolean) => void
   setReaction: (id: string, reaction: Reaction | null) => void
@@ -105,6 +108,7 @@ export interface GrapevineState {
 }
 
 import { api } from "./api"
+import { supabase } from "./supabase"
 
 // Debounced push of filters/interests to the signed-in user's account, so a
 // burst of filter toggles becomes one PUT. Fire-and-forget: local state is
@@ -144,6 +148,7 @@ export const useGrapevine = create<GrapevineState>()(
       carouselWidth: 440,
       dockState: "peek",
       askOpen: false,
+      signInOpen: false,
       calendarOpen: false,
       weekOpen: false,
       agentHighlight: null,
@@ -226,6 +231,8 @@ export const useGrapevine = create<GrapevineState>()(
         set({ askOpen, ...(askOpen ? { carouselOn: false } : { agentHighlight: null }) })
       },
 
+      setSignInOpen: (signInOpen) => set({ signInOpen }),
+
       setCalendarOpen: (calendarOpen) => set({ calendarOpen }),
 
       setWeekOpen: (weekOpen) => set({ weekOpen }),
@@ -305,7 +312,9 @@ export const useGrapevine = create<GrapevineState>()(
 
       async signOut() {
         clearTimeout(prefsTimer)
-        await api.logout().catch(() => {})
+        // Supabase Auth owns the session; local scope keeps other devices
+        // signed in.
+        await supabase?.auth.signOut({ scope: "local" }).catch(() => {})
         set({ user: null, calendar: null })
       },
 

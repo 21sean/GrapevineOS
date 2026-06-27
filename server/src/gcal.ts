@@ -1,7 +1,9 @@
 /**
  * Google Calendar API v3 — insert/delete events on the signed-in user's
- * primary calendar. Tokens come from the incremental consent flow in auth.ts
- * (calendar.events scope, offline access) and are refreshed here on expiry.
+ * primary calendar. The refresh token comes from the incremental consent
+ * flow (supabase-js signInWithOAuth with the calendar.events scope +
+ * offline access) and lives encrypted in Supabase Vault; short-lived access
+ * tokens are minted from it here and cached in memory only.
  */
 import { store } from "./store.js";
 import type { CityEvent, User } from "./types.js";
@@ -13,7 +15,7 @@ const EVENTS_URL = "https://www.googleapis.com/calendar/v3/calendars/primary/eve
 export const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 
 export function calendarConnected(user: User): boolean {
-  return !!user.google?.refreshToken;
+  return !!user.googleCalendar;
 }
 
 /**
@@ -33,11 +35,21 @@ async function gcalError(res: Response, verb: string): Promise<Error> {
   return new Error(`Google Calendar ${verb} failed (${res.status}): ${message}`);
 }
 
-/** Valid access token for the user, refreshing (and persisting) if expired. */
+/**
+ * Access tokens are short-lived (~1h) and deliberately never persisted —
+ * only the Vault-encrypted refresh token survives a restart. One refresh
+ * round trip per user per process lifetime (then per expiry) is free-tier
+ * noise, and it keeps bearer tokens out of the database entirely.
+ */
+const accessTokens = new Map<string, { token: string; expiresAt: number }>();
+
+/** Valid access token for the user, minting one from the refresh token. */
 async function accessToken(user: User): Promise<string> {
-  const t = user.google;
-  if (!t?.refreshToken) throw new Error("Google Calendar is not connected");
-  if (t.accessToken && t.expiresAt - 60_000 > Date.now()) return t.accessToken;
+  const cached = accessTokens.get(user.id);
+  if (cached && cached.expiresAt - 60_000 > Date.now()) return cached.token;
+
+  const grant = await store.googleCalendarToken(user.id);
+  if (!grant) throw new Error("Google Calendar is not connected");
 
   const res = await fetch(TOKEN_URL, {
     method: "POST",
@@ -45,7 +57,7 @@ async function accessToken(user: User): Promise<string> {
     body: new URLSearchParams({
       client_id: process.env.GOOGLE_CLIENT_ID ?? "",
       client_secret: process.env.GOOGLE_CLIENT_SECRET ?? "",
-      refresh_token: t.refreshToken,
+      refresh_token: grant.refreshToken,
       grant_type: "refresh_token",
     }),
     signal: AbortSignal.timeout(10000),
@@ -54,14 +66,9 @@ async function accessToken(user: User): Promise<string> {
     throw new Error(`token refresh failed: ${(await res.text()).slice(0, 200)}`);
   }
   const body = (await res.json()) as { access_token: string; expires_in: number };
-  const next = {
-    ...t,
-    accessToken: body.access_token,
-    expiresAt: Date.now() + body.expires_in * 1000,
-  };
-  await store.setGoogleTokens(user.id, next);
-  user.google = next; // keep the in-flight request's copy current too
-  return next.accessToken;
+  const next = { token: body.access_token, expiresAt: Date.now() + body.expires_in * 1000 };
+  accessTokens.set(user.id, next);
+  return next.token;
 }
 
 function gcalBody(e: CityEvent, tz: string) {
@@ -353,14 +360,15 @@ export async function deleteGoogleEvent(user: User, googleEventId: string): Prom
   }
 }
 
-/** Revokes the grant at Google (best effort) and drops the stored tokens. */
+/** Revokes the grant at Google (best effort) and scrubs the Vault secret. */
 export async function disconnectGoogle(user: User): Promise<void> {
-  const t = user.google;
-  if (t) {
-    await fetch(`${REVOKE_URL}?token=${encodeURIComponent(t.refreshToken)}`, {
+  const grant = await store.googleCalendarToken(user.id).catch(() => null);
+  if (grant) {
+    await fetch(`${REVOKE_URL}?token=${encodeURIComponent(grant.refreshToken)}`, {
       method: "POST",
       signal: AbortSignal.timeout(10000),
     }).catch(() => {});
   }
-  await store.setGoogleTokens(user.id, null);
+  accessTokens.delete(user.id);
+  await store.clearGoogleCalendarToken(user.id);
 }

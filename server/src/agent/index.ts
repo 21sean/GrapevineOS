@@ -225,8 +225,8 @@ agent.post("/api/agent/chat", async (req, res) => {
       });
     }
 
-    // sessionUser comes from the cookie, never from the wire — overwrite
-    // whatever a crafted request may have put in context.
+    // sessionUser comes from the verified Supabase JWT, never from the wire —
+    // overwrite whatever a crafted request may have put in context.
     const chat: ChatContext = { ...(body.context ?? {}), sessionUser: user ?? undefined };
     const ctx = await buildCtx(coercePos(chat.userPos));
     const graph = buildAgentGraph({

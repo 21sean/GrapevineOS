@@ -38,8 +38,10 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { useClock } from "@/hooks/useClock"
 import { useIsMobile } from "@/hooks/useIsMobile"
+import { toast } from "sonner"
 import { api } from "@/lib/api"
 import { useGrapevine } from "@/lib/store"
+import { connectGoogleCalendar } from "@/lib/supabase"
 import type { GcalEvent } from "@/lib/types"
 import { AgendaView, AGENDA_DAYS } from "./AgendaView"
 import { addDays, monthGrid, startOfDay } from "./date-utils"
@@ -401,12 +403,24 @@ function ConnectPrompt({ signedIn }: { signedIn: boolean }) {
       </EmptyHeader>
       <EmptyContent>
         {signedIn ? (
-          <Button asChild size="sm">
-            <a href="/auth/google/calendar">Connect Google Calendar</a>
+          <Button
+            size="sm"
+            onClick={() =>
+              connectGoogleCalendar().catch((err) =>
+                toast.error("Couldn't start the Google consent", {
+                  description: String(err instanceof Error ? err.message : err).slice(0, 140),
+                }),
+              )
+            }
+          >
+            Connect Google Calendar
           </Button>
         ) : (
-          <Button size="sm" onClick={() => window.location.assign("/auth/google")}>
-            Sign in with Google
+          <Button
+            size="sm"
+            onClick={() => useGrapevine.getState().setSignInOpen(true)}
+          >
+            Sign in
           </Button>
         )}
       </EmptyContent>

@@ -729,7 +729,7 @@ function CalendarCard({
 
   async function saveAll() {
     if (!user) {
-      window.location.assign("/auth/google")
+      useGrapevine.getState().setSignInOpen(true)
       return
     }
     setBusy(true)

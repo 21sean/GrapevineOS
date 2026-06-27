@@ -62,13 +62,12 @@ export default defineConfig({
     },
   },
   server: {
-    // The Google OAuth client is registered for http://localhost:5174 —
-    // keep the dev origin pinned so sign-in redirects keep working.
+    // Supabase Auth redirects back to this origin after OAuth — keep the
+    // dev port pinned so it stays on the project's redirect allow-list.
     port: 5174,
     strictPort: true,
     proxy: {
       "/api": api,
-      "/auth": api,
     },
   },
 })

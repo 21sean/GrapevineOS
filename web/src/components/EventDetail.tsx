@@ -162,9 +162,7 @@ export function EventDetail() {
       toast("Sign in to save events to your calendar", {
         action: {
           label: "Sign in",
-          onClick: () => {
-            window.location.href = "/auth/google"
-          },
+          onClick: () => useGrapevine.getState().setSignInOpen(true),
         },
       })
       return
