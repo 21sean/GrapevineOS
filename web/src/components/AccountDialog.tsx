@@ -38,6 +38,7 @@ import { currentSubscription, disablePush, enablePush, pushSupported } from "@/l
 import { nextOccurrence } from "@/lib/recurrence"
 import { matchesFilters } from "@/lib/score"
 import { useGrapevine } from "@/lib/store"
+import { connectGoogleCalendar } from "@/lib/supabase"
 import { dayLabel, hasEnded, isLive } from "@/lib/time"
 import {
   CATEGORY_META,
@@ -279,7 +280,7 @@ export function AccountDialog({
                 {user.name}
               </DialogTitle>
               <DialogDescription className="mt-0.5 truncate">
-                {user.email} · Google
+                {user.email}
               </DialogDescription>
             </div>
           </div>
@@ -421,8 +422,21 @@ export function AccountDialog({
                     Disconnect
                   </Button>
                 ) : (
-                  <Button variant="secondary" size="sm" className="h-7 text-xs" asChild>
-                    <a href="/auth/google/calendar">Connect</a>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() =>
+                      connectGoogleCalendar().catch((err) =>
+                        toast.error("Couldn't start the Google consent", {
+                          description: String(
+                            err instanceof Error ? err.message : err,
+                          ).slice(0, 140),
+                        }),
+                      )
+                    }
+                  >
+                    Connect
                   </Button>
                 )}
               </div>

@@ -107,11 +107,12 @@ export interface UserPrefs {
   hiddenIds?: unknown;
 }
 
-/** OAuth tokens from the incremental Google Calendar consent (auth.ts). */
-export interface GoogleTokens {
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: number; // epoch ms when accessToken dies
+/**
+ * Google Calendar connection metadata. The refresh token itself lives in
+ * Supabase Vault (encrypted at rest) and is only read through the
+ * google_calendar_get RPC; this is the non-secret shape rows join with.
+ */
+export interface GoogleCalendarGrant {
   scope: string;
 }
 
@@ -128,22 +129,15 @@ export interface CalendarEntry {
 }
 
 export interface User {
-  id: string;
-  googleId: string; // Google `sub` claim — stable per account
+  id: string; // auth.users.id — Supabase Auth is the identity source
   email: string;
   name: string;
   picture: string;
   createdAt: string;
   lastLoginAt: string;
   prefs?: UserPrefs;
-  google?: GoogleTokens; // present once Google Calendar is connected
+  googleCalendar?: GoogleCalendarGrant; // present once Google Calendar is connected
   feedToken?: string; // unguessable path segment for the personal ICS feed
-}
-
-export interface Session {
-  tokenHash: string; // sha256 of the cookie value — raw tokens aren't stored
-  userId: string;
-  expiresAt: number;
 }
 
 /** One row in the Ask Grapevine history panel. */

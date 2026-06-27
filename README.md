@@ -49,7 +49,9 @@ Requirements:
   model (`ollama pull qwen3:8b` works fine; pick it in Admin -> Models)
 - **Supabase**: copy `server/.env.example` to `server/.env` and set
   `SUPABASE_URL` and `SUPABASE_SECRET_KEY` from your project's dashboard
-  (Settings -> API)
+  (Settings -> API). For sign-in, also set `VITE_SUPABASE_URL` and
+  `VITE_SUPABASE_PUBLISHABLE_KEY` in `web/.env.local` and enable the
+  Google/GitHub providers (see **Auth** below)
 - **Mapbox**: a scoped public token (`pk.`, styles/tiles/fonts only) as
   `VITE_MAPBOX_TOKEN` in `web/.env.local`, and a secret token (`sk.`) as
   `MAPBOX_SECRET_TOKEN` in `server/.env`
@@ -406,21 +408,65 @@ Design choices, briefly:
   (geocoded and rated), approve which ones land on the map.
 - **Admin -> Sources**: the per-source inbox addresses with copy buttons.
 
+## Auth (Supabase Auth: Google + GitHub)
+
+Sign-in is **Supabase Auth** with the PKCE authorization-code flow -
+industry-standard OAuth 2.1, run entirely by supabase-js in the browser.
+The Express API never sees a password or provider secret for sign-in; it
+verifies each request's `Authorization: Bearer` JWT **locally** against the
+project's JWKS (asymmetric ES256 signing keys), so there's no auth-server
+round trip per request.
+
+- **Providers**: Google and GitHub today; Apple slots in later with one more
+  button once a Services ID + signing key exist.
+- **Identity model**: `auth.users` is the source of truth;
+  `public.users` is a profile row (same uuid) kept in sync by a DB trigger,
+  so every FK (`calendar_entries`, `event_reactions`, `chat_threads`,
+  `push_subscriptions`) hangs off a stable id. Accounts with the same
+  verified email are linked to one user automatically.
+- **Google Calendar sync** is an incremental consent: a signed-in user
+  clicks Connect, supabase-js re-runs the Google flow with the
+  `calendar.events` scope + offline access, and the returned refresh token
+  is handed to the server which stores it in **Supabase Vault** (encrypted
+  at rest, libsodium AEAD). It is only readable through
+  `security definer` RPCs granted to `service_role`; access tokens are
+  minted on demand and cached in memory only.
+- **Session state** lives with GoTrue (the old `sessions` table and its
+  cron purge are gone).
+
+One-time dashboard setup (Authentication -> Sign In / Providers):
+
+1. **Google**: create an OAuth client (Web) in Google Cloud Console with
+   redirect URI `https://<project-ref>.supabase.co/auth/v1/callback`, paste
+   its client id/secret into the Google provider, and enable it. Enable the
+   Google Calendar API on the same project; put the same id/secret in
+   `server/.env` for token refresh.
+2. **GitHub**: create an OAuth App (Settings -> Developer settings) with the
+   same callback URL, paste id/secret into the GitHub provider, enable it.
+3. **URLs** (Authentication -> URL Configuration): site URL
+   `http://localhost:5174`, and add your production origin to the redirect
+   allow-list when you deploy.
+
 ## The data store (Supabase)
 
 All app data lives in a Supabase Postgres project (free tier): `events`,
-`sources`, `users`, `user_google_tokens`, `sessions`, `calendar_entries`,
-`ingests`, `raw_emails`, `app_settings`, `geocode_cache`.
+`sources`, `users` (profiles for `auth.users`), `user_google_calendar`
+(Vault-backed), `calendar_entries`, `event_reactions`, `chat_threads`,
+`chat_messages`, `push_subscriptions`, `ingests`, `raw_emails`,
+`app_settings`, `geocode_cache`.
 
 - **Schema** is tracked in `supabase/migrations/`.
 - **Access model**: RLS is enabled on every table with no policies and the
   Data API roles have no grants, so the posture is deny-all. Only the server
   and the email worker (secret key) can touch data; the browser talks to the
-  Express API.
+  Express API and uses Supabase solely for auth.
+- **Secrets**: the Google Calendar refresh token lives in Supabase Vault,
+  not a plaintext column; service-role-only RPCs are the read/write path.
 - **Connections**: everything uses supabase-js/PostgREST over HTTPS. No raw
   Postgres connections, nothing to pool, free-tier friendly.
-- **Housekeeping**: pg_cron purges expired sessions and 30-day-old raw
-  emails nightly, so storage stays flat.
+- **Housekeeping**: nightly pg_cron purges keep storage flat - raw emails
+  (30d), push-send dedupe keys (60d), ingest logs (180d), and stale
+  geocode *misses* (90d, so transient failures heal; hits live forever).
 - **Types**: `server/src/db-types.ts` is generated. Regenerate after schema
   changes with
   `npx supabase gen types typescript --project-id <your-project-id>`.
@@ -526,10 +572,11 @@ npm --prefix server run start             # api -> http://localhost:8787
 npm --prefix web run preview -- --port 5174   # web -> http://localhost:5174
 ```
 
-Preview inherits the dev proxy, so `/api` and `/auth` are forwarded to the
-API automatically. The `--port 5174` flag matters: the Google OAuth client is
-registered for `http://localhost:5174`, so sign-in breaks on preview's
-default port (4173). Stop the dev server first, since it holds the same port.
+Preview inherits the dev proxy, so `/api` is forwarded to the API
+automatically. The `--port 5174` flag matters: `http://localhost:5174` is the
+origin on the Supabase Auth redirect allow-list, so sign-in breaks on
+preview's default port (4173). Stop the dev server first, since it holds the
+same port.
 
 ## Layout
 

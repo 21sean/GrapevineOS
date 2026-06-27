@@ -17,10 +17,8 @@ import type {
   CalendarEntry,
   CityEvent,
   IngestRecord,
-  Session,
   Settings,
   Source,
-  User,
 } from "../src/types.js";
 
 const DATA_DIR = path.resolve(import.meta.dirname, "../data");
@@ -35,8 +33,6 @@ function readJson<T>(file: string, fallback: T): T {
 
 const sources = readJson<Source[]>("sources.json", []);
 const events = readJson<CityEvent[]>("events.json", []);
-const users = readJson<User[]>("users.json", []);
-const sessions = readJson<Session[]>("sessions.json", []);
 const settings = readJson<Settings | null>("settings.json", null);
 const calendarEntries = readJson<CalendarEntry[]>("calendar.json", []);
 const ingests = readJson<IngestRecord[]>("ingests.json", []);
@@ -107,54 +103,10 @@ await db
   .throwOnError();
 console.log(`events: ${events.length}`);
 
-for (const u of users) {
-  await db
-    .from("users")
-    .upsert(
-      {
-        id: u.id,
-        google_id: u.googleId,
-        email: u.email,
-        name: u.name,
-        picture: u.picture,
-        prefs: (u.prefs ?? {}) as never,
-        feed_token: u.feedToken ?? null,
-        created_at: u.createdAt,
-        last_login_at: u.lastLoginAt,
-      },
-      { onConflict: "google_id", ignoreDuplicates: true },
-    )
-    .throwOnError();
-  if (u.google) {
-    await db
-      .from("user_google_tokens")
-      .upsert({
-        user_id: u.id,
-        access_token: u.google.accessToken,
-        refresh_token: u.google.refreshToken,
-        expires_at: new Date(u.google.expiresAt).toISOString(),
-        scope: u.google.scope,
-      })
-      .throwOnError();
-  }
-}
-console.log(`users: ${users.length}`);
-
-const liveSessions = sessions.filter((s) => s.expiresAt > Date.now());
-if (liveSessions.length) {
-  await db
-    .from("sessions")
-    .upsert(
-      liveSessions.map((s) => ({
-        token_hash: s.tokenHash,
-        user_id: s.userId,
-        expires_at: new Date(s.expiresAt).toISOString(),
-      })),
-      { onConflict: "token_hash", ignoreDuplicates: true },
-    )
-    .throwOnError();
-}
-console.log(`sessions: ${liveSessions.length} live`);
+// users and sessions are Supabase Auth's now: identities live in
+// auth.users/auth.identities (see the supabase_auth migration, which carried
+// the legacy JSON-era accounts across), so this script no longer seeds them.
+// calendar_entries below still requires the referenced user ids to exist.
 
 if (settings) {
   await db

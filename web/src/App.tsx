@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/sonner"
 import { Spinner } from "@/components/ui/spinner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { AgentChat } from "@/components/AgentChat"
+import { SignInDialog } from "@/components/SignInDialog"
 import { CarouselOverlay, CAROUSEL_MS } from "@/components/CarouselOverlay"
 import { EventDetail } from "@/components/EventDetail"
 import { FilterRail } from "@/components/FilterRail"
@@ -13,8 +14,10 @@ import { EventMap } from "@/components/map/EventMap"
 import { MobileDock } from "@/components/MobileDock"
 import { TopBar } from "@/components/TopBar"
 import { useIsMobile } from "@/hooks/useIsMobile"
+import { api } from "@/lib/api"
 import { selectTour } from "@/lib/derived"
 import { useGrapevine } from "@/lib/store"
+import { supabase } from "@/lib/supabase"
 
 // Operator-only chrome — load its chunk on first open instead of shipping it
 // to every visitor.
@@ -61,33 +64,60 @@ export function App() {
 
   useEffect(() => {
     load().catch((err) => setLoadError(String(err)))
-    // the OAuth callbacks bounce here with ?auth= / ?calendar= status params
     const params = new URLSearchParams(window.location.search)
-    if (params.get("auth") === "failed") {
-      toast.error("Google sign-in didn't complete. Try again.")
+    // Supabase reports OAuth failures back on the redirect URL.
+    const oauthError = params.get("error_description") ?? params.get("error")
+    if (oauthError) toast.error("Sign-in didn't complete", { description: oauthError })
+    // Returning from the Google Calendar consent (see connectGoogleCalendar):
+    // the fresh session carries provider tokens exactly once — capture the
+    // refresh token now and vault it server-side.
+    if (params.get("calendar") === "oauth" && supabase) {
+      void (async () => {
+        const { data } = await supabase.auth.getSession()
+        const refreshToken = data.session?.provider_refresh_token
+        if (!refreshToken) {
+          toast.error("Google Calendar didn't connect. Try again from your account.")
+          return
+        }
+        try {
+          const status = await api.calendarConnect(refreshToken)
+          useGrapevine.getState().setCalendar(status)
+          toast.success("Google Calendar connected", {
+            description: "Events you save now sync automatically.",
+          })
+        } catch (err) {
+          toast.error("Google Calendar didn't connect", {
+            description: String(err instanceof Error ? err.message : err).slice(0, 140),
+          })
+        }
+      })()
     }
-    if (params.get("calendar") === "connected") {
-      toast.success("Google Calendar connected", {
-        description: "Events you save now sync automatically.",
-      })
-    } else if (params.get("calendar") === "failed") {
-      toast.error("Google Calendar didn't connect. Try again from your account.")
-    }
+    // Sign-in lands back here with a fresh session; reload account-scoped
+    // state when the user actually changed (ignores token refreshes).
+    const { data: authSub } = supabase?.auth.onAuthStateChange((event, session) => {
+      const current = useGrapevine.getState().user
+      if (event === "SIGNED_IN" && session && current?.id !== session.user.id) {
+        void load()
+      }
+      if (event === "SIGNED_OUT" && current) {
+        useGrapevine.setState({ user: null, calendar: null })
+      }
+    }) ?? { data: null }
     // push-notification deep links: ?event=<id> selects it, ?digest=week
     // opens the weekly digest
     const eventParam = params.get("event")
     if (eventParam) useGrapevine.getState().select(eventParam)
     if (params.get("digest") === "week") useGrapevine.getState().setWeekOpen(true)
     if (
-      params.has("auth") ||
+      params.has("error") ||
+      params.has("error_description") ||
       params.has("calendar") ||
       params.has("event") ||
       params.has("digest")
     ) {
-      params.delete("auth")
-      params.delete("calendar")
-      params.delete("event")
-      params.delete("digest")
+      for (const k of ["error", "error_description", "error_code", "calendar", "event", "digest"]) {
+        params.delete(k)
+      }
       const qs = params.toString()
       window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname)
     }
@@ -97,7 +127,10 @@ export function App() {
       () => {},
       { maximumAge: 600_000 },
     )
-    return () => clearInterval(timer)
+    return () => {
+      clearInterval(timer)
+      authSub?.subscription.unsubscribe()
+    }
   }, [load, tick, setUserPos])
 
   // the live tour: advance every CAROUSEL_MS while enabled
@@ -126,6 +159,7 @@ export function App() {
             <CarouselOverlay />
             <EventDetail />
             <InterestsDialog />
+            <SignInDialog />
             <AgentChat />
             {(adminOpen || adminEverOpened) && (
               <Suspense fallback={null}>
