@@ -5,11 +5,18 @@
  *            ▼                                    │
  *   START → agent ── no tool_calls → END          │
  *            ▲                                    ▼
- *            └── rounds < MAX ────────────────── tools
- *                                                 │ rounds ≥ MAX
+ *            └── toolRounds < MAX ─────────────── tools
+ *                                                 │ toolRounds ≥ MAX
  *                                                 ▼
  *                                             finalize → END
  *
+ * State is a LangGraph `StateSchema` (Standard Schema, so plain Zod 4):
+ * - `messages` — the running transcript (`MessagesValue` reducer).
+ * - `toolRounds` — a `ReducedValue` counter the tools node increments; each
+ *   user turn resets it via `Overwrite` (see `turnInput`), so routing reads a
+ *   typed channel instead of re-scanning message history every step.
+ *
+ * Nodes:
  * - `agent` calls ChatOllama with the toolbox bound; the system prompt is
  *   rebuilt every request so the event digest and clock stay fresh, and is
  *   never persisted into thread state.
@@ -19,6 +26,16 @@
  * - `finalize` answers without tools once the per-turn tool budget is spent,
  *   so a looping model can't spin forever.
  *
+ * Node policies (model nodes only):
+ * - `timeout.idleTimeout` — token callbacks refresh the idle timer, so long
+ *   answers stream freely while a stalled Ollama generation fails in ~45s
+ *   instead of eating the whole 120s HTTP deadline.
+ * - `retryPolicy.retryOn` — retries connection-establishment failures only.
+ *   Those happen before the first token, so a retry can't duplicate streamed
+ *   text; mid-stream failures (ECONNRESET, idle timeout) are deliberately not
+ *   retried for the same reason. The tools node has no retry at all: re-running
+ *   it would re-emit UI action frames (duplicate confirm cards).
+ *
  * Conversation memory is a LangGraph checkpointer keyed by thread_id: the
  * client sends only the new user message and the graph replays the rest.
  * MemorySaver is deliberate — chats are ephemeral by design; restart the
@@ -26,7 +43,6 @@
  */
 import {
   isAIMessage,
-  isHumanMessage,
   SystemMessage,
   ToolMessage,
   type BaseMessage,
@@ -35,17 +51,36 @@ import type { ToolCall } from "@langchain/core/messages/tool";
 import {
   END,
   MemorySaver,
-  MessagesAnnotation,
+  MessagesValue,
+  Overwrite,
+  ReducedValue,
   START,
   StateGraph,
+  StateSchema,
   type LangGraphRunnableConfig,
+  type RetryPolicy,
 } from "@langchain/langgraph";
 import { ChatOllama } from "@langchain/ollama";
 import type { StructuredToolInterface } from "@langchain/core/tools";
+import { z } from "zod";
 import { buildSystemPrompt, type AgentCtx, type ChatContext } from "./context.js";
 import { makeTools, toolDetail, toolLabel } from "./tools.js";
 
 export const MAX_TOOL_ROUNDS = 6;
+
+/** A stalled generation fails here; a healthy stream refreshes the timer per token. */
+const MODEL_IDLE_TIMEOUT_MS = 45_000;
+
+/**
+ * Connection-establishment failures only (Ollama restarting, socket refused).
+ * These surface before any token streams, so retrying is invisible to the
+ * browser. Mid-stream errors must not match — see the header comment.
+ */
+const modelRetry: RetryPolicy = {
+  maxAttempts: 2,
+  initialInterval: 500,
+  retryOn: (err) => /fetch failed|ECONNREFUSED|EAI_AGAIN/i.test(String(err)),
+};
 
 /** How much thread history the model sees; older turns stay checkpointed. */
 const HISTORY_WINDOW = 24;
@@ -63,7 +98,24 @@ export async function hasCheckpoint(threadId: string): Promise<boolean> {
   return !!tuple;
 }
 
-type State = typeof MessagesAnnotation.State;
+const AgentState = new StateSchema({
+  messages: MessagesValue,
+  /** Tool rounds spent on the current turn; summed by the tools node. */
+  toolRounds: new ReducedValue(z.number().default(0), {
+    reducer: (total, next) => total + next,
+  }),
+});
+
+type State = typeof AgentState.State;
+
+/**
+ * The per-turn graph input: the new (or reseeded) messages, plus an
+ * `Overwrite` that bypasses the sum reducer to zero the tool budget — a new
+ * user turn starts with a full budget without replaying history.
+ */
+export function turnInput(messages: BaseMessage[]): typeof AgentState.Update {
+  return { messages, toolRounds: new Overwrite(0) };
+}
 
 export interface GraphDeps {
   ctx: AgentCtx;
@@ -71,17 +123,6 @@ export interface GraphDeps {
   baseUrl: string;
   model: string;
   toolsOk: boolean;
-}
-
-/** Tool rounds the model has taken since the user last spoke. */
-function toolRoundsThisTurn(messages: BaseMessage[]): number {
-  let rounds = 0;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i];
-    if (isHumanMessage(m)) break;
-    if (isAIMessage(m) && m.tool_calls?.length) rounds++;
-  }
-  return rounds;
 }
 
 /** Trailing window that never starts on an orphaned tool result. */
@@ -179,7 +220,7 @@ export function buildAgentGraph(deps: GraphDeps) {
       });
       results.push(message);
     }
-    return { messages: results };
+    return { messages: results, toolRounds: 1 };
   }
 
   function routeAfterAgent(state: State): "tools" | typeof END {
@@ -188,13 +229,20 @@ export function buildAgentGraph(deps: GraphDeps) {
   }
 
   function routeAfterTools(state: State): "agent" | "finalize" {
-    return toolRoundsThisTurn(state.messages) >= MAX_TOOL_ROUNDS ? "finalize" : "agent";
+    return state.toolRounds >= MAX_TOOL_ROUNDS ? "finalize" : "agent";
   }
 
-  return new StateGraph(MessagesAnnotation)
-    .addNode("agent", agentNode)
+  const modelNodePolicy = {
+    retryPolicy: modelRetry,
+    timeout: { idleTimeout: MODEL_IDLE_TIMEOUT_MS },
+  };
+
+  return new StateGraph(AgentState)
+    .addNode("agent", agentNode, modelNodePolicy)
+    // No retry/timeout here: tools stream UI frames as they run, so a re-run
+    // would duplicate them, and each call already catches its own failures.
     .addNode("tools", toolsNode)
-    .addNode("finalize", finalizeNode)
+    .addNode("finalize", finalizeNode, modelNodePolicy)
     .addEdge(START, "agent")
     .addConditionalEdges("agent", routeAfterAgent, ["tools", END])
     .addConditionalEdges("tools", routeAfterTools, ["agent", "finalize"])

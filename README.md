@@ -87,12 +87,19 @@ The concierge is a LangGraph `StateGraph` running against `ChatOllama`, so
 swapping in a cloud model later is a one-line change.
 
 <p align="center">
-  <img src="docs/ask-grapevine.png" width="900" alt="The Ask Grapevine agent as a LangGraph state machine: a user message (Cmd-K) enters the agent node, a ChatOllama call with tools bound and a system prompt rebuilt each turn; if the model emits tool_calls they run in the tools node (data tools like search_events and read_page run server-side, UI tools like propose_calendar emit confirm cards) and results return to the agent while the round count is under six; if the model emits no tool_calls the reply streams to the browser; once six tool rounds are spent a finalize node answers with no tools so the loop can never spin forever; conversation memory is an ephemeral MemorySaver checkpointer keyed by thread id.">
+  <img src="docs/ask-grapevine.png" width="900" alt="The Ask Grapevine agent as a LangGraph state machine: a user message (Cmd-K) enters the agent node, a ChatOllama call with tools bound and a system prompt rebuilt each turn; if the model emits tool_calls they run in the tools node (data tools like search_events and read_page run server-side, UI tools like propose_calendar emit confirm cards) and results return to the agent while the typed toolRounds counter is under six; if the model emits no tool_calls the reply streams to the browser; once the budget is spent a finalize node answers with no tools so the loop can never spin forever. Graph state is a Zod 4 StateSchema (messages plus a toolRounds ReducedValue an Overwrite zeroes each turn) checkpointed by an ephemeral MemorySaver keyed by thread id; model nodes retry connection failures (safe before the first token) and idle-out stalled generations at 45s, while the tools node never retries so UI frames stream exactly once.">
 </p>
 
-- **Typed graph state** with conditional edges. A `finalize` node answers
-  without tools once the per-turn tool budget is spent, so a looping model
-  can't spin forever.
+- **Typed graph state** (LangGraph `StateSchema`, plain Zod 4): the transcript
+  plus a `toolRounds` counter channel the tools node increments; each user turn
+  resets it with an `Overwrite`, so routing reads typed state instead of
+  re-scanning history. A `finalize` node answers without tools once the
+  six-round budget is spent, so a looping model can't spin forever.
+- **Node policies only where retries are safe**: the model nodes retry
+  connection failures (they happen before the first streamed token, so a retry
+  can't duplicate output) and fail fast on stalled generations via an idle
+  timeout that healthy token streams keep refreshing. The tools node never
+  retries; re-running it would re-emit UI action frames.
 - **Conversation memory is a LangGraph checkpointer** (`MemorySaver`, keyed by
   `thread_id`): the browser sends only the new message and the graph replays
   the rest. Threads are ephemeral; calendars and interests persist in Postgres.
