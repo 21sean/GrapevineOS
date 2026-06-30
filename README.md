@@ -90,9 +90,16 @@ swapping in a cloud model later is a one-line change.
   <img src="docs/ask-grapevine.png" width="900" alt="The Ask Grapevine agent as a LangGraph state machine: a user message (Cmd-K) enters the agent node, a ChatOllama call with tools bound and a system prompt rebuilt each turn; if the model emits tool_calls they run in the tools node (data tools like search_events and read_page run server-side, UI tools like propose_calendar emit confirm cards) and results return to the agent while the round count is under six; if the model emits no tool_calls the reply streams to the browser; once six tool rounds are spent a finalize node answers with no tools so the loop can never spin forever; conversation memory is an ephemeral MemorySaver checkpointer keyed by thread id.">
 </p>
 
-- **Typed graph state** with conditional edges. A `finalize` node answers
-  without tools once the per-turn tool budget is spent, so a looping model
-  can't spin forever.
+- **Typed graph state** (LangGraph `StateSchema`, plain Zod 4): the transcript
+  plus a `toolRounds` counter channel the tools node increments; each user turn
+  resets it with an `Overwrite`, so routing reads typed state instead of
+  re-scanning history. A `finalize` node answers without tools once the
+  six-round budget is spent, so a looping model can't spin forever.
+- **Node policies only where retries are safe**: the model nodes retry
+  connection failures (they happen before the first streamed token, so a retry
+  can't duplicate output) and fail fast on stalled generations via an idle
+  timeout that healthy token streams keep refreshing. The tools node never
+  retries; re-running it would re-emit UI action frames.
 - **Conversation memory is a LangGraph checkpointer** (`MemorySaver`, keyed by
   `thread_id`): the browser sends only the new message and the graph replays
   the rest. Threads are ephemeral; calendars and interests persist in Postgres.

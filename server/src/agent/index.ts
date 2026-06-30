@@ -54,7 +54,7 @@ import {
   type ChatContext,
   type SearchParams,
 } from "./context.js";
-import { buildAgentGraph, hasCheckpoint } from "./graph.js";
+import { buildAgentGraph, hasCheckpoint, turnInput } from "./graph.js";
 
 export const agent = Router();
 
@@ -252,7 +252,8 @@ agent.post("/api/agent/chat", async (req, res) => {
     // streamed answer, keyed to whichever model the admin has selected.
     const guard = personaGuard({ modelName: settings.model });
     const stream = await graph.stream(
-      { messages: [...seed, new HumanMessage(message.slice(0, MAX_MESSAGE_CHARS))] },
+      // turnInput also resets the per-turn tool budget (Overwrite on toolRounds).
+      turnInput([...seed, new HumanMessage(message.slice(0, MAX_MESSAGE_CHARS))]),
       {
         configurable: { thread_id: threadId },
         streamMode: ["messages", "custom"],
