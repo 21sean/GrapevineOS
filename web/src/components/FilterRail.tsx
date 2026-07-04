@@ -7,12 +7,14 @@ import {
   GemIcon,
   MegaphoneOffIcon,
   RadioIcon,
+  RotateCcwIcon,
   SearchIcon,
   SlidersHorizontalIcon,
   SproutIcon,
   TicketIcon,
   XIcon,
 } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import {
   InputGroup,
   InputGroupAddon,
@@ -32,7 +34,14 @@ import { Separator } from "@/components/ui/separator"
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty"
+import { DateQuickChips } from "@/components/DateFilters"
 import { EventCard } from "@/components/EventCard"
 import { useOrderedEvents } from "@/hooks/useOrderedEvents"
 import { activeFilterCount } from "@/lib/score"
@@ -40,6 +49,7 @@ import { useGrapevine } from "@/lib/store"
 import {
   CATEGORIES,
   CATEGORY_META,
+  DEFAULT_FILTERS,
   SORT_OPTIONS,
   type Category,
   type FarmersFilter,
@@ -53,6 +63,12 @@ const FARMERS_OPTIONS: { value: FarmersFilter; label: string }[] = [
   { value: "hide", label: "Hide" },
 ]
 
+// Rail-sized chips for the date quick filters; the dock passes its own.
+const RAIL_CHIP =
+  "flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+const RAIL_CHIP_ACTIVE =
+  "border-wine/50 bg-wine/15 text-wine hover:bg-wine/15 hover:text-wine"
+
 const RAIL_MIN = 300
 const RAIL_MAX = 560
 
@@ -63,7 +79,6 @@ export function FilterRail() {
   const setRailWidth = useGrapevine((s) => s.setRailWidth)
   const hiddenCount = useGrapevine((s) => s.hiddenIds.length)
   const clearHidden = useGrapevine((s) => s.clearHidden)
-  const searchQuery = useGrapevine((s) => s.searchQuery)
 
   // Filters (buzz + categories) tuck into a disclosure that starts collapsed,
   // so the list gets the room by default.
@@ -128,7 +143,14 @@ export function FilterRail() {
             checked={filters.hidePromoted}
             onChange={(v) => setFilters({ hidePromoted: v })}
           />
-          <DateWindowRow />
+          {/* one-tap date windows; a custom range (agent- or picker-set)
+              shows on the picker chip with its own clear button */}
+          <div className="flex items-start gap-2 pt-0.5">
+            <CalendarRangeIcon className="mt-[5px] size-3.5 shrink-0 text-muted-foreground" />
+            <div className="flex flex-1 flex-wrap items-center gap-1.5">
+              <DateQuickChips chipClass={RAIL_CHIP} activeClass={RAIL_CHIP_ACTIVE} />
+            </div>
+          </div>
         </div>
 
         <div className="flex flex-col gap-3">
@@ -183,20 +205,7 @@ export function FilterRail() {
           {ordered.map((e) => (
             <EventCard key={e.id} event={e} />
           ))}
-          {!ordered.length && (
-            <Empty className="py-10">
-              <EmptyHeader>
-                <EmptyTitle>
-                  {searchQuery.trim() ? "No matches" : "Nothing gets through"}
-                </EmptyTitle>
-                <EmptyDescription>
-                  {searchQuery.trim()
-                    ? `Nothing on the vine matches "${searchQuery.trim()}". Try another word or clear the search.`
-                    : "Loosen a filter or lower the buzz bar. The grapevine is quiet under these settings."}
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          )}
+          {!ordered.length && <EventListEmpty />}
           {hiddenCount > 0 && (
             <button
               type="button"
@@ -389,48 +398,43 @@ function FarmersRow({
 }
 
 /**
- * The date window has no picker of its own — Ask Grapevine sets it ("free
- * stuff this weekend") via set_filters. This row surfaces it while active so
- * the narrowed map is explainable and one click wide again.
+ * Empty state for the event list, shared between the desktop rail and the
+ * phone dock. A dead end needs a way out: one tap clears the search when
+ * that's what's narrowing, or resets the filters when they block everything.
  */
-function DateWindowRow() {
-  const dateFrom = useGrapevine((s) => s.filters.dateFrom)
-  const dateTo = useGrapevine((s) => s.filters.dateTo)
+export function EventListEmpty() {
+  const searchQuery = useGrapevine((s) => s.searchQuery)
+  const setSearchQuery = useGrapevine((s) => s.setSearchQuery)
   const setFilters = useGrapevine((s) => s.setFilters)
-  if (!dateFrom && !dateTo) return null
-
-  // "2026-07-11" → "Jul 11", local-date safe (noon dodges TZ backslide)
-  const label = (d: string) =>
-    new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(
-      new Date(`${d}T12:00:00`),
-    )
-  const text =
-    dateFrom && dateTo
-      ? dateFrom === dateTo
-        ? label(dateFrom)
-        : `${label(dateFrom)} – ${label(dateTo)}`
-      : dateFrom
-        ? `from ${label(dateFrom)}`
-        : `through ${label(dateTo!)}`
+  const searching = searchQuery.trim() !== ""
 
   return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="flex items-center gap-2 text-sm">
-        <CalendarRangeIcon className="size-3.5 text-wine" />
-        Dates
-      </span>
-      <span className="flex items-center gap-1 rounded-md border border-wine/40 bg-wine/10 py-0.5 pr-1 pl-2 text-xs">
-        {text}
-        <button
-          type="button"
-          aria-label="Clear date filter"
-          onClick={() => setFilters({ dateFrom: null, dateTo: null })}
-          className="flex size-4 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+    <Empty className="py-10">
+      <EmptyHeader>
+        <EmptyTitle>{searching ? "No matches" : "Nothing gets through"}</EmptyTitle>
+        <EmptyDescription>
+          {searching
+            ? `Nothing on the vine matches "${searchQuery.trim()}". Try another word or clear the search.`
+            : "Loosen a filter or lower the buzz bar. The grapevine is quiet under these settings."}
+        </EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            searching ? setSearchQuery("") : setFilters(DEFAULT_FILTERS)
+          }
         >
-          <XIcon className="size-3" />
-        </button>
-      </span>
-    </div>
+          {searching ? (
+            <XIcon data-icon="inline-start" />
+          ) : (
+            <RotateCcwIcon data-icon="inline-start" />
+          )}
+          {searching ? "Clear search" : "Reset filters"}
+        </Button>
+      </EmptyContent>
+    </Empty>
   )
 }
 

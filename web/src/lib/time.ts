@@ -66,6 +66,32 @@ export function localDay(iso: string, tz?: string): string {
   }).format(new Date(iso))
 }
 
+/** Day-string arithmetic: "2026-07-11" + 1 → "2026-07-12" (noon dodges TZ backslide). */
+export function addDays(day: string, n: number): string {
+  const d = new Date(`${day}T12:00:00`)
+  d.setDate(d.getDate() + n)
+  const p = (x: number) => String(x).padStart(2, "0")
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+/**
+ * The Sat–Sun window nearest `today`, leaning forward: midweek it's the
+ * upcoming weekend, on Saturday it starts today, on Sunday it's what's left.
+ */
+export function weekendRange(today: string): { from: string; to: string } {
+  const dow = new Date(`${today}T12:00:00`).getDay() // 0 Sun … 6 Sat
+  if (dow === 0) return { from: today, to: today }
+  const toSat = 6 - dow
+  return { from: addDays(today, toSat), to: addDays(today, toSat + 1) }
+}
+
+/** "2026-07-11" → "Jul 11" for date-window pills and chips. */
+export function fmtDay(day: string): string {
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(
+    new Date(`${day}T12:00:00`),
+  )
+}
+
 function sameDay(a: Date, b: Date, tz: string): boolean {
   const key = (d: Date) =>
     new Intl.DateTimeFormat("en-CA", { timeZone: tz, dateStyle: "short" }).format(d)
