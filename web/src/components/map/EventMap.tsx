@@ -7,6 +7,7 @@ import {
   selectLightPreset,
   selectLiveIds,
   selectRendered,
+  selectSearched,
   selectTour,
   selectVisible,
 } from "@/lib/derived"
@@ -145,6 +146,17 @@ export function EventMap() {
     [agentHighlight],
   )
 
+  // The search box narrows the map too: ids that survive the query, or null
+  // when no search is active (nothing dims). Markers that miss the query
+  // recede via data-dimmed instead of unmounting, so the city stays readable
+  // and nothing churns while the user types.
+  const searchQuery = useGrapevine((s) => s.searchQuery)
+  const searched = useGrapevine(selectSearched)
+  const searchIds = useMemo(
+    () => (searchQuery.trim() ? new Set(searched.map((e) => e.id)) : null),
+    [searched, searchQuery],
+  )
+
   // A marker looks "selected" only while its detail sheet is open. Keeping
   // selectedId set through the sheet's close animation is what lets the sheet
   // fade out — but the marker must drop its selected look the moment the sheet
@@ -255,15 +267,16 @@ export function EventMap() {
   // Latest decorate inputs for the stack pager handlers, which live in plain
   // DOM listeners outside React's render cycle. Synced in an effect (not
   // during render); listeners only fire after effects have run.
-  const decorCtxRef = useRef({ liveIds, activeId, agentIds })
+  const decorCtxRef = useRef({ liveIds, activeId, agentIds, searchIds })
   useEffect(() => {
-    decorCtxRef.current = { liveIds, activeId, agentIds }
-  }, [liveIds, activeId, agentIds])
+    decorCtxRef.current = { liveIds, activeId, agentIds, searchIds }
+  }, [liveIds, activeId, agentIds, searchIds])
   // Snap a stack's face to the selected/toured/highlighted event only when
   // that target changes — never on unrelated re-runs, so a face the user
   // paged to by hand isn't yanked back by the next clock tick.
   const lastTargetRef = useRef<string | null>(null)
   const lastAgentSeqRef = useRef(0)
+  const lastSearchRef = useRef("")
 
   // --- markers: one stack per location, diffed by location key ---
   useEffect(() => {
@@ -291,6 +304,9 @@ export function EventMap() {
     const agentSeq = agentHighlight?.seq ?? 0
     const agentChanged = agentSeq !== lastAgentSeqRef.current
     lastAgentSeqRef.current = agentSeq
+    const query = searchQuery.trim()
+    const searchChanged = query !== lastSearchRef.current
+    lastSearchRef.current = query
 
     for (const [key, group] of groups) {
       let stack = stacksRef.current.get(key)
@@ -350,7 +366,7 @@ export function EventMap() {
           if (n < 2) return
           created.idx = (created.idx + dir + n) % n
           const ctx = decorCtxRef.current
-          decorateStack(created, ctx.liveIds, ctx.activeId, ctx.agentIds)
+          decorateStack(created, ctx.liveIds, ctx.activeId, ctx.agentIds, ctx.searchIds)
           // Sheet open means the user is inspecting this venue — retarget it.
           // Sheet closed, paging is a silent preview: no camera move, no popup.
           const st = useGrapevine.getState()
@@ -382,8 +398,12 @@ export function EventMap() {
       } else if (agentChanged && agentIds.size) {
         const i = group.findIndex((e) => agentIds.has(e.id))
         if (i >= 0) stack.idx = i
+      } else if (searchChanged && searchIds) {
+        // a stack whose shown face misses the query turns to a face that hits
+        const i = group.findIndex((e) => searchIds.has(e.id))
+        if (i >= 0) stack.idx = i
       }
-      decorateStack(stack, liveIds, activeId, agentIds)
+      decorateStack(stack, liveIds, activeId, agentIds, searchIds)
     }
   }, [
     rendered,
@@ -395,6 +415,8 @@ export function EventMap() {
     select,
     agentIds,
     agentHighlight?.seq,
+    searchIds,
+    searchQuery,
   ])
 
   // --- traffic visibility (layer created lazily on first enable) ---
@@ -498,6 +520,7 @@ function decorateStack(
   liveIds: ReadonlySet<string>,
   selectedId: string | null,
   agentIds?: Set<string>,
+  searchIds?: ReadonlySet<string> | null,
 ) {
   const e = stack.events[stack.idx]
   if (!e) return
@@ -511,6 +534,12 @@ function decorateStack(
   setData(el, "selected", String(e.id === selectedId))
   setData(el, "agent", String(agentIds?.has(e.id) ?? false))
   setData(el, "stack", String(stack.events.length > 1))
+  // dim only when a search is active and nothing at this spot matches it —
+  // agent pins stay lit, a dimmed recommendation is half a broken answer
+  const dimmed =
+    !!searchIds &&
+    !stack.events.some((ev) => searchIds.has(ev.id) || agentIds?.has(ev.id))
+  setData(el, "dimmed", String(dimmed))
   if (el.dataset.category !== e.category) {
     el.dataset.category = e.category
     stack.iconEl.innerHTML = ICON_SVG[e.category]

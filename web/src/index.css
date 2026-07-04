@@ -152,7 +152,15 @@
   cursor: pointer;
   /* zoom-driven scale (set from EventMap); hover/selected compound onto it */
   transform: scale(var(--gv-marker-scale, 1));
-  transition: transform 160ms ease;
+  transition: transform 160ms ease, opacity 200ms ease, filter 200ms ease;
+}
+
+/* the search box narrows the map too: markers that miss the query recede
+   instead of vanishing, so hits stay lit with the city still readable.
+   Selecting a dimmed marker lights it back up while its sheet is open. */
+.gv-marker[data-dimmed="true"]:not([data-selected="true"]) {
+  opacity: 0.25;
+  filter: saturate(0.4);
 }
 
 .gv-marker:hover {

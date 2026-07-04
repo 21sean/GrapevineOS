@@ -9,10 +9,14 @@ import {
   TicketIcon,
 } from "lucide-react"
 import type { FarmersFilter } from "@/lib/types"
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Separator } from "@/components/ui/separator"
+import { DateQuickChips } from "@/components/DateFilters"
 import { EventCard } from "@/components/EventCard"
-import { BuzzAndCategoryFilters, ListSearchSort } from "@/components/FilterRail"
+import {
+  BuzzAndCategoryFilters,
+  EventListEmpty,
+  ListSearchSort,
+} from "@/components/FilterRail"
 import { useOrderedEvents } from "@/hooks/useOrderedEvents"
 import { activeFilterCount } from "@/lib/score"
 import { useGrapevine } from "@/lib/store"
@@ -30,6 +34,11 @@ type Snap = "peek" | "half" | "full"
 const FLICK_V = 0.45
 // Pointer travel below this is a tap, not a drag.
 const DRAG_SLOP = 6
+
+// Date quick filters restyled to match the dock's Chip buttons.
+const DOCK_CHIP =
+  "flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border bg-card/50 px-3 text-[13px] whitespace-nowrap transition-colors"
+const DOCK_CHIP_ACTIVE = "border-wine/50 bg-wine/15 text-wine"
 
 function transformFor(snap: Snap) {
   if (snap === "full") return "translateY(0px)"
@@ -50,7 +59,6 @@ export function MobileDock() {
   const detailOpen = useGrapevine((s) => s.detailOpen)
   const hiddenCount = useGrapevine((s) => s.hiddenIds.length)
   const clearHidden = useGrapevine((s) => s.clearHidden)
-  const searchQuery = useGrapevine((s) => s.searchQuery)
 
   const { visible, ordered } = useOrderedEvents()
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -229,6 +237,9 @@ export function MobileDock() {
             <TicketIcon className="size-3.5 text-live" />
             Free
           </Chip>
+          {/* Today / Tomorrow / Weekend / range picker — the phone finally
+              gets the date window the agent could always set */}
+          <DateQuickChips chipClass={DOCK_CHIP} activeClass={DOCK_CHIP_ACTIVE} />
           {/* three states, one thumb: show all → only markets → no markets */}
           <Chip
             active={filters.farmers !== "any"}
@@ -299,20 +310,7 @@ export function MobileDock() {
           {ordered.map((e) => (
             <EventCard key={e.id} event={e} />
           ))}
-          {!ordered.length && (
-            <Empty className="py-10">
-              <EmptyHeader>
-                <EmptyTitle>
-                  {searchQuery.trim() ? "No matches" : "Nothing gets through"}
-                </EmptyTitle>
-                <EmptyDescription>
-                  {searchQuery.trim()
-                    ? `Nothing on the vine matches "${searchQuery.trim()}". Try another word or clear the search.`
-                    : "Loosen a filter or lower the buzz bar. The grapevine is quiet under these settings."}
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          )}
+          {!ordered.length && <EventListEmpty />}
           {hiddenCount > 0 && (
             <button
               type="button"

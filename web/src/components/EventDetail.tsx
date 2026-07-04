@@ -1,4 +1,4 @@
-import { useState, type PointerEvent as ReactPointerEvent } from "react"
+import { useEffect, useState, type PointerEvent as ReactPointerEvent } from "react"
 import {
   CalendarCheckIcon,
   CalendarPlusIcon,
@@ -9,6 +9,7 @@ import {
   MapPinIcon,
   NavigationIcon,
   RepeatIcon,
+  Share2Icon,
   SparklesIcon,
   ThumbsDownIcon,
   ThumbsUpIcon,
@@ -130,6 +131,21 @@ export function EventDetail() {
   const isMobile = useIsMobile()
 
   const eta = useEta(detailOpen ? event : null)
+
+  // Mirror the open event into ?event=<id> so the address bar is itself a
+  // shareable deep link — App.tsx already restores it on load (the push
+  // notification path). replaceState keeps Back for the map, not sheet history.
+  const eventId = event?.id
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    const current = url.searchParams.get("event")
+    const next = detailOpen && eventId ? eventId : null
+    if (current === next) return
+    if (next) url.searchParams.set("event", next)
+    else url.searchParams.delete("event")
+    window.history.replaceState(null, "", url)
+  }, [detailOpen, eventId])
+
   if (!event) return null
 
   const meta = CATEGORY_META[event.category]
@@ -204,6 +220,33 @@ export function EventDetail() {
       description: "It won't show on the map or in the list.",
       action: { label: "Undo", onClick: () => unhideEvent(event.id) },
     })
+  }
+
+  // "Want to go to this?" — the ?event= deep link the push notifications
+  // already use, handed to the native share sheet where there is one and the
+  // clipboard everywhere else.
+  async function shareEvent() {
+    if (!event) return
+    const url = new URL(window.location.origin + window.location.pathname)
+    url.searchParams.set("event", event.id)
+    const link = url.toString()
+    const data = { title: event.title, text: `${event.title} — ${event.venue}`, url: link }
+    if (navigator.canShare?.(data)) {
+      try {
+        await navigator.share(data)
+      } catch {
+        // user closed the share sheet — not an error
+      }
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(link)
+      toast.success("Link copied", {
+        description: "Opens the map right on this event.",
+      })
+    } catch {
+      toast.error("Couldn't copy the link", { description: link })
+    }
   }
 
   // Drag the left edge to resize; width persists (device-local). Same
@@ -456,6 +499,15 @@ export function EventDetail() {
         )}
 
         <div className="absolute top-3 right-3 z-20 flex items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon-sm" onClick={shareEvent}>
+                <Share2Icon />
+                <span className="sr-only">Share event</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Share a link to this event</TooltipContent>
+          </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="icon-sm" onClick={hideThis}>
