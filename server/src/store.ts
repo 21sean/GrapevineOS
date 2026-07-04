@@ -37,9 +37,11 @@ export function eventKey(e: Pick<CityEvent, "title" | "start" | "recurrence">): 
   return rule ? `${title}|${rule}` : `${title}|${e.start.slice(0, 10)}`;
 }
 
-/** DB stores chat_provider as free text; unknown values fall back to ollama. */
+/** DB stores providers as free text; unknown values fall back to ollama. */
 function coerceProvider(v: string): Settings["chatProvider"] {
-  return v === "claude" || v === "codex" || v === "gemini" ? v : "ollama";
+  return v === "claude" || v === "codex" || v === "gemini" || v === "copilot"
+    ? v
+    : "ollama";
 }
 
 // ---------- row mappers ----------
@@ -127,6 +129,11 @@ function rowToUser(r: UserRow): User {
     prefs: (r.prefs ?? {}) as UserPrefs,
     ...(g && { googleCalendar: { scope: g.scope } satisfies GoogleCalendarGrant }),
     feedToken: r.feed_token ?? undefined,
+    ...(r.last_lng !== null &&
+      r.last_lat !== null &&
+      r.last_pos_at !== null && {
+        lastPos: { lng: r.last_lng, lat: r.last_lat, at: r.last_pos_at },
+      }),
   };
 }
 
@@ -148,6 +155,7 @@ function rowToPushSub(r: Tables<"push_subscriptions">): PushSub {
     auth: r.auth,
     reminders: r.reminders,
     weeklyDigest: r.weekly_digest,
+    leaveBy: r.leave_by,
   };
 }
 
@@ -285,6 +293,7 @@ export const store = {
         model: "",
         ollamaUrl: "",
         chatProvider: "ollama",
+        extractProvider: "ollama",
       };
     }
     return {
@@ -294,6 +303,7 @@ export const store = {
       model: data.model,
       ollamaUrl: data.ollama_url,
       chatProvider: coerceProvider(data.chat_provider),
+      extractProvider: coerceProvider(data.extract_provider),
     };
   },
 
@@ -310,6 +320,7 @@ export const store = {
         model: next.model,
         ollama_url: next.ollamaUrl,
         chat_provider: next.chatProvider,
+        extract_provider: next.extractProvider,
       })
       .throwOnError();
     return next;
@@ -421,6 +432,24 @@ export const store = {
       .maybeSingle()
       .throwOnError();
     return data ? rowToUser(data as UserRow) : undefined;
+  },
+
+  /**
+   * Last coarse position, the origin for leave-by departure ETAs. Snapped to
+   * a ~110 m grid before it ever reaches a row — the alerts don't need more
+   * precision, so the DB never learns more than that.
+   */
+  async setUserPosition(id: string, lng: number, lat: number): Promise<void> {
+    const snap = (n: number) => Math.round(n * 1000) / 1000;
+    await db
+      .from("users")
+      .update({
+        last_lng: snap(lng),
+        last_lat: snap(lat),
+        last_pos_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .throwOnError();
   },
 
   /**
@@ -683,8 +712,8 @@ export const store = {
   },
 
   async upsertPushSub(
-    sub: Omit<PushSub, "id" | "reminders" | "weeklyDigest"> &
-      Partial<Pick<PushSub, "reminders" | "weeklyDigest">>,
+    sub: Omit<PushSub, "id" | "reminders" | "weeklyDigest" | "leaveBy"> &
+      Partial<Pick<PushSub, "reminders" | "weeklyDigest" | "leaveBy">>,
   ): Promise<void> {
     await db
       .from("push_subscriptions")
@@ -696,6 +725,7 @@ export const store = {
           auth: sub.auth,
           ...(sub.reminders !== undefined && { reminders: sub.reminders }),
           ...(sub.weeklyDigest !== undefined && { weekly_digest: sub.weeklyDigest }),
+          ...(sub.leaveBy !== undefined && { leave_by: sub.leaveBy }),
         },
         { onConflict: "endpoint" },
       )
@@ -705,13 +735,14 @@ export const store = {
   async updatePushSubPrefs(
     userId: string,
     endpoint: string,
-    prefs: Partial<Pick<PushSub, "reminders" | "weeklyDigest">>,
+    prefs: Partial<Pick<PushSub, "reminders" | "weeklyDigest" | "leaveBy">>,
   ): Promise<void> {
     await db
       .from("push_subscriptions")
       .update({
         ...(prefs.reminders !== undefined && { reminders: prefs.reminders }),
         ...(prefs.weeklyDigest !== undefined && { weekly_digest: prefs.weeklyDigest }),
+        ...(prefs.leaveBy !== undefined && { leave_by: prefs.leaveBy }),
       })
       .eq("user_id", userId)
       .eq("endpoint", endpoint)

@@ -70,9 +70,11 @@ export interface Settings {
   ollamaUrl: string
   /** Who answers chat: the local Ollama agent or a subscription-authed CLI. */
   chatProvider: ChatProviderId
+  /** Who runs newsletter extraction and buzz ratings (default: ollama). */
+  extractProvider: ChatProviderId
 }
 
-export type ChatProviderId = "ollama" | "claude" | "codex" | "gemini"
+export type ChatProviderId = "ollama" | "claude" | "codex" | "gemini" | "copilot"
 
 /** One row from GET /api/providers — a locally installed, OAuth-authed CLI. */
 export interface CliProviderStatus {

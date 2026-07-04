@@ -12,9 +12,10 @@ import type { ChatProviderId, CliProviderStatus, McpInfo } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 /**
- * Admin → Providers: pick who answers "Ask Grapevine" (the local Ollama agent
- * or a subscription-authed CLI — Claude Code / Codex / Gemini, no API keys),
- * and wire Claude up to this app's tools over MCP.
+ * Admin → Providers: pick who answers "Ask Grapevine" and who runs the
+ * newsletter extraction pipeline — the local Ollama model or a
+ * subscription-authed CLI (Claude Code / Codex / Gemini / Copilot, no API
+ * keys) — and wire Claude up to this app's tools over MCP.
  */
 export function ProvidersTab() {
   const settings = useGrapevine((s) => s.settings)
@@ -38,26 +39,71 @@ export function ProvidersTab() {
     api.mcpInfo().then(setMcp).catch(() => setMcp(null))
   }, [refresh])
 
-  const active = settings?.chatProvider ?? "ollama"
+  const chatActive = settings?.chatProvider ?? "ollama"
+  const extractActive = settings?.extractProvider ?? "ollama"
 
-  async function setProvider(id: ChatProviderId, label: string) {
+  async function setProvider(
+    role: "chatProvider" | "extractProvider",
+    id: ChatProviderId,
+    label: string,
+  ) {
     try {
-      const next = await api.saveSettings({ chatProvider: id })
+      const next = await api.saveSettings({ [role]: id })
       setSettings(next)
-      toast.success(`Ask Grapevine now answers via ${label}`)
+      toast.success(
+        role === "chatProvider"
+          ? `Ask Grapevine now answers via ${label}`
+          : `Newsletter extraction now runs via ${label}`,
+      )
     } catch (err) {
       toast.error("Couldn't switch provider", { description: String(err).slice(0, 140) })
     }
   }
 
+  const roleActions = (id: ChatProviderId, label: string, disabled = false) => (
+    <div className="flex shrink-0 flex-col items-end gap-1">
+      {chatActive === id ? (
+        <Badge variant="outline" className="text-live">
+          Chat
+        </Badge>
+      ) : (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-6 px-2 text-xs"
+          disabled={disabled}
+          onClick={() => setProvider("chatProvider", id, label)}
+        >
+          Use for chat
+        </Button>
+      )}
+      {extractActive === id ? (
+        <Badge variant="outline" className="text-live">
+          Extraction
+        </Badge>
+      ) : (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-6 px-2 text-xs"
+          disabled={disabled}
+          onClick={() => setProvider("extractProvider", id, label)}
+        >
+          Use for extraction
+        </Button>
+      )}
+    </div>
+  )
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-col gap-1">
-          <h3 className="font-heading text-base font-semibold">Chat provider</h3>
+          <h3 className="font-heading text-base font-semibold">Providers</h3>
           <p className="text-sm text-muted-foreground">
-            Who answers Ask Grapevine. The CLIs sign in with the subscription
-            you already have (Claude.ai, ChatGPT, Google) — no API keys.
+            Who answers Ask Grapevine, and who runs newsletter extraction and
+            buzz ratings. The CLIs sign in with the subscription you already
+            have (Claude.ai, ChatGPT, Google, GitHub) — no API keys.
           </p>
         </div>
         <Button
@@ -71,11 +117,11 @@ export function ProvidersTab() {
         </Button>
       </div>
 
-      {/* Ollama — the full agent */}
+      {/* Ollama — the full agent, and the fully local pipeline */}
       <div
         className={cn(
           "flex flex-col gap-2 rounded-lg border px-3 py-2.5",
-          active === "ollama" && "border-wine/60",
+          (chatActive === "ollama" || extractActive === "ollama") && "border-wine/60",
         )}
       >
         <div className="flex items-center justify-between gap-2">
@@ -83,7 +129,7 @@ export function ProvidersTab() {
             <ProviderLogo id="ollama" />
             <div className="flex min-w-0 flex-col">
               <span className="flex items-center gap-2 text-sm">
-                Ollama (local agent)
+                Ollama (local)
                 <span
                   className={cn(
                     "size-1.5 rounded-full",
@@ -97,24 +143,12 @@ export function ProvidersTab() {
               </span>
             </div>
           </div>
-          {active === "ollama" ? (
-            <Badge variant="outline" className="shrink-0 text-live">
-              Active
-            </Badge>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0"
-              onClick={() => setProvider("ollama", "the local Ollama agent")}
-            >
-              Use for chat
-            </Button>
-          )}
+          {roleActions("ollama", "the local Ollama model")}
         </div>
         <p className="text-xs text-muted-foreground">
-          Full toolbox — map pinning, ETAs, calendar proposals, web search.
-          Pick the model in the Models tab.
+          Chat gets the full toolbox — map pinning, ETAs, calendar proposals,
+          web search — and extraction stays entirely on this machine. Pick the
+          model in the Models tab.
         </p>
       </div>
 
@@ -124,10 +158,11 @@ export function ProvidersTab() {
           <Skeleton className="h-20 w-full" />
           <Skeleton className="h-20 w-full" />
           <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-20 w-full" />
         </div>
       )}
       {clis?.map((p) => {
-        const isActive = active === p.id
+        const isActive = chatActive === p.id || extractActive === p.id
         return (
           <div
             key={p.id}
@@ -166,21 +201,7 @@ export function ProvidersTab() {
                   </span>
                 </div>
               </div>
-              {isActive ? (
-                <Badge variant="outline" className="shrink-0 text-live">
-                  Active
-                </Badge>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0"
-                  disabled={!p.installed}
-                  onClick={() => setProvider(p.id, p.name)}
-                >
-                  Use for chat
-                </Button>
-              )}
+              {roleActions(p.id, p.name, !p.installed)}
             </div>
             {!p.installed && <Snippet text={p.installHint} />}
             {p.installed && !p.authed && (
@@ -192,8 +213,9 @@ export function ProvidersTab() {
               </>
             )}
             <p className="text-xs text-muted-foreground">
-              {p.loginNote}. Answers from the event digest — no map or calendar
-              tools in this mode.
+              {p.loginNote}. Chat answers from the event digest — no map or
+              calendar tools in this mode. Extraction runs the same newsletter
+              pipeline through the CLI instead of the local model.
             </p>
           </div>
         )

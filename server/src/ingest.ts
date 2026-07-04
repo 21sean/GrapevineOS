@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { chatJSON } from "./ollama.js";
+import { generateJSON } from "./llm.js";
 import { geocode } from "./mapbox.js";
 import { normalizeRRule } from "./recurrence.js";
 import { store } from "./store.js";
@@ -65,7 +65,7 @@ export async function extractEvents(opts: {
 }): Promise<ExtractedEvent[]> {
   const settings = await store.settings();
   const today = new Date().toLocaleDateString("en-CA", { timeZone: settings.tz });
-  const raw = await chatJSON({
+  const raw = await generateJSON({
     system: EXTRACTION_SYSTEM(settings.city, settings.tz, today),
     user: opts.text.slice(0, 24000),
     model: opts.model,
@@ -137,7 +137,7 @@ export async function rateEvent(e: CityEvent): Promise<{
   rationale: string;
   promoted: boolean;
 }> {
-  const raw = await chatJSON({
+  const raw = await generateJSON({
     system: RATING_SYSTEM,
     user: JSON.stringify({
       title: e.title,

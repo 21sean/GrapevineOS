@@ -1,27 +1,40 @@
 /**
- * Web Push — reminders for saved events and the Sunday-evening "your week"
- * digest. Free and serverless-friendly: the browser's push service does the
- * delivery, we just sign with VAPID keys minted on first boot and kept in
- * Postgres (no env setup).
+ * Web Push — reminders for saved events, traffic-aware "leave by" departure
+ * alerts, and the Sunday-evening "your week" digest. Free and
+ * serverless-friendly: the browser's push service does the delivery, we just
+ * sign with VAPID keys minted on first boot and kept in Postgres (no env
+ * setup).
  *
  * Scheduling is a one-minute tick, not a job queue: each tick loads the
  * subscriptions, finds saved events starting within the reminder window
  * (next occurrence, so weekly events remind weekly), and the push_sends
  * ledger guarantees each (user, event, occurrence) fires exactly once.
  * Digest pushes fire on the first tick after Sunday 5pm city time.
+ *
+ * Leave-by alerts watch events the user is going to (a "going" reaction or a
+ * calendar save), ask Mapbox for the traffic-aware drive from the browser's
+ * last reported position (or the city center), and fire once when it's time
+ * to head out: leave-at = start − drive − a parking buffer. The ETA cache in
+ * mapbox.ts keeps the per-tick cost inside the free tier.
  */
 import { Router } from "express";
 import webpush from "web-push";
 import { sessionUser } from "./auth.js";
 import { weekPicks } from "./digest.js";
+import { eta } from "./mapbox.js";
 import { nextOccurrence } from "./recurrence.js";
 import { store } from "./store.js";
-import type { PushSub } from "./types.js";
+import type { CityEvent, PushSub } from "./types.js";
 
 const REMINDER_WINDOW_MIN = 45; // "starts soon" lead time
 const TICK_MS = 60_000;
 const DIGEST_DOW = "Sun";
 const DIGEST_HOUR = 17;
+
+const LEAVEBY_LOOKAHEAD_MIN = 180; // only price ETAs for events starting soon
+const LEAVEBY_BUFFER_MIN = 10; // park, walk in, find the friends
+const LEAVEBY_LEAD_MIN = 10; // fire when ≤10 min until you must leave
+const POSITION_FRESH_MS = 12 * 60 * 60 * 1000; // stale position → city center
 
 function clickBase(): string {
   return (process.env.PUBLIC_BASE_URL ?? "http://localhost:5174").replace(/\/$/, "");
@@ -94,13 +107,14 @@ push.post("/api/push/status", async (req, res) => {
     subscribed: !!mine,
     reminders: mine?.reminders ?? true,
     weeklyDigest: mine?.weeklyDigest ?? true,
+    leaveBy: mine?.leaveBy ?? true,
   });
 });
 
 push.post("/api/push/subscribe", async (req, res) => {
   const user = await sessionUser(req);
   if (!user) return res.status(401).json({ error: "not signed in" });
-  const { subscription, reminders, weeklyDigest } = req.body ?? {};
+  const { subscription, reminders, weeklyDigest, leaveBy } = req.body ?? {};
   const endpoint = subscription?.endpoint;
   const p256dh = subscription?.keys?.p256dh;
   const auth = subscription?.keys?.auth;
@@ -115,6 +129,7 @@ push.post("/api/push/subscribe", async (req, res) => {
       auth,
       ...(typeof reminders === "boolean" && { reminders }),
       ...(typeof weeklyDigest === "boolean" && { weeklyDigest }),
+      ...(typeof leaveBy === "boolean" && { leaveBy }),
     });
     res.json({ ok: true });
   } catch (err) {
@@ -125,13 +140,32 @@ push.post("/api/push/subscribe", async (req, res) => {
 push.put("/api/push/prefs", async (req, res) => {
   const user = await sessionUser(req);
   if (!user) return res.status(401).json({ error: "not signed in" });
-  const { endpoint, reminders, weeklyDigest } = req.body ?? {};
+  const { endpoint, reminders, weeklyDigest, leaveBy } = req.body ?? {};
   if (typeof endpoint !== "string") return res.status(400).json({ error: "endpoint required" });
   try {
     await store.updatePushSubPrefs(user.id, endpoint, {
       ...(typeof reminders === "boolean" && { reminders }),
       ...(typeof weeklyDigest === "boolean" && { weeklyDigest }),
+      ...(typeof leaveBy === "boolean" && { leaveBy }),
     });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(502).json({ error: String(err).slice(0, 200) });
+  }
+});
+
+/** Coarse origin for leave-by ETAs — the browser reports it after the user
+ * grants geolocation; the store snaps it to ~110 m before it's written. */
+push.post("/api/push/position", async (req, res) => {
+  const user = await sessionUser(req);
+  if (!user) return res.status(401).json({ error: "not signed in" });
+  const lng = Number(req.body?.lng);
+  const lat = Number(req.body?.lat);
+  if (!Number.isFinite(lng) || !Number.isFinite(lat) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+    return res.status(400).json({ error: "lng + lat required" });
+  }
+  try {
+    await store.setUserPosition(user.id, lng, lat);
     res.json({ ok: true });
   } catch (err) {
     res.status(502).json({ error: String(err).slice(0, 200) });
@@ -180,16 +214,86 @@ async function remindersTick(subsByUser: Map<string, PushSub[]>, tz: string): Pr
       if (minsToStart <= 0 || minsToStart > REMINDER_WINDOW_MIN) continue;
       const key = `reminder|${userId}|${e.id}|${occ.start}`;
       if (!(await store.tryMarkSent(key))) continue;
-      const when = new Intl.DateTimeFormat("en-US", {
-        timeZone: tz,
-        hour: "numeric",
-        minute: "2-digit",
-      }).format(new Date(occ.start));
       const payload: PushPayload = {
         title: `Starts soon: ${e.title}`,
-        body: `${when} · ${e.venue}${e.free ? " · Free" : ""}`,
+        body: `${fmtTime(occ.start, tz)} · ${e.venue}${e.free ? " · Free" : ""}`,
         url: `${clickBase()}/?event=${encodeURIComponent(e.id)}`,
         tag: `reminder-${e.id}`,
+      };
+      await Promise.all(armed.map((s) => send(s, payload)));
+    }
+  }
+}
+
+function fmtTime(iso: string, tz: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}
+
+/**
+ * Traffic-aware departure alerts for events the user is going to — a "going"
+ * reaction or a calendar save, whichever they use. Fires once per occurrence
+ * when now reaches leave-at − LEAVEBY_LEAD_MIN, and also claims the plain
+ * reminder key so long drives don't double-notify (short drives keep the
+ * 45-minute heads-up, then get the "go now" at the right moment).
+ */
+async function leaveByTick(
+  subsByUser: Map<string, PushSub[]>,
+  tz: string,
+  center: [number, number],
+): Promise<void> {
+  const now = new Date();
+  const events = await store.events();
+  const byId = new Map(events.map((e) => [e.id, e]));
+  for (const [userId, subs] of subsByUser) {
+    const armed = subs.filter((s) => s.leaveBy);
+    if (!armed.length) continue;
+
+    const going = new Map<string, CityEvent>();
+    for (const r of await store.userReactions(userId).catch(() => [])) {
+      const e = r.reaction === "going" ? byId.get(r.eventId) : undefined;
+      if (e) going.set(e.id, e);
+    }
+    for (const entry of await store.userCalendar(userId).catch(() => [])) {
+      const e = byId.get(entry.eventId);
+      if (e) going.set(e.id, e);
+    }
+    if (!going.size) continue;
+
+    let origin: [number, number] | undefined;
+    for (const e of going.values()) {
+      const occ = nextOccurrence(e, now, tz);
+      const minsToStart = (Date.parse(occ.start) - now.getTime()) / 60_000;
+      if (minsToStart <= 0 || minsToStart > LEAVEBY_LOOKAHEAD_MIN) continue;
+
+      if (!origin) {
+        const pos = (await store.userById(userId).catch(() => undefined))?.lastPos;
+        origin =
+          pos && now.getTime() - Date.parse(pos.at) < POSITION_FRESH_MS
+            ? [pos.lng, pos.lat]
+            : center;
+      }
+      const drive = await eta(origin, [e.lng, e.lat]).catch(() => null);
+      if (!drive) continue; // no route, no alert — the plain reminder still runs
+
+      const leaveInMin = minsToStart - drive.minutes - LEAVEBY_BUFFER_MIN;
+      if (leaveInMin > LEAVEBY_LEAD_MIN) continue;
+      const key = `leaveby|${userId}|${e.id}|${occ.start}`;
+      if (!(await store.tryMarkSent(key))) continue;
+      await store.tryMarkSent(`reminder|${userId}|${e.id}|${occ.start}`).catch(() => {});
+
+      const leaveAt = new Date(now.getTime() + leaveInMin * 60_000);
+      const payload: PushPayload = {
+        title:
+          leaveInMin <= 0
+            ? `Time to go — ${e.title}`
+            : `Leave by ${fmtTime(leaveAt.toISOString(), tz)} — ${e.title}`,
+        body: `${drive.minutes} min drive with traffic · starts ${fmtTime(occ.start, tz)} · ${e.venue}`,
+        url: `${clickBase()}/?event=${encodeURIComponent(e.id)}`,
+        tag: `leaveby-${e.id}`,
       };
       await Promise.all(armed.map((s) => send(s, payload)));
     }
@@ -228,7 +332,10 @@ async function tick(): Promise<void> {
     if (subs.length) {
       const byUser = new Map<string, PushSub[]>();
       for (const s of subs) byUser.set(s.userId, [...(byUser.get(s.userId) ?? []), s]);
-      const { tz, city } = await store.settings();
+      const { tz, city, center } = await store.settings();
+      // leave-by first: when both would fire on the same tick, the departure
+      // alert claims the reminder key and the generic nudge stays quiet.
+      await leaveByTick(byUser, tz, center);
       await remindersTick(byUser, tz);
       await digestTick(byUser, tz, city);
     }
@@ -245,5 +352,7 @@ export function startPushScheduler(): void {
     return;
   }
   setInterval(() => void tick(), TICK_MS);
-  console.log(`[grapevine] push scheduler on — reminders ${REMINDER_WINDOW_MIN}min before start, digest ${DIGEST_DOW} ${DIGEST_HOUR}:00`);
+  console.log(
+    `[grapevine] push scheduler on — leave-by alerts (drive + ${LEAVEBY_BUFFER_MIN}min buffer), reminders ${REMINDER_WINDOW_MIN}min before start, digest ${DIGEST_DOW} ${DIGEST_HOUR}:00`,
+  );
 }

@@ -31,6 +31,7 @@ export async function currentSubscription(): Promise<PushSubscription | null> {
 export async function enablePush(prefs: {
   reminders?: boolean
   weeklyDigest?: boolean
+  leaveBy?: boolean
 }): Promise<PushSubscription> {
   if (!pushSupported()) throw new Error("this browser doesn't support notifications")
   const permission = await Notification.requestPermission()

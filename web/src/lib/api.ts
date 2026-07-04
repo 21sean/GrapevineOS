@@ -97,7 +97,7 @@ export const api = {
       body: JSON.stringify({ reaction }),
     }).then((r) => json<{ ok: boolean }>(r)),
 
-  // ---------- web push (reminders + weekly digest) ----------
+  // ---------- web push (reminders + leave-by alerts + weekly digest) ----------
 
   pushKey: () => fetch("/api/push/key").then((r) => json<{ publicKey: string }>(r)),
 
@@ -107,12 +107,17 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ endpoint }),
     }).then((r) =>
-      json<{ subscribed: boolean; reminders: boolean; weeklyDigest: boolean }>(r),
+      json<{
+        subscribed: boolean
+        reminders: boolean
+        weeklyDigest: boolean
+        leaveBy: boolean
+      }>(r),
     ),
 
   pushSubscribe: (
     subscription: PushSubscriptionJSON,
-    prefs?: { reminders?: boolean; weeklyDigest?: boolean },
+    prefs?: { reminders?: boolean; weeklyDigest?: boolean; leaveBy?: boolean },
   ) =>
     fetch("/api/push/subscribe", {
       method: "POST",
@@ -120,11 +125,22 @@ export const api = {
       body: JSON.stringify({ subscription, ...prefs }),
     }).then((r) => json<{ ok: boolean }>(r)),
 
-  pushPrefs: (endpoint: string, prefs: { reminders?: boolean; weeklyDigest?: boolean }) =>
+  pushPrefs: (
+    endpoint: string,
+    prefs: { reminders?: boolean; weeklyDigest?: boolean; leaveBy?: boolean },
+  ) =>
     fetch("/api/push/prefs", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ endpoint, ...prefs }),
+    }).then((r) => json<{ ok: boolean }>(r)),
+
+  /** Coarse origin for leave-by ETAs; the server snaps it to ~110 m. */
+  pushPosition: (pos: [number, number]) =>
+    fetch("/api/push/position", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lng: pos[0], lat: pos[1] }),
     }).then((r) => json<{ ok: boolean }>(r)),
 
   pushUnsubscribe: (endpoint: string) =>
