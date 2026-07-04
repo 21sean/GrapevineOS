@@ -23,6 +23,7 @@ export type Database = {
           center_lng: number
           chat_provider: string
           city: string
+          extract_provider: string
           id: number
           model: string
           ollama_url: string
@@ -34,6 +35,7 @@ export type Database = {
           center_lng: number
           chat_provider?: string
           city: string
+          extract_provider?: string
           id?: number
           model?: string
           ollama_url?: string
@@ -45,6 +47,7 @@ export type Database = {
           center_lng?: number
           chat_provider?: string
           city?: string
+          extract_provider?: string
           id?: number
           model?: string
           ollama_url?: string
@@ -392,6 +395,7 @@ export type Database = {
           created_at: string
           endpoint: string
           id: string
+          leave_by: boolean
           p256dh: string
           reminders: boolean
           user_id: string
@@ -402,6 +406,7 @@ export type Database = {
           created_at?: string
           endpoint: string
           id?: string
+          leave_by?: boolean
           p256dh: string
           reminders?: boolean
           user_id: string
@@ -412,6 +417,7 @@ export type Database = {
           created_at?: string
           endpoint?: string
           id?: string
+          leave_by?: boolean
           p256dh?: string
           reminders?: boolean
           user_id?: string
@@ -545,7 +551,10 @@ export type Database = {
           email: string
           feed_token: string | null
           id: string
+          last_lat: number | null
+          last_lng: number | null
           last_login_at: string
+          last_pos_at: string | null
           name: string
           picture: string
           prefs: Json
@@ -555,7 +564,10 @@ export type Database = {
           email: string
           feed_token?: string | null
           id: string
+          last_lat?: number | null
+          last_lng?: number | null
           last_login_at?: string
+          last_pos_at?: string | null
           name?: string
           picture?: string
           prefs?: Json
@@ -565,7 +577,10 @@ export type Database = {
           email?: string
           feed_token?: string | null
           id?: string
+          last_lat?: number | null
+          last_lng?: number | null
           last_login_at?: string
+          last_pos_at?: string | null
           name?: string
           picture?: string
           prefs?: Json

@@ -62,7 +62,20 @@ export interface PushSub {
   auth: string;
   reminders: boolean;
   weeklyDigest: boolean;
+  /** Traffic-aware "time to leave" alerts for going/saved events. */
+  leaveBy: boolean;
 }
+
+/** An LLM engine: the local Ollama model or a subscription-authed CLI. */
+export type LlmProviderId = "ollama" | "claude" | "codex" | "gemini" | "copilot";
+
+export const LLM_PROVIDERS: LlmProviderId[] = [
+  "ollama",
+  "claude",
+  "codex",
+  "gemini",
+  "copilot",
+];
 
 export interface Settings {
   city: string;
@@ -71,7 +84,9 @@ export interface Settings {
   model: string;
   ollamaUrl: string;
   /** Who answers chat: the local Ollama agent or a subscription-authed CLI. */
-  chatProvider: "ollama" | "claude" | "codex" | "gemini";
+  chatProvider: LlmProviderId;
+  /** Who runs newsletter extraction and buzz ratings (default: ollama). */
+  extractProvider: LlmProviderId;
 }
 
 export interface Source {
@@ -138,6 +153,9 @@ export interface User {
   prefs?: UserPrefs;
   googleCalendar?: GoogleCalendarGrant; // present once Google Calendar is connected
   feedToken?: string; // unguessable path segment for the personal ICS feed
+  /** Last coarse position (~110 m grid) the browser reported — the origin for
+   * leave-by ETAs. Absent until the user grants geolocation while signed in. */
+  lastPos?: { lng: number; lat: number; at: string };
 }
 
 /** One row in the Ask Grapevine history panel. */

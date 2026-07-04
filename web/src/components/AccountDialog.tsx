@@ -86,10 +86,17 @@ export function AccountDialog({
     subscribed: boolean
     reminders: boolean
     weeklyDigest: boolean
+    leaveBy: boolean
   } | null>(() =>
     pushSupported()
       ? null
-      : { supported: false, subscribed: false, reminders: false, weeklyDigest: false },
+      : {
+          supported: false,
+          subscribed: false,
+          reminders: false,
+          weeklyDigest: false,
+          leaveBy: false,
+        },
   )
   const [pushBusy, setPushBusy] = useState(false)
 
@@ -123,6 +130,7 @@ export function AccountDialog({
         subscribed: !!status?.subscribed,
         reminders: !!status?.subscribed && status.reminders,
         weeklyDigest: !!status?.subscribed && status.weeklyDigest,
+        leaveBy: !!status?.subscribed && status.leaveBy,
       })
     })()
     return () => {
@@ -130,17 +138,24 @@ export function AccountDialog({
     }
   }, [open])
 
-  async function togglePush(kind: "reminders" | "weeklyDigest", value: boolean) {
+  async function togglePush(
+    kind: "reminders" | "weeklyDigest" | "leaveBy",
+    value: boolean,
+  ) {
     if (!pushState || pushBusy) return
     const next = { ...pushState, [kind]: value }
     setPushBusy(true)
     try {
       if (value && !pushState.subscribed) {
         // first toggle on this device: permission prompt + subscribe
-        await enablePush({ reminders: next.reminders, weeklyDigest: next.weeklyDigest })
+        await enablePush({
+          reminders: next.reminders,
+          weeklyDigest: next.weeklyDigest,
+          leaveBy: next.leaveBy,
+        })
         next.subscribed = true
         toast.success("Notifications on for this browser")
-      } else if (!next.reminders && !next.weeklyDigest) {
+      } else if (!next.reminders && !next.weeklyDigest && !next.leaveBy) {
         await disablePush()
         next.subscribed = false
       } else {
@@ -149,6 +164,7 @@ export function AccountDialog({
           await api.pushPrefs(sub.endpoint, {
             reminders: next.reminders,
             weeklyDigest: next.weeklyDigest,
+            leaveBy: next.leaveBy,
           })
       }
       setPushState(next)
@@ -497,6 +513,22 @@ export function AccountDialog({
                 <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border px-3 py-2">
                   <span className="min-w-0">
                     <span className="block text-[13px] font-medium">
+                      Leave-by alerts
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      "Time to leave" with live traffic, for events you're
+                      going to
+                    </span>
+                  </span>
+                  <Switch
+                    checked={!!pushState?.leaveBy}
+                    disabled={!pushState || pushBusy}
+                    onCheckedChange={(v) => void togglePush("leaveBy", v)}
+                  />
+                </label>
+                <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border px-3 py-2">
+                  <span className="min-w-0">
+                    <span className="block text-[13px] font-medium">
                       Weekly digest
                     </span>
                     <span className="block text-xs text-muted-foreground">
@@ -511,7 +543,9 @@ export function AccountDialog({
                 </label>
                 <p className="text-xs text-muted-foreground">
                   Notifications are per-browser. Reminders follow your saved
-                  events; the digest is ranked by your interests and reactions.
+                  events; leave-by alerts time the drive (with traffic) to
+                  anything you saved or marked "going", from your last known
+                  spot; the digest is ranked by your interests and reactions.
                 </p>
               </div>
             )}

@@ -42,6 +42,8 @@ export function App() {
   const load = useGrapevine((s) => s.load)
   const tick = useGrapevine((s) => s.tick)
   const setUserPos = useGrapevine((s) => s.setUserPos)
+  const user = useGrapevine((s) => s.user)
+  const userPos = useGrapevine((s) => s.userPos)
   const carouselOn = useGrapevine((s) => s.carouselOn)
   const adminOpen = useGrapevine((s) => s.adminOpen)
   const calendarOpen = useGrapevine((s) => s.calendarOpen)
@@ -132,6 +134,13 @@ export function App() {
       authSub?.subscription.unsubscribe()
     }
   }, [load, tick, setUserPos])
+
+  // Coarse origin for leave-by departure alerts. Signed-in only, and the
+  // server snaps it to a ~110 m grid — it never stores the exact fix.
+  useEffect(() => {
+    if (!user || !userPos) return
+    api.pushPosition(userPos).catch(() => {})
+  }, [user, userPos])
 
   // the live tour: advance every CAROUSEL_MS while enabled
   useEffect(() => {

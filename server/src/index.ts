@@ -15,7 +15,7 @@ import { catalog, logo } from "./catalog.js";
 import { eta, geocode } from "./mapbox.js";
 import { extractEvents, rateEvent } from "./ingest.js";
 import { listInbox, reprocessInbox, startInboxPoll } from "./inbox.js";
-import { REACTIONS, type CityEvent, type Reaction } from "./types.js";
+import { LLM_PROVIDERS, REACTIONS, type CityEvent, type Reaction } from "./types.js";
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
@@ -101,12 +101,13 @@ app.put("/api/events/:id/reaction", async (req, res) => {
 app.get("/api/settings", async (_req, res) => res.json(await store.settings()));
 
 app.put("/api/settings", async (req, res) => {
-  const { city, center, tz, model, ollamaUrl, chatProvider } = req.body ?? {};
-  if (
-    chatProvider !== undefined &&
-    !["ollama", "claude", "codex", "gemini"].includes(chatProvider)
-  ) {
+  const { city, center, tz, model, ollamaUrl, chatProvider, extractProvider } =
+    req.body ?? {};
+  if (chatProvider !== undefined && !LLM_PROVIDERS.includes(chatProvider)) {
     return res.status(400).json({ error: "unknown chatProvider" });
+  }
+  if (extractProvider !== undefined && !LLM_PROVIDERS.includes(extractProvider)) {
+    return res.status(400).json({ error: "unknown extractProvider" });
   }
   res.json(
     await store.saveSettings({
@@ -116,6 +117,7 @@ app.put("/api/settings", async (req, res) => {
       ...(model !== undefined && { model }),
       ...(ollamaUrl !== undefined && { ollamaUrl }),
       ...(chatProvider !== undefined && { chatProvider }),
+      ...(extractProvider !== undefined && { extractProvider }),
     }),
   );
 });

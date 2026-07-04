@@ -81,6 +81,14 @@ model as ingestion (pick a tools-capable one like `qwen3` in Admin -> Models):
   for prompt injection, and a deterministic persona rail stops the model from
   ever breaking character or leaking which LLM powers it (see below).
 
+No GPU, or just prefer a frontier model? **Admin -> Providers** can hand
+either job - chat, newsletter extraction, or both - to a subscription-authed
+CLI instead: Claude Code (`claude -p`), OpenAI Codex, Gemini CLI, or GitHub
+Copilot CLI. Each signs in with the account you already have (Claude.ai,
+ChatGPT, Google, GitHub), so no API keys ever touch the server; Claude Code
+even connects back to Grapevine's own MCP endpoint for live event search and
+ETAs mid-chat.
+
 ### Agent architecture (LangGraph + LangChain)
 
 The concierge is a LangGraph `StateGraph` running against `ChatOllama`, so
@@ -222,9 +230,16 @@ external assistants two ways:
   ticket-provider link when advance tickets are needed.
 - **Ask Grapevine**: ⌘K concierge chat that searches, pins the map, plans
   days, and learns your taste (see above).
+- **Leave-by alerts**: mark "going" (or save to calendar) with notifications
+  on and Grapevine pushes *"Leave by 6:38"* at exactly the right minute -
+  traffic-aware drive time from your last coarse position plus a parking
+  buffer. Reminders and the Sunday digest ride the same Web Push pipe.
 - **Admin -> Models**: Ollama health, active-model switcher, and a pull catalog
   of open-weights models grouped by lab with models.dev metadata and logos,
   streaming download progress.
+- **Admin -> Providers**: pick who answers chat and who runs extraction -
+  local Ollama or a subscription CLI (Claude Code, Codex, Gemini, Copilot) -
+  plus copy-paste MCP snippets so Claude can drive Grapevine from outside.
 - **Admin -> Ingest**: paste a newsletter, preview extracted events
   (geocoded and rated), approve which ones land on the map.
 - **Admin -> Sources**: the per-source inbox addresses with copy buttons.

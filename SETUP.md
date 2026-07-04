@@ -18,7 +18,11 @@ Requirements:
 
 - **Node 22+**
 - **[Ollama](https://ollama.com)** running locally with at least one chat
-  model (`ollama pull qwen3:8b` works fine; pick it in Admin → Models)
+  model (`ollama pull qwen3:8b` works fine; pick it in Admin → Models).
+  No GPU? Chat and/or newsletter extraction can instead run through a
+  subscription-authed CLI — Claude Code (`claude -p`), OpenAI Codex, Gemini
+  CLI, or GitHub Copilot CLI — picked per role in **Admin → Providers**; each
+  logs in with its own account, no API keys
 - **Supabase**: copy `server/.env.example` to `server/.env` and set
   `SUPABASE_URL` and `SUPABASE_SECRET_KEY` from your project's dashboard
   (Settings → API). For sign-in, also set `VITE_SUPABASE_URL` and
@@ -145,7 +149,8 @@ One-time dashboard setup (Authentication → Sign In / Providers):
   (venues don't move; misses are cached too, so a bad venue string is billed
   once); ETAs cache for 10 minutes (traffic-aware); the browser additionally
   memoizes per session. Map rendering bills by monthly active user, not per
-  tile.
+  tile. Leave-by departure alerts reuse the same cached `/api/eta` path and
+  only price events starting within the next three hours.
 - Consider adding URL restrictions to the pk token (Mapbox dashboard →
   Tokens) once you have a production domain.
 
