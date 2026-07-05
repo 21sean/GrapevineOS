@@ -5,6 +5,7 @@ import { agent } from "./agent/index.js";
 import { warmupGuardrails } from "./agent/guardrails.js";
 import { auth, sessionUser } from "./auth.js";
 import { calendar } from "./calendar.js";
+import { runDiscovery, runSavedSearch, startDiscoveryScheduler } from "./discovery.js";
 import { backfillImages, enrichEventImages } from "./images.js";
 import { mcp, mcpKeyRequired } from "./mcp.js";
 import { detectProviders } from "./providers.js";
@@ -140,10 +141,15 @@ app.get("/api/mcp/info", (_req, res) => {
   // origin), so an MCP client connects to the server port. MCP_PUBLIC_URL
   // overrides it when the server sits behind a public reverse proxy.
   const base = process.env.MCP_PUBLIC_URL ?? `http://localhost:${port}`;
+  const url = `${base.replace(/\/$/, "")}/mcp`;
+  const keyRequired = mcpKeyRequired();
   res.json({
-    url: `${base.replace(/\/$/, "")}/mcp`,
+    url,
     transport: "http",
-    keyRequired: mcpKeyRequired(),
+    keyRequired,
+    // Claude Desktop / claude.ai custom connectors take only a URL, so the
+    // key rides as a query param. Placeholder on purpose — never the key.
+    connectorUrl: keyRequired ? `${url}?key=<AGENT_API_KEY>` : url,
   });
 });
 
@@ -280,7 +286,7 @@ app.post("/api/ingest/email", async (req, res) => {
   }
 });
 
-/** Commit previously previewed events. */
+/** Commit previously previewed events (email pastes and discovery dry runs). */
 app.post("/api/ingest/commit", async (req, res) => {
   const events: CityEvent[] = req.body?.events ?? [];
   if (!Array.isArray(events) || !events.length) {
@@ -290,7 +296,7 @@ app.post("/api/ingest/commit", async (req, res) => {
     const added = await store.addEvents(events);
     await store.logIngest({
       source: events[0]?.source ?? "manual",
-      kind: "manual",
+      kind: events[0]?.sourceKind === "search" ? "search" : "manual",
       extracted: events.length,
       added: added.length,
       events: eventSnapshot(added),
@@ -331,6 +337,84 @@ app.post("/api/ingest/inbound", async (req, res) => {
   }
 });
 
+// ---------- web discovery (AI web search → verified events, on a schedule) ----------
+
+/** Clamp cadence to the DB's 1–336 h range; default daily. */
+const clampCadence = (v: unknown): number => {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(Math.max(1, Math.round(n)), 336) : 24;
+};
+
+/** Run one web discovery search now. dryRun verifies but writes nothing. */
+app.post("/api/discovery/run", async (req, res) => {
+  const query = String(req.body?.query ?? "").trim();
+  if (query.length < 3) return res.status(400).json({ error: "query required (3+ chars)" });
+  try {
+    res.json(await runDiscovery({ query, commit: !req.body?.dryRun }));
+  } catch (err) {
+    res.status(502).json({ error: String(err).slice(0, 300) });
+  }
+});
+
+app.get("/api/discovery/searches", async (_req, res) => {
+  try {
+    res.json({ searches: await store.discoverySearches() });
+  } catch (err) {
+    res.status(502).json({ error: String(err).slice(0, 300) });
+  }
+});
+
+/** Save (or update, keyed on the query) a scheduled search. */
+app.post("/api/discovery/searches", async (req, res) => {
+  const query = String(req.body?.query ?? "").trim();
+  if (query.length < 3 || query.length > 200) {
+    return res.status(400).json({ error: "query must be 3-200 chars" });
+  }
+  try {
+    res.json(await store.addDiscoverySearch(query, clampCadence(req.body?.cadenceHours)));
+  } catch (err) {
+    res.status(502).json({ error: String(err).slice(0, 300) });
+  }
+});
+
+app.patch("/api/discovery/searches/:id", async (req, res) => {
+  const patch: { active?: boolean; cadenceHours?: number } = {};
+  if (req.body?.active !== undefined) patch.active = Boolean(req.body.active);
+  if (req.body?.cadenceHours !== undefined)
+    patch.cadenceHours = clampCadence(req.body.cadenceHours);
+  if (!Object.keys(patch).length) {
+    return res.status(400).json({ error: "nothing to update (active, cadenceHours)" });
+  }
+  try {
+    const updated = await store.updateDiscoverySearch(req.params.id, patch);
+    if (!updated) return res.status(404).json({ error: "unknown search" });
+    res.json(updated);
+  } catch (err) {
+    res.status(502).json({ error: String(err).slice(0, 300) });
+  }
+});
+
+app.delete("/api/discovery/searches/:id", async (req, res) => {
+  try {
+    const deleted = await store.deleteDiscoverySearch(req.params.id);
+    if (!deleted) return res.status(404).json({ error: "unknown search" });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(502).json({ error: String(err).slice(0, 300) });
+  }
+});
+
+/** Run one saved search immediately (also stamps last_run/status). */
+app.post("/api/discovery/searches/:id/run", async (req, res) => {
+  try {
+    const search = await store.discoverySearchById(req.params.id);
+    if (!search) return res.status(404).json({ error: "unknown search" });
+    res.json(await runSavedSearch(search));
+  } catch (err) {
+    res.status(502).json({ error: String(err).slice(0, 300) });
+  }
+});
+
 // ---------- inbox (raw emails in Postgres, written by the email worker) ----------
 
 app.get("/api/inbox", async (_req, res) => {
@@ -356,5 +440,6 @@ app.listen(port, () => {
   console.log(`[grapevine] api listening on http://localhost:${port}`);
   startInboxPoll();
   startPushScheduler();
+  startDiscoveryScheduler();
   warmupGuardrails();
 });

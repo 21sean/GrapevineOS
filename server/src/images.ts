@@ -126,10 +126,13 @@ async function fetchImage(url: string): Promise<{ bytes: Buffer; contentType: st
 async function enrichOne(
   e: CityEvent,
 ): Promise<{ imageUrl: string; imageColor?: string } | null> {
-  if (!e.ticketUrl) return null;
-  const html = await fetchText(e.ticketUrl, MAX_HTML_BYTES, PAGE_TIMEOUT_MS).catch(() => null);
+  // Ticket page first; web-discovered events fall back to the page they
+  // were verified against.
+  const pageUrl = e.ticketUrl ?? e.sourceUrl;
+  if (!pageUrl) return null;
+  const html = await fetchText(pageUrl, MAX_HTML_BYTES, PAGE_TIMEOUT_MS).catch(() => null);
   if (!html) return null;
-  const imageUrl = extractImageUrl(html, e.ticketUrl);
+  const imageUrl = extractImageUrl(html, pageUrl);
   if (!imageUrl) return null;
   const img = await fetchImage(imageUrl).catch(() => null);
   const color = img ? dominantColor(img.bytes, img.contentType) : null;
@@ -143,7 +146,7 @@ async function enrichOne(
  * ingest already succeeded; this only decorates it.
  */
 export async function enrichEventImages(events: CityEvent[]): Promise<number> {
-  const queue = events.filter((e) => e.ticketUrl && !e.imageUrl);
+  const queue = events.filter((e) => (e.ticketUrl || e.sourceUrl) && !e.imageUrl);
   let enriched = 0;
   const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
     for (let e = queue.shift(); e; e = queue.shift()) {
@@ -161,7 +164,9 @@ export async function enrichEventImages(events: CityEvent[]): Promise<number> {
 
 /** Backfill artwork for the whole catalog (admin action / one-off). */
 export async function backfillImages(): Promise<{ scanned: number; enriched: number }> {
-  const events = (await store.events()).filter((e) => e.ticketUrl && !e.imageUrl);
+  const events = (await store.events()).filter(
+    (e) => (e.ticketUrl || e.sourceUrl) && !e.imageUrl,
+  );
   const enriched = await enrichEventImages(events);
   return { scanned: events.length, enriched };
 }

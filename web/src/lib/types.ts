@@ -40,7 +40,9 @@ export interface CityEvent {
   ticketUrl?: string
   ticketProvider?: string
   source: string
-  sourceKind: "newsletter" | "manual" | "seed"
+  sourceKind: "newsletter" | "manual" | "seed" | "search"
+  /** Page a web-discovered event was verified against. */
+  sourceUrl?: string
   rating: number
   ratingRationale?: string
   promoted: boolean
@@ -96,6 +98,8 @@ export interface McpInfo {
   url: string
   transport: string
   keyRequired: boolean
+  /** URL form for Claude Desktop custom connectors (?key= placeholder). */
+  connectorUrl: string
 }
 
 export interface Source {
@@ -165,11 +169,47 @@ export interface IngestRecord {
   id: string
   receivedAt: string
   source: string
-  kind: "email" | "manual"
+  kind: "email" | "manual" | "search"
   subject?: string
   extracted: number
   added: number
   events: { id: string; title: string; start: string }[]
+}
+
+// ---------- web discovery (AI web search → verified events) ----------
+
+/** One saved web search the server re-runs on a cadence. */
+export interface DiscoverySearch {
+  id: string
+  query: string
+  cadenceHours: number
+  active: boolean
+  createdAt: string
+  lastRunAt?: string
+  lastStatus?: string
+}
+
+/** One extracted event candidate with its verification outcome. */
+export interface DiscoveryCandidate {
+  event: CityEvent
+  verdict: "confirmed" | "corrected" | "rejected"
+  confidence: number
+  evidence?: string
+  reason?: string
+  sourceUrl: string
+  corroborations: number
+}
+
+export interface DiscoveryRunResult {
+  query: string
+  searchedAt: string
+  pagesRead: { url: string; title: string }[]
+  pagesSkipped: { url: string; error: string }[]
+  extracted: number
+  verified: DiscoveryCandidate[]
+  rejected: DiscoveryCandidate[]
+  added: number
+  error?: string
 }
 
 export interface User {

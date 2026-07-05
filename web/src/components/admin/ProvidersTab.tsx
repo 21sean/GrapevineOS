@@ -268,15 +268,20 @@ export function ProvidersTab() {
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <SnippetLabel>Claude Desktop</SnippetLabel>
+            <SnippetLabel>Claude Desktop / claude.ai — custom connector</SnippetLabel>
+            <Snippet text={mcp.connectorUrl} />
             <p className="text-xs text-muted-foreground">
-              Settings → Connectors → Add custom connector → paste the endpoint
-              URL. (Desktop needs the server reachable from that machine.)
+              Settings → Connectors → Add custom connector → paste this URL
+              {mcp.keyRequired && " (with your real AGENT_API_KEY filled in — connectors can't send headers, so the key rides in the URL; treat the URL as a secret)"}
+              . Custom connectors need the server reachable over HTTPS — run a
+              tunnel (e.g. <code className="font-mono">cloudflared tunnel --url http://localhost:8787</code>)
+              and set MCP_PUBLIC_URL in server/.env to the tunnel URL so this
+              snippet updates.
             </p>
           </div>
           <p className="text-xs text-muted-foreground">
             {mcp.keyRequired
-              ? "Requests must carry AGENT_API_KEY (server/.env) as X-Agent-Key or a Bearer token."
+              ? "Requests must carry AGENT_API_KEY (server/.env) as X-Agent-Key, a Bearer token, or ?key=."
               : "Open on localhost — set AGENT_API_KEY in server/.env to require a key."}{" "}
             Calendar and interest writes act on the account named by
             AGENT_USER_EMAIL.

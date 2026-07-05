@@ -6,6 +6,8 @@ import type {
   ChatThreadMeta,
   CityEvent,
   CliProviderStatus,
+  DiscoveryRunResult,
+  DiscoverySearch,
   Filters,
   GcalEvent,
   GcalEventPatch,
@@ -382,4 +384,45 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ events }),
     }).then((r) => json<{ added: number }>(r)),
+
+  // ---------- web discovery (AI web search → verified events) ----------
+
+  discoveryRun: (query: string, dryRun: boolean) =>
+    fetch("/api/discovery/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, dryRun }),
+    }).then((r) => json<DiscoveryRunResult>(r)),
+
+  discoverySearches: () =>
+    fetch("/api/discovery/searches").then((r) =>
+      json<{ searches: DiscoverySearch[] }>(r),
+    ),
+
+  addDiscoverySearch: (query: string, cadenceHours: number) =>
+    fetch("/api/discovery/searches", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, cadenceHours }),
+    }).then((r) => json<DiscoverySearch>(r)),
+
+  patchDiscoverySearch: (
+    id: string,
+    patch: { active?: boolean; cadenceHours?: number },
+  ) =>
+    fetch(`/api/discovery/searches/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    }).then((r) => json<DiscoverySearch>(r)),
+
+  deleteDiscoverySearch: (id: string) =>
+    fetch(`/api/discovery/searches/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }).then((r) => json<{ ok: boolean }>(r)),
+
+  runDiscoverySearch: (id: string) =>
+    fetch(`/api/discovery/searches/${encodeURIComponent(id)}/run`, {
+      method: "POST",
+    }).then((r) => json<DiscoveryRunResult>(r)),
 }

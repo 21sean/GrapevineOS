@@ -196,8 +196,9 @@ function blockedHost(hostname: string): boolean {
 
 export async function readPage(
   rawUrl: string,
-  opts: { signal?: AbortSignal } = {},
+  opts: { signal?: AbortSignal; maxChars?: number } = {},
 ): Promise<ReadPageResult> {
+  const maxChars = Math.min(opts.maxChars ?? MAX_PAGE_CHARS, 16_000);
   let url: URL;
   try {
     url = new URL(rawUrl);
@@ -230,8 +231,8 @@ export async function readPage(
 
   const html = (await res.text()).slice(0, MAX_HTML_BYTES);
   if (type.includes("text/plain")) {
-    const text = html.replace(/\s+/g, " ").trim().slice(0, MAX_PAGE_CHARS);
-    return { url: res.url, title: url.hostname, text, truncated: html.length > MAX_PAGE_CHARS };
+    const text = html.replace(/\s+/g, " ").trim().slice(0, maxChars);
+    return { url: res.url, title: url.hostname, text, truncated: html.length > maxChars };
   }
 
   try {
@@ -245,8 +246,8 @@ export async function readPage(
       url: res.url,
       title: article?.title || dom.window.document.title || url.hostname,
       ...(article?.byline ? { byline: article.byline } : {}),
-      text: raw.slice(0, MAX_PAGE_CHARS),
-      truncated: raw.length > MAX_PAGE_CHARS,
+      text: raw.slice(0, maxChars),
+      truncated: raw.length > maxChars,
     };
   } catch (err) {
     return { error: `parse failed: ${String((err as Error)?.message ?? err).slice(0, 120)}` };

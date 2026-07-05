@@ -1,13 +1,23 @@
 /**
  * Grapevine as an MCP server — lets Claude (Claude Code, Claude Desktop, or
  * any MCP client) drive this app's tools directly: search events, look up
- * details, ETAs, save to the calendar, tune interests.
+ * details, ETAs, save to the calendar, tune interests, and run verified
+ * web discovery (including managing its scheduled searches).
  *
  * Transport: Streamable HTTP at POST /mcp, stateless (a fresh server+transport
  * pair per request — no session bookkeeping, works across server restarts).
  * Auth mirrors the app's local-first stance: open when AGENT_API_KEY is unset,
- * otherwise the key must arrive as X-Agent-Key or a Bearer token. Writes act
- * on the account named by AGENT_USER_EMAIL, same as /api/ext/v1.
+ * otherwise the key must arrive as X-Agent-Key, a Bearer token, or — for
+ * clients that can't set headers, like Claude Desktop/claude.ai custom
+ * connectors — a ?key= query parameter on the endpoint URL. Writes act on the
+ * account named by AGENT_USER_EMAIL, same as /api/ext/v1.
+ *
+ * Claude Desktop custom connectors: expose this server over HTTPS (tunnel or
+ * reverse proxy, see MCP_PUBLIC_URL), then add
+ *   https://your-host/mcp?key=<AGENT_API_KEY>
+ * under Settings → Connectors → Add custom connector. The endpoint answers
+ * CORS preflights so browser-based MCP clients (e.g. the MCP inspector) work
+ * too; GET/DELETE return 405 as the spec allows for stateless servers.
  *
  * Tool schemas are plain JSON Schema via the low-level Server API, sharing the
  * executors in agent/context.ts with the in-app agent and the ext REST API.
@@ -33,6 +43,7 @@ import {
   type SearchParams,
 } from "./agent/context.js";
 import { removeEventForUser, saveEventForUser } from "./calendar.js";
+import { runDiscovery } from "./discovery.js";
 import { store } from "./store.js";
 import type { User } from "./types.js";
 
@@ -119,6 +130,58 @@ const TOOLS = [
         rarity: { type: "string", enum: [...RARITIES] },
       },
       required: ["event_id", "rarity"],
+    },
+  },
+  {
+    name: "discover_events",
+    description:
+      "Search the open web for local events and add verified ones to the catalog. Each candidate is verified against the page it came from (dates, venue, a supporting quote) before anything is written; unverified candidates are reported with the rejection reason. Defaults to a dry run — call again with dry_run:false to commit, ideally after the user confirms.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: 'what to look for, e.g. "jazz shows this weekend" (the city is appended automatically)',
+        },
+        dry_run: {
+          type: "boolean",
+          description: "default true — verify and report without writing; false commits verified events",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "list_scheduled_searches",
+    description:
+      "Saved web-discovery searches the server re-runs automatically, with cadence, last run time, and last result summary.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "schedule_search",
+    description:
+      "Save a web-discovery search the server re-runs on a schedule (verified events land on the map automatically). Re-saving an existing query updates its cadence.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "3-200 chars" },
+        cadence_hours: {
+          type: "number",
+          description: "hours between runs, 1-336 (default 24; 168 = weekly)",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "unschedule_search",
+    description: "Delete a scheduled web-discovery search by id (from list_scheduled_searches) or exact query text.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        query: { type: "string", description: "alternative to id — exact query text, case-insensitive" },
+      },
     },
   },
   {
@@ -221,6 +284,57 @@ async function callTool(name: string, args: Record<string, unknown>) {
         changed: result.changed,
       });
     }
+    case "discover_events": {
+      const query = String(args.query ?? "").trim();
+      if (query.length < 3) return fail("query required (3+ chars)");
+      const result = await runDiscovery({ query, commit: args.dry_run === false });
+      if (result.error) return fail(`discovery failed: ${result.error}`);
+      // Compact shape: verdicts and evidence stay, page text never leaves.
+      const shape = (c: (typeof result.verified)[number]) => ({
+        id: c.event.id,
+        title: c.event.title,
+        start: c.event.start,
+        venue: c.event.venue,
+        price: c.event.price,
+        verdict: c.verdict,
+        confidence: c.confidence,
+        ...(c.evidence && { evidence: c.evidence }),
+        ...(c.reason && { reason: c.reason }),
+        source_url: c.sourceUrl,
+        corroborations: c.corroborations,
+      });
+      return ok({
+        query: result.query,
+        dry_run: args.dry_run !== false,
+        pages_read: result.pagesRead,
+        extracted: result.extracted,
+        added: result.added,
+        verified: result.verified.map(shape),
+        rejected: result.rejected.map(shape),
+      });
+    }
+    case "list_scheduled_searches": {
+      const searches = await store.discoverySearches();
+      return ok({ count: searches.length, searches });
+    }
+    case "schedule_search": {
+      const query = String(args.query ?? "").trim();
+      if (query.length < 3 || query.length > 200) return fail("query must be 3-200 chars");
+      const n = Number(args.cadence_hours);
+      const cadence = Number.isFinite(n) ? Math.min(Math.max(1, Math.round(n)), 336) : 24;
+      const saved = await store.addDiscoverySearch(query, cadence);
+      return ok({ scheduled: true, ...saved });
+    }
+    case "unschedule_search": {
+      let id = typeof args.id === "string" ? args.id : "";
+      if (!id && typeof args.query === "string") {
+        const q = args.query.trim().toLowerCase();
+        id = (await store.discoverySearches()).find((s) => s.query.toLowerCase() === q)?.id ?? "";
+      }
+      if (!id) return fail("give id or the exact query of a scheduled search");
+      const deleted = await store.deleteDiscoverySearch(id);
+      return deleted ? ok({ deleted: true, id }) : fail("unknown scheduled search");
+    }
     case "update_interests": {
       const user = await boundUser();
       if ("error" in user) return fail(user.error);
@@ -276,13 +390,36 @@ export function mcpKeyRequired(): boolean {
 function mcpAuth(req: Request, res: Response, next: () => void) {
   const key = process.env.AGENT_API_KEY;
   if (!key) return next(); // local-first: open like the rest of the HTTP API
+  // ?key= exists for clients that can't set headers (Claude Desktop/claude.ai
+  // custom connectors take only a URL). Treat that URL as a secret.
   const given =
-    req.get("X-Agent-Key") ?? req.get("Authorization")?.replace(/^Bearer\s+/i, "");
+    req.get("X-Agent-Key") ??
+    req.get("Authorization")?.replace(/^Bearer\s+/i, "") ??
+    (typeof req.query.key === "string" ? req.query.key : undefined);
   if (given !== key) return res.status(401).json({ error: "bad agent key" });
   next();
 }
 
+/**
+ * CORS for browser-based MCP clients (the MCP inspector, web apps). Claude's
+ * own connector client calls server-to-server and ignores this. The wildcard
+ * origin grants nothing by itself — auth still rides on every request.
+ */
+function mcpCors(req: Request, res: Response, next: () => void) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, GET, DELETE, OPTIONS");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Agent-Key, Mcp-Session-Id, Mcp-Protocol-Version, Last-Event-ID",
+  );
+  res.setHeader("Access-Control-Expose-Headers", "Mcp-Session-Id, Mcp-Protocol-Version");
+  if (req.method === "OPTIONS") return res.status(204).end();
+  next();
+}
+
 export const mcp = Router();
+
+mcp.use("/mcp", mcpCors);
 
 mcp.post("/mcp", mcpAuth, async (req, res) => {
   // Stateless: fresh pair per request so concurrent clients can't collide.

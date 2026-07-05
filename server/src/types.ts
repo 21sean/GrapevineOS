@@ -32,7 +32,9 @@ export interface CityEvent {
   ticketUrl?: string;
   ticketProvider?: string;
   source: string;
-  sourceKind: "newsletter" | "manual" | "seed";
+  sourceKind: "newsletter" | "manual" | "seed" | "search";
+  /** Page the event was verified against — set by web discovery only. */
+  sourceUrl?: string;
   rating: number; // 1–5 local-buzz score
   ratingRationale?: string;
   promoted: boolean; // paid/sponsored spam detection
@@ -105,13 +107,28 @@ export interface Source {
 export interface IngestRecord {
   id: string;
   receivedAt: string; // ISO 8601
-  source: string; // inbox tag ("sdtoday") or "manual"
-  kind: "email" | "manual";
-  subject?: string; // inbound emails only
+  source: string; // inbox tag ("sdtoday"), "manual", or "web-search"
+  kind: "email" | "manual" | "search";
+  subject?: string; // inbound emails: subject; search runs: the query
   extracted: number;
   added: number;
   /** Snapshot of what landed, so history survives event edits/deletes. */
   events: { id: string; title: string; start: string }[];
+}
+
+/**
+ * One saved web search the discovery scheduler re-runs. Each run searches the
+ * open web, reads the top result pages, extracts event candidates, and adds
+ * only the ones verification confirmed against the source page.
+ */
+export interface DiscoverySearch {
+  id: string;
+  query: string;
+  cadenceHours: number; // hours between runs (1–336)
+  active: boolean;
+  createdAt: string; // ISO 8601
+  lastRunAt?: string; // ISO 8601 — unset until the first run
+  lastStatus?: string; // short human summary of the last run
 }
 
 /** Per-account copies of the browser preferences, synced when signed in. */

@@ -15,6 +15,7 @@ import type {
   ChatMessage,
   ChatThreadMeta,
   CityEvent,
+  DiscoverySearch,
   GoogleCalendarGrant,
   IngestRecord,
   PushSub,
@@ -66,6 +67,7 @@ function rowToEvent(r: Tables<"events">): CityEvent {
     ticketProvider: r.ticket_provider ?? undefined,
     source: r.source_id,
     sourceKind: r.source_kind,
+    sourceUrl: r.source_url ?? undefined,
     rating: Number(r.rating),
     ratingRationale: r.rating_rationale ?? undefined,
     promoted: r.promoted,
@@ -100,6 +102,7 @@ function eventToRow(e: CityEvent): TablesInsert<"events"> {
     ticket_provider: e.ticketProvider ?? null,
     source_id: e.source,
     source_kind: e.sourceKind,
+    source_url: e.sourceUrl ?? null,
     rating: e.rating,
     rating_rationale: e.ratingRationale ?? null,
     promoted: e.promoted,
@@ -156,6 +159,18 @@ function rowToPushSub(r: Tables<"push_subscriptions">): PushSub {
     reminders: r.reminders,
     weeklyDigest: r.weekly_digest,
     leaveBy: r.leave_by,
+  };
+}
+
+function rowToDiscoverySearch(r: Tables<"discovery_searches">): DiscoverySearch {
+  return {
+    id: r.id,
+    query: r.query,
+    cadenceHours: r.cadence_hours,
+    active: r.active,
+    createdAt: r.created_at,
+    lastRunAt: r.last_run_at ?? undefined,
+    lastStatus: r.last_status || undefined,
   };
 }
 
@@ -371,6 +386,78 @@ export const store = {
       .single()
       .throwOnError();
     return rowToIngest(data);
+  },
+
+  // ---------- discovery searches (scheduled web searches) ----------
+
+  async discoverySearches(): Promise<DiscoverySearch[]> {
+    const { data } = await db
+      .from("discovery_searches")
+      .select("*")
+      .order("created_at", { ascending: true })
+      .throwOnError();
+    return data.map(rowToDiscoverySearch);
+  },
+
+  async discoverySearchById(id: string): Promise<DiscoverySearch | undefined> {
+    const { data } = await db
+      .from("discovery_searches")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle()
+      .throwOnError();
+    return data ? rowToDiscoverySearch(data) : undefined;
+  },
+
+  /** Upsert keyed on the normalized query, so re-adding a search updates it. */
+  async addDiscoverySearch(query: string, cadenceHours: number): Promise<DiscoverySearch> {
+    const { data } = await db
+      .from("discovery_searches")
+      .upsert(
+        { query: query.trim(), cadence_hours: cadenceHours, active: true },
+        { onConflict: "query_key" },
+      )
+      .select()
+      .single()
+      .throwOnError();
+    return rowToDiscoverySearch(data);
+  },
+
+  async updateDiscoverySearch(
+    id: string,
+    patch: Partial<Pick<DiscoverySearch, "query" | "cadenceHours" | "active">>,
+  ): Promise<DiscoverySearch | undefined> {
+    const { data } = await db
+      .from("discovery_searches")
+      .update({
+        ...(patch.query !== undefined && { query: patch.query.trim() }),
+        ...(patch.cadenceHours !== undefined && { cadence_hours: patch.cadenceHours }),
+        ...(patch.active !== undefined && { active: patch.active }),
+      })
+      .eq("id", id)
+      .select()
+      .maybeSingle()
+      .throwOnError();
+    return data ? rowToDiscoverySearch(data) : undefined;
+  },
+
+  async deleteDiscoverySearch(id: string): Promise<boolean> {
+    const { data } = await db
+      .from("discovery_searches")
+      .delete()
+      .eq("id", id)
+      .select("id")
+      .throwOnError();
+    return data.length > 0;
+  },
+
+  /** Stamp a run's outcome; the scheduler keys "due" off last_run_at. */
+  async markDiscoveryRun(id: string, status: string): Promise<void> {
+    await db
+      .from("discovery_searches")
+      .update({ last_run_at: new Date().toISOString(), last_status: status.slice(0, 300) })
+      .eq("id", id)
+      .throwOnError();
   },
 
   // ---------- users ----------
