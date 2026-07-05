@@ -4,8 +4,10 @@ description: >
   Query the user's local Grapevine server for San Diego events: search what's
   on (tonight, this weekend, by vibe/category/tag), get full event details,
   traffic-aware drive ETAs, and manage the user's saved-events calendar and
-  interests. Use whenever the user asks what's happening in San Diego, wants
-  plans, asks if they can make it to an event, or wants an event saved.
+  interests. Can also discover NEW events by running a verified web search
+  (one-off or on a schedule the server re-runs). Use whenever the user asks
+  what's happening in San Diego, wants plans, asks if they can make it to an
+  event, wants an event saved, or wants the map topped up from the web.
 ---
 
 # Grapevine events
@@ -85,6 +87,42 @@ POST   /api/ext/v1/calendar/:eventId    # save (syncs to Google Calendar when co
 DELETE /api/ext/v1/calendar/:eventId    # remove
 ```
 
+## Web discovery (search the web → verified events)
+
+The server can build events from an AI web search. Every candidate is
+verified against the page it came from — dates, venue, a supporting quote —
+and only verified candidates can be added. The response separates `verified`
+(with `confidence` and `evidence`) from `rejected` (with `reason`), plus
+`pages_read` and `added`.
+
+```
+curl -s -X POST "$GRAPEVINE_URL/api/ext/v1/discovery/run" \
+  -H "X-Agent-Key: $GRAPEVINE_AGENT_KEY" -H "Content-Type: application/json" \
+  -d '{"query":"live jazz this month"}'
+```
+
+The city is appended to the query automatically. `dry_run` defaults to
+**true** (verify and report, write nothing) — show the user what was found,
+then re-run with `"dry_run": false` to commit the verified events. This is a
+slow call (web search + page reads + two LLM passes); expect ~1-2 minutes.
+
+### Scheduled searches
+
+The server re-runs saved searches itself — prefer this over polling from
+your side. `cadence_hours` is 1-336 (default 24; 168 = weekly). Saving an
+existing query again just updates its cadence.
+
+```
+GET    /api/ext/v1/discovery/searches          # list, with last_run/status
+POST   /api/ext/v1/discovery/searches          # {"query":"...","cadence_hours":24}
+DELETE /api/ext/v1/discovery/searches/:id      # stop re-running it
+```
+
+Scheduled runs commit verified events automatically and appear in the app's
+ingest history as kind "search". If you also keep your own cron job (e.g. an
+OpenClaw scheduled task that reviews what discovery found each morning),
+read `/api/ext/v1/events?from=...` rather than re-running discovery.
+
 ## Interests (feeds Grapevine's personal ranking)
 
 ```
@@ -104,8 +142,20 @@ next page load.
 
 - Only report events the API returned — never invent events, times, or ticket
   links.
-- **Confirm with the user before** saving/removing calendar entries or
-  changing interests; report exactly what changed afterwards.
+- **Confirm with the user before** saving/removing calendar entries, changing
+  interests, committing discovery results (`dry_run:false`), or scheduling /
+  deleting a recurring search; report exactly what changed afterwards.
+- Discovery results are machine-verified, not gospel: pass the `evidence`
+  quote and `source_url` along so the user can judge, and never present a
+  `rejected` candidate as a real event.
 - 401 → key mismatch; 503 → the API is disabled server-side (`AGENT_API_KEY`
   or `AGENT_USER_EMAIL` unset). If the server is unreachable, say Grapevine
   isn't running (`npm run dev` in the repo) rather than guessing.
+
+## Prefer MCP when available
+
+The same tools (plus `discover_events`, `schedule_search`, …) are served over
+Model Context Protocol at `POST $GRAPEVINE_URL/mcp` (Streamable HTTP, same
+key as `X-Agent-Key`/Bearer — or `?key=` in the URL for clients that can't
+set headers). If your runtime speaks MCP, connect there instead of shelling
+out to curl.

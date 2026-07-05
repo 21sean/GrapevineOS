@@ -19,6 +19,12 @@ Setup, deployment, and operations live in [SETUP.md](SETUP.md).
   Cloudflare Email Worker lands them in Postgres, and a local Ollama model
   extracts typed events, rates their "local buzz" 1 to 5, and flags
   pay-to-play placements before they are geocoded onto the map.
+- **Verified web discovery.** The server can also build events from an AI
+  web search - keyless search, page reads, LLM extraction - but nothing
+  reaches the map without passing a verification gate: deterministic checks
+  plus a skeptical second LLM pass that must confirm each candidate against
+  its source page (with a supporting quote) or reject it with a reason.
+  Searches can run once or on a saved schedule.
 - **A guarded concierge agent.** "Ask Grapevine" (hit ⌘K) is a LangGraph
   agent with typed graph state, Zod-validated tools, streaming token output,
   and human-in-the-loop confirmation for anything that writes.
@@ -61,6 +67,35 @@ machine by default.
 
 You can also paste any newsletter into **Admin -> Ingest** at any time. Same
 pipeline, manual entry.
+
+### Web discovery (search -> verify -> map)
+
+Newsletters are the spine, but they miss things. **Admin -> Discover** (and the
+`discover_events` MCP tool, and `POST /api/ext/v1/discovery/run`) tops the map
+up from the open web without trusting the model's first draft:
+
+1. **Search** the query (city appended automatically) via SearXNG or the
+   keyless DuckDuckGo fallback, then **read** the top result pages through the
+   same Readability + SSRF-guard pipeline the agent uses.
+2. **Extract** candidates one page at a time, so every candidate stays
+   attributable to exactly one URL.
+3. **Verify** before anything is written:
+   - deterministic gates - parseable dates, not in the past, not absurdly far
+     out, and the title must literally appear in the page text (a cheap
+     hallucination check);
+   - a second, skeptical LLM pass re-reads the page and must **confirm** the
+     event (date, venue, plus a supporting quote), **correct** a detail from
+     the page, or call it **unsupported**;
+   - candidates corroborated by two or more independent pages clear a lower
+     confidence bar; everything else needs `DISCOVERY_MIN_CONFIDENCE`
+     (default 0.7).
+4. **Commit**: verified events land with `sourceKind: "search"` and the
+   `sourceUrl` they were verified against; rejected candidates are reported
+   with their reason but never written. Every run is logged in ingest history.
+
+Saved searches re-run on a cadence (1 hour to 2 weeks) via a scheduler in the
+server - set them up in Admin -> Discover, over MCP (`schedule_search`), or
+via the external REST API.
 
 ## Ask Grapevine (the agent)
 
@@ -203,13 +238,19 @@ external assistants two ways:
 
 - **MCP server**: Streamable HTTP at `POST /mcp`, stateless, so it works across
   server restarts. Claude Code, Claude Desktop, or any MCP client can search
-  events, look up details, get ETAs, save to the calendar, and tune interests.
-  When `AGENT_API_KEY` is set the key must arrive as `X-Agent-Key` or a Bearer
-  token; setup snippets live in **Admin -> Providers**.
+  events, look up details, get ETAs, save to the calendar, tune interests, run
+  verified web discovery (`discover_events`), and manage its scheduled
+  searches. When `AGENT_API_KEY` is set the key arrives as `X-Agent-Key`, a
+  Bearer token, or `?key=` in the URL for clients that only take a URL -
+  which is exactly what **Claude Desktop / claude.ai custom connectors** need:
+  expose the server over HTTPS (tunnel + `MCP_PUBLIC_URL`), then add
+  `https://your-host/mcp?key=<AGENT_API_KEY>` under Settings -> Connectors.
+  Copy-paste snippets live in **Admin -> Providers**.
 - **External REST API** at `/api/ext/v1/*`, gated by an `X-Agent-Key` header.
-  Endpoints cover event search, event detail, ETAs, calendar read/write, and
-  interests. A ready-to-install [OpenClaw](https://openclaw.ai) skill
-  documenting all of it lives at `openclaw/skills/grapevine/SKILL.md`.
+  Endpoints cover event search, event detail, ETAs, calendar read/write,
+  interests, and web discovery (run now or scheduled). A ready-to-install
+  [OpenClaw](https://openclaw.ai) skill documenting all of it lives at
+  `openclaw/skills/grapevine/SKILL.md`.
 
 ## App tour
 
@@ -242,6 +283,9 @@ external assistants two ways:
   plus copy-paste MCP snippets so Claude can drive Grapevine from outside.
 - **Admin -> Ingest**: paste a newsletter, preview extracted events
   (geocoded and rated), approve which ones land on the map.
+- **Admin -> Discover**: search the web for events, review what verification
+  confirmed (with evidence quotes) or rejected (with reasons), approve the
+  keepers, and save searches the server re-runs on a schedule.
 - **Admin -> Sources**: the per-source inbox addresses with copy buttons.
 
 ## Layout
@@ -252,6 +296,7 @@ server/    Express 5 + tsx · supabase-js data layer (src/store.ts)
            LangGraph agent (src/agent/: graph, zod tools, NDJSON bridge,
            guardrails: Prompt Guard 2 classifier + persona rail)
            MCP server (src/mcp.ts) · CLI chat providers (src/providers.ts)
+           web discovery + verification + scheduler (src/discovery.ts)
 workers/   email-ingest Cloudflare Email Worker -> Supabase raw_emails
 supabase/  tracked SQL migrations
 openclaw/  installable OpenClaw skill for the external agent API

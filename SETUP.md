@@ -81,7 +81,7 @@ All app data lives in a Supabase Postgres project (free tier): `events`,
 `sources`, `users` (profiles for `auth.users`), `user_google_calendar`
 (Vault-backed), `calendar_entries`, `event_reactions`, `chat_threads`,
 `chat_messages`, `push_subscriptions`, `ingests`, `raw_emails`,
-`app_settings`, `geocode_cache`.
+`discovery_searches`, `app_settings`, `geocode_cache`.
 
 - **Schema** is tracked in `supabase/migrations/`.
 - **Access model**: RLS is enabled on every table with no policies and the
@@ -153,6 +153,50 @@ One-time dashboard setup (Authentication → Sign In / Providers):
   only price events starting within the next three hours.
 - Consider adding URL restrictions to the pk token (Mapbox dashboard →
   Tokens) once you have a production domain.
+
+## Web discovery (scheduled searches)
+
+Web discovery (Admin → Discover; `discover_events` over MCP;
+`/api/ext/v1/discovery/*` over REST) needs no keys: search uses SearXNG when
+`SEARXNG_URL` is set and falls back to keyless DuckDuckGo scraping, and both
+extraction and verification run through the provider picked in
+**Admin → Providers** (local Ollama by default). Tuning lives in `server/.env`:
+
+- `DISCOVERY_MIN_CONFIDENCE` (default `0.7`) — verifier confidence a
+  candidate needs before it can be added; candidates corroborated by 2+
+  independent pages clear `0.5`.
+- `DISCOVERY_TICK_SECONDS` (default `300`) — how often the scheduler checks
+  whether a saved search is due. Each check is one cheap query; runs
+  themselves are serialized and never overlap.
+- `DISCOVERY_SCHEDULE=0` — disable the scheduler entirely (one-off runs from
+  the admin UI / MCP / REST still work).
+
+A run reads at most a handful of pages and makes one extraction plus one
+verification LLM call per readable page, so a daily cadence is light even on
+a laptop GPU.
+
+## MCP for Claude Desktop / claude.ai (custom connector)
+
+Claude Code on the same machine can talk to `http://localhost:8787/mcp`
+directly (snippets in **Admin → Providers**). Claude Desktop and claude.ai
+**custom connectors** instead connect from Anthropic's side, so the endpoint
+must be reachable over public HTTPS:
+
+1. Expose the API server: `cloudflared tunnel --url http://localhost:8787`
+   (or ngrok, or a reverse proxy on a deployed box).
+2. Set `MCP_PUBLIC_URL=https://<your-tunnel-host>` in `server/.env` so
+   Admin → Providers advertises the right endpoint.
+3. Set `AGENT_API_KEY` (you are about to put this server on the internet) and
+   restart.
+4. In Claude Desktop or claude.ai: Settings → Connectors → **Add custom
+   connector** → URL `https://<your-tunnel-host>/mcp?key=<AGENT_API_KEY>`.
+   Connectors can't send custom headers, so the key rides as a query
+   parameter — treat that URL as a secret. Skip the OAuth fields; the server
+   doesn't use OAuth.
+
+Once connected, Claude can search events, get details and ETAs, save to the
+calendar (writes act on `AGENT_USER_EMAIL`), tune interests, fix rarities,
+run verified web discovery, and manage scheduled searches.
 
 ## Running the production build locally
 

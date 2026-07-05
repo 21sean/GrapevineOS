@@ -20,6 +20,7 @@ import { AIMessage, HumanMessage, type BaseMessage } from "@langchain/core/messa
 import { Router, type Request, type Response } from "express";
 import { sessionUser } from "../auth.js";
 import { removeEventForUser, saveEventForUser } from "../calendar.js";
+import { runDiscovery } from "../discovery.js";
 import {
   GUARD_MODEL_LABEL,
   inputRefusalMessage,
@@ -592,6 +593,56 @@ agent.delete("/api/ext/v1/calendar/:eventId", extAuth, async (req, res) => {
     res.json(result);
   } catch (err) {
     res.status(502).json({ error: String(err) });
+  }
+});
+
+// ---------- web discovery (search the web → verified events) ----------
+
+/**
+ * Run a discovery search now. Body: { query, dry_run? }. Dry runs verify and
+ * report without writing — the polite default for external agents; pass
+ * dry_run:false to commit the verified events.
+ */
+agent.post("/api/ext/v1/discovery/run", extAuth, async (req, res) => {
+  const query = String(req.body?.query ?? "").trim();
+  if (query.length < 3) return res.status(400).json({ error: "query required (3+ chars)" });
+  try {
+    res.json(await runDiscovery({ query, commit: req.body?.dry_run === false }));
+  } catch (err) {
+    res.status(502).json({ error: String(err).slice(0, 300) });
+  }
+});
+
+agent.get("/api/ext/v1/discovery/searches", extAuth, async (_req, res) => {
+  try {
+    res.json({ searches: await store.discoverySearches() });
+  } catch (err) {
+    res.status(502).json({ error: String(err).slice(0, 300) });
+  }
+});
+
+/** Save a scheduled search: { query, cadence_hours? } (1-336, default 24). */
+agent.post("/api/ext/v1/discovery/searches", extAuth, async (req, res) => {
+  const query = String(req.body?.query ?? "").trim();
+  if (query.length < 3 || query.length > 200) {
+    return res.status(400).json({ error: "query must be 3-200 chars" });
+  }
+  const n = Number(req.body?.cadence_hours);
+  const cadence = Number.isFinite(n) ? Math.min(Math.max(1, Math.round(n)), 336) : 24;
+  try {
+    res.json(await store.addDiscoverySearch(query, cadence));
+  } catch (err) {
+    res.status(502).json({ error: String(err).slice(0, 300) });
+  }
+});
+
+agent.delete("/api/ext/v1/discovery/searches/:id", extAuth, async (req, res) => {
+  try {
+    const deleted = await store.deleteDiscoverySearch(String(req.params.id));
+    if (!deleted) return res.status(404).json({ error: "unknown search" });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(502).json({ error: String(err).slice(0, 300) });
   }
 });
 

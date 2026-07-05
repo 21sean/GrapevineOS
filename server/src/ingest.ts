@@ -5,8 +5,13 @@ import { normalizeRRule } from "./recurrence.js";
 import { store } from "./store.js";
 import { CATEGORIES, type Category, type CityEvent, type Rarity } from "./types.js";
 
-const EXTRACTION_SYSTEM = (city: string, tz: string, today: string) => `
-You extract local events from newsletter emails into strict JSON.
+const EXTRACTION_SYSTEM = (
+  city: string,
+  tz: string,
+  today: string,
+  origin: "newsletter" | "web" = "newsletter",
+) => `
+You extract local events from ${origin === "web" ? "web pages" : "newsletter emails"} into strict JSON.
 
 City: ${city}. Timezone: ${tz}. Today's date: ${today}.
 
@@ -47,26 +52,43 @@ Rules:
 - Never invent ticket URLs. Use null when absent.
 - If the email lists many events, extract each one separately.
 - If an event repeats on a schedule (a weekly market, run club, trivia night), emit ONE
-  event: set "recurrence" to its RRULE and anchor "start"/"end" to the next occurrence.`;
+  event: set "recurrence" to its RRULE and anchor "start"/"end" to the next occurrence.${
+    origin === "web"
+      ? `
+- The text is ONE web page's readable content and may include navigation junk,
+  unrelated links, comments, or stale listings from past years. Extract only
+  events this page itself announces with a concrete upcoming date — never
+  reconstruct an event from a passing mention or a bare link.`
+      : ""
+  }`;
 
 export interface ExtractedEvent extends CityEvent {}
 
-function slugId(title: string, start: string): string {
+export function slugId(title: string, start: string): string {
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
   const hash = crypto.createHash("sha1").update(title + start).digest("hex").slice(0, 6);
   return `${slug}-${hash}`;
 }
 
-/** Run LLM extraction over a raw email, then geocode the venues. */
+/** Run LLM extraction over a raw email or web page, then geocode the venues. */
 export async function extractEvents(opts: {
   text: string;
   source: string;
   model?: string;
+  /** Provenance stamped on the results; also tunes the prompt. Default: newsletter. */
+  sourceKind?: CityEvent["sourceKind"];
+  /** Page the text came from — web discovery verifies candidates against it. */
+  sourceUrl?: string;
 }): Promise<ExtractedEvent[]> {
   const settings = await store.settings();
   const today = new Date().toLocaleDateString("en-CA", { timeZone: settings.tz });
   const raw = await generateJSON({
-    system: EXTRACTION_SYSTEM(settings.city, settings.tz, today),
+    system: EXTRACTION_SYSTEM(
+      settings.city,
+      settings.tz,
+      today,
+      opts.sourceKind === "search" ? "web" : "newsletter",
+    ),
     user: opts.text.slice(0, 24000),
     model: opts.model,
   });
@@ -107,7 +129,8 @@ export async function extractEvents(opts: {
       ticketUrl: it.ticketUrl || undefined,
       ticketProvider: it.ticketProvider || undefined,
       source: opts.source,
-      sourceKind: "newsletter",
+      sourceKind: opts.sourceKind ?? "newsletter",
+      ...(opts.sourceUrl && { sourceUrl: opts.sourceUrl }),
       rating: clampRating(it.buzz),
       ratingRationale: it.buzzWhy ? String(it.buzzWhy) : undefined,
       promoted: Boolean(it.promoted),

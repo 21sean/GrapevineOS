@@ -5,6 +5,7 @@ import {
   CheckIcon,
   ClipboardPasteIcon,
   CopyIcon,
+  GlobeIcon,
   HeartIcon,
   InboxIcon,
   LogOutIcon,
@@ -825,7 +826,12 @@ function IngestRow({
   now: Date
   onSelect: (id: string) => void
 }) {
-  const KindIcon = record.kind === "email" ? MailIcon : ClipboardPasteIcon
+  const KindIcon =
+    record.kind === "email"
+      ? MailIcon
+      : record.kind === "search"
+        ? GlobeIcon
+        : ClipboardPasteIcon
   return (
     <div className="flex flex-col gap-1 px-3 py-2.5">
       <div className="flex items-baseline justify-between gap-2">

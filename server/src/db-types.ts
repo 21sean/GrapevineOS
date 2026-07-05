@@ -159,6 +159,37 @@ export type Database = {
           },
         ]
       }
+      discovery_searches: {
+        Row: {
+          active: boolean
+          cadence_hours: number
+          created_at: string
+          id: string
+          last_run_at: string | null
+          last_status: string
+          query: string
+          query_key: string | null
+        }
+        Insert: {
+          active?: boolean
+          cadence_hours?: number
+          created_at?: string
+          id?: string
+          last_run_at?: string | null
+          last_status?: string
+          query: string
+        }
+        Update: {
+          active?: boolean
+          cadence_hours?: number
+          created_at?: string
+          id?: string
+          last_run_at?: string | null
+          last_status?: string
+          query?: string
+        }
+        Relationships: []
+      }
       event_reactions: {
         Row: {
           created_at: string
@@ -220,6 +251,7 @@ export type Database = {
           recurrence: string | null
           source_id: string
           source_kind: Database["public"]["Enums"]["event_source_kind"]
+          source_url: string | null
           starts_at: string
           tags: string[]
           ticket_provider: string | null
@@ -249,6 +281,7 @@ export type Database = {
           recurrence?: string | null
           source_id: string
           source_kind?: Database["public"]["Enums"]["event_source_kind"]
+          source_url?: string | null
           starts_at: string
           tags?: string[]
           ticket_provider?: string | null
@@ -278,6 +311,7 @@ export type Database = {
           recurrence?: string | null
           source_id?: string
           source_kind?: Database["public"]["Enums"]["event_source_kind"]
+          source_url?: string | null
           starts_at?: string
           tags?: string[]
           ticket_provider?: string | null
@@ -616,8 +650,8 @@ export type Database = {
         | "community"
       event_rarity: "common" | "notable" | "rare"
       event_reaction: "going" | "went" | "not_for_me"
-      event_source_kind: "seed" | "newsletter" | "manual"
-      ingest_kind: "email" | "manual"
+      event_source_kind: "seed" | "newsletter" | "manual" | "search"
+      ingest_kind: "email" | "manual" | "search"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -756,8 +790,8 @@ export const Constants = {
       ],
       event_rarity: ["common", "notable", "rare"],
       event_reaction: ["going", "went", "not_for_me"],
-      event_source_kind: ["seed", "newsletter", "manual"],
-      ingest_kind: ["email", "manual"],
+      event_source_kind: ["seed", "newsletter", "manual", "search"],
+      ingest_kind: ["email", "manual", "search"],
     },
   },
 } as const
