@@ -15,7 +15,7 @@ import { listInstalled, ollamaBase } from "./ollama.js";
 import { catalog, logo } from "./catalog.js";
 import { eta, geocode } from "./mapbox.js";
 import { extractEvents, rateEvent } from "./ingest.js";
-import { listInbox, reprocessInbox, startInboxPoll } from "./inbox.js";
+import { kickInbox, listInbox, reprocessInbox, startInboxPoll } from "./inbox.js";
 import { LLM_PROVIDERS, REACTIONS, type CityEvent, type Reaction } from "./types.js";
 
 const app = express();
@@ -309,32 +309,19 @@ app.post("/api/ingest/commit", async (req, res) => {
 });
 
 /**
- * Endpoint the Cloudflare Email Worker posts to (when you expose this
- * server via a tunnel or deploy it). Guarded by a shared key.
+ * Kick endpoint the Cloudflare Email Worker pings (when you expose this server
+ * via a tunnel or deploy it) right after it inserts the email into raw_emails.
+ * The worker's insert is the durable ledger; this just wakes the processor so
+ * extraction runs on arrival instead of on a timer. Fire-and-forget: the
+ * worker isn't blocked on the local model, and the row's processed_at/retry
+ * state owns durability. Guarded by a shared key.
  */
-app.post("/api/ingest/inbound", async (req, res) => {
+app.post("/api/ingest/inbound", (req, res) => {
   if (req.get("X-Ingest-Key") !== process.env.INGEST_SHARED_KEY) {
     return res.status(401).json({ error: "bad ingest key" });
   }
-  const { to = "", subject = "", text = "" } = req.body ?? {};
-  // catch-all addressing: dostuff@… → source "dostuff"
-  const source = String(to).split("@")[0] || "inbound";
-  try {
-    const events = await extractEvents({ text: `Subject: ${subject}\n\n${text}`, source });
-    const added = await store.addEvents(events);
-    await store.logIngest({
-      source,
-      kind: "email",
-      subject: String(subject) || undefined,
-      extracted: events.length,
-      added: added.length,
-      events: eventSnapshot(added),
-    });
-    enrichLater(added);
-    res.json({ extracted: events.length, added: added.length });
-  } catch (err) {
-    res.status(502).json({ error: String(err) });
-  }
+  kickInbox();
+  res.json({ ok: true, queued: true });
 });
 
 // ---------- web discovery (AI web search → verified events, on a schedule) ----------

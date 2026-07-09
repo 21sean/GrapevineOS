@@ -1,16 +1,21 @@
 /**
  * Inbox ingestion over Postgres (replaces the Cloudflare KV poll).
  *
- * The email worker inserts every inbound newsletter into raw_emails; this
- * poller picks up unprocessed rows, runs them through the same Ollama
- * pipeline as manual pastes, and stamps processed_at + the ingest log id
- * onto the row. One cheap indexed query per tick — no KV list-op budget,
- * no Cloudflare API token, and kv-processed.json is gone: the row itself
- * is the ledger.
+ * The email worker inserts every inbound newsletter into raw_emails, then
+ * pings /api/ingest/inbound; that calls kickInbox() here, which picks up the
+ * unprocessed rows, runs them through the same Ollama pipeline as manual
+ * pastes, and stamps processed_at + the ingest log id onto the row. The row
+ * itself is the ledger — no KV list-op budget, no Cloudflare API token.
  *
- * A row that fails (Ollama down, bad extraction) keeps processed_at null
- * and records the error, so it retries next tick and the admin inbox can
- * show what's stuck — same retry semantics the KV poller had.
+ * Event-driven by default: nothing runs on a timer, so the local model isn't
+ * woken (and swapped into VRAM) every minute just to find an empty queue.
+ * A backlog pass runs once at boot to drain anything that arrived while the
+ * server was down, and INBOX_POLL_SECONDS re-enables interval polling as a
+ * safety net for setups where the worker can't reach this server.
+ *
+ * A row that fails (Ollama down, bad extraction) keeps processed_at null and
+ * records the error, so the next kick (or the next inbound email) retries it
+ * and the admin inbox can show what's stuck — same retry semantics as before.
  */
 import { db } from "./db.js";
 import type { Tables } from "./db-types.js";
@@ -18,11 +23,17 @@ import { enrichEventImages } from "./images.js";
 import { extractEvents } from "./ingest.js";
 import { store } from "./store.js";
 
-const DEFAULT_POLL_SECONDS = 60;
+/** Rows drained per query; a full batch re-runs so one kick clears a backlog. */
+const BATCH = 20;
 
+/** Interval polling is opt-in now (event-driven by default). Returns null to
+ * mean "no timer" unless INBOX_POLL_SECONDS is set to a positive value. */
 function pollIntervalMs(): number | null {
   if (/^(0|false|no)$/i.test(process.env.INBOX_POLL ?? "")) return null;
-  const seconds = Number(process.env.INBOX_POLL_SECONDS ?? DEFAULT_POLL_SECONDS);
+  const raw = process.env.INBOX_POLL_SECONDS;
+  if (!raw) return null;
+  const seconds = Number(raw);
+  if (!Number.isFinite(seconds) || seconds <= 0) return null;
   return Math.max(15, seconds) * 1000;
 }
 
@@ -54,36 +65,61 @@ async function processEmail(row: RawEmail): Promise<{ extracted: number; added: 
 }
 
 let running = false;
+let rerun = false;
 
 async function tick(): Promise<void> {
-  if (running) return; // don't overlap a slow LLM pass with the next tick
+  // A kick that lands mid-pass sets rerun instead of overlapping a slow LLM
+  // pass — the in-flight pass loops once more so nothing is left stranded.
+  if (running) {
+    rerun = true;
+    return;
+  }
   running = true;
   try {
-    const { data: pending } = await db
-      .from("raw_emails")
-      .select("*")
-      .is("processed_at", null)
-      .order("received_at", { ascending: true })
-      .limit(20)
-      .throwOnError();
-    for (const row of pending) {
-      try {
-        const r = await processEmail(row);
-        console.log(
-          `[grapevine] inbox: ${row.source} “${row.subject || "(no subject)"}” → ` +
-            `${r.extracted} extracted, ${r.added} new`,
-        );
-      } catch (err) {
-        const message = String(err).slice(0, 300);
-        console.log(`[grapevine] inbox: ${row.email_key} failed — ${message}`);
-        await db.from("raw_emails").update({ error: message }).eq("id", row.id);
+    do {
+      rerun = false;
+      const { data: pending } = await db
+        .from("raw_emails")
+        .select("*")
+        .is("processed_at", null)
+        .order("received_at", { ascending: true })
+        .limit(BATCH)
+        .throwOnError();
+      let processed = 0;
+      for (const row of pending) {
+        try {
+          const r = await processEmail(row);
+          processed++;
+          console.log(
+            `[grapevine] inbox: ${row.source} “${row.subject || "(no subject)"}” → ` +
+              `${r.extracted} extracted, ${r.added} new`,
+          );
+        } catch (err) {
+          const message = String(err).slice(0, 300);
+          console.log(`[grapevine] inbox: ${row.email_key} failed — ${message}`);
+          await db.from("raw_emails").update({ error: message }).eq("id", row.id);
+        }
       }
-    }
+      // A full batch may not be the whole backlog — drain the rest now, but
+      // only if we made progress. A full batch that all failed keeps its rows
+      // unprocessed, so looping would just re-select and re-fail them forever;
+      // leave those for the next kick/startup pass to retry.
+      if (pending.length === BATCH && processed > 0) rerun = true;
+    } while (rerun);
   } catch (err) {
-    console.log(`[grapevine] inbox poll error: ${String(err).slice(0, 200)}`);
+    console.log(`[grapevine] inbox error: ${String(err).slice(0, 200)}`);
   } finally {
     running = false;
   }
+}
+
+/**
+ * Process pending inbox rows now. The email worker calls this (via
+ * /api/ingest/inbound) right after inserting an email, so extraction starts on
+ * arrival instead of on a timer. Bursts coalesce into one pass.
+ */
+export function kickInbox(): void {
+  void tick();
 }
 
 // ---------- admin inbox (views over the same table) ----------
@@ -144,14 +180,19 @@ export async function reprocessInbox(key: string): Promise<{
   return processEmail(row);
 }
 
-/** Starts the poll loop unless INBOX_POLL=0. */
+/**
+ * Drain any backlog at boot (mail that arrived while the server was down, or
+ * dead letters that were reprocessed into the table), then stay event-driven:
+ * kickInbox() runs on each inbound email. Set INBOX_POLL_SECONDS to also poll
+ * on a timer where the worker can't reach this server.
+ */
 export function startInboxPoll(): void {
+  void tick();
   const intervalMs = pollIntervalMs();
   if (!intervalMs) {
-    console.log("[grapevine] inbox: polling disabled (INBOX_POLL=0)");
+    console.log("[grapevine] inbox: event-driven (processes on inbound email; no polling)");
     return;
   }
-  console.log(`[grapevine] inbox: polling raw_emails every ${intervalMs / 1000}s`);
-  void tick();
+  console.log(`[grapevine] inbox: polling raw_emails every ${intervalMs / 1000}s (safety net)`);
   setInterval(() => void tick(), intervalMs);
 }

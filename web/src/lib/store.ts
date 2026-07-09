@@ -138,7 +138,9 @@ export const useGrapevine = create<GrapevineState>()(
       detailOpen: false,
       adminOpen: false,
       interestsOpen: false,
-      carouselOn: true,
+      // Off by default: the map opens static (no auto-fly through events).
+      // The "happening now" card shows a Play button to start the tour by hand.
+      carouselOn: false,
       carouselIdx: 0,
       trafficOn: true,
       userPos: null,

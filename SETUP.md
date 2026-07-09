@@ -41,10 +41,6 @@ anything that arrived while the machine was asleep. If the Supabase insert
 ever fails, the worker dead-letters the raw email to the `RAW_EMAILS` KV
 namespace (30-day TTL) so nothing is lost.
 
-<p align="center">
-  <img src="docs/email-worker.png" width="900" alt="Email ingestion pipeline: newsletters sent to a catch-all address hit Cloudflare Email Routing, then a Cloudflare Email Worker parses each message (the To: line becomes the source tag) and writes one idempotent row to the Supabase raw_emails table, which the local server polls for unprocessed rows. If the insert fails the worker dead-letters the raw email to a Cloudflare KV store with a 30-day TTL; an optional push mode can POST straight to the API for instant processing.">
-</p>
-
 **Point the catch-all at the worker** (Cloudflare dashboard, your zone):
 
 > Email → Email Routing → Routing rules → **Catch-all** → Edit →
@@ -61,9 +57,12 @@ npx wrangler secret put SUPABASE_SECRET_KEY   # once, same key as server/.env
 npm run deploy
 ```
 
-The poller config lives in `server/.env` (`INBOX_POLL_SECONDS`, default 60;
-`INBOX_POLL=0` to pause it). Each tick is one indexed Postgres query, and
-processed state lives on the row itself.
+Processing is event-driven: the worker pings `/api/ingest/inbound` after each
+insert (set `INGEST_URL`/`INGEST_KEY` in the worker to your tunnel or deploy
+URL) and the server extracts the new row right away, so the local model isn't
+woken on a timer. A backlog pass runs once at startup. Where the worker can't
+reach the server, set `INBOX_POLL_SECONDS` in `server/.env` to also poll on a
+timer. Processed state lives on the row itself.
 
 ### Is it free?
 

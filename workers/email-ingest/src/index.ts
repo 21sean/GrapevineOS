@@ -5,10 +5,12 @@
  * all arrive here without being created first — the To: address carries the
  * source attribution for free.
  *
- * Each email is inserted into the Supabase raw_emails table (the local
- * server polls unprocessed rows). If that insert fails, the raw copy goes to
- * the RAW_EMAILS KV namespace as a dead letter so nothing is lost — reprocess
- * it from Admin → Ingest once Supabase is reachable again.
+ * Each email is inserted into the Supabase raw_emails table (the durable
+ * ledger). If INGEST_URL is set, the worker then pings the server so it
+ * processes the new row immediately (event-driven — no polling). If the
+ * insert fails, the raw copy goes to the RAW_EMAILS KV namespace as a dead
+ * letter so nothing is lost — reprocess it from Admin → Ingest once Supabase
+ * is reachable again.
  */
 import PostalMime from "postal-mime";
 

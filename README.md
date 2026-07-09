@@ -65,6 +65,14 @@ machine by default.
    geocoding (Mapbox, cached), a jaded-local 1 to 5 buzz rating, and a
    `promoted` flag for pay-to-play placements. Nothing leaves your machine.
 
+The inbox is the pipeline. Each newsletter lands as one idempotent Postgres
+row the local server polls; if an insert ever fails, the worker dead-letters
+the raw email to KV so nothing is lost:
+
+<p align="center">
+  <img src="docs/email-worker.png" width="900" alt="Email ingestion pipeline: newsletters sent to a catch-all address hit Cloudflare Email Routing, then a Cloudflare Email Worker parses each message (the To: line becomes the source tag) and writes one idempotent row to the Supabase raw_emails table, which the local server polls for unprocessed rows. If the insert fails the worker dead-letters the raw email to a Cloudflare KV store with a 30-day TTL; an optional push mode can POST straight to the API for instant processing.">
+</p>
+
 You can also paste any newsletter into **Admin -> Ingest** at any time. Same
 pipeline, manual entry.
 
@@ -126,11 +134,12 @@ ETAs mid-chat.
 
 ### Agent architecture (LangGraph + LangChain)
 
-The concierge is a LangGraph `StateGraph` running against `ChatOllama`, so
-swapping in a cloud model later is a one-line change.
+The concierge is a LangGraph `StateGraph`. `ChatOllama` drives it by default,
+and Admin -> Providers can swap a subscription CLI in for chat without touching
+the graph.
 
 <p align="center">
-  <img src="docs/ask-grapevine.png" width="900" alt="The Ask Grapevine agent as a LangGraph state machine: a user message (Cmd-K) enters the agent node, a ChatOllama call with tools bound and a system prompt rebuilt each turn; if the model emits tool_calls they run in the tools node (data tools like search_events and read_page run server-side, UI tools like propose_calendar emit confirm cards) and results return to the agent while the typed toolRounds counter is under six; if the model emits no tool_calls the reply streams to the browser; once the budget is spent a finalize node answers with no tools so the loop can never spin forever. Graph state is a Zod 4 StateSchema (messages plus a toolRounds ReducedValue an Overwrite zeroes each turn) checkpointed by an ephemeral MemorySaver keyed by thread id; model nodes retry connection failures (safe before the first token) and idle-out stalled generations at 45s, while the tools node never retries so UI frames stream exactly once.">
+  <img src="docs/ask-grapevine.png" width="900" alt="The Ask Grapevine agent as a LangGraph state machine: a user message (Cmd-K) enters the agent node, the chat engine with tools bound (Ollama by default) and a system prompt rebuilt each turn; if the model emits tool_calls they run in the tools node (data tools like search_events and read_page run server-side, UI tools show_on_map, set_filters, propose_calendar, save_calendar, set_rarity, and update_interests emit confirm cards) and results return to the agent while the typed toolRounds counter is under six; if the model emits no tool_calls the reply streams to the browser; once the budget is spent a finalize node answers with no tools so the loop can never spin forever. Graph state is a Zod 4 StateSchema (messages plus a toolRounds ReducedValue an Overwrite zeroes each turn) checkpointed by an ephemeral MemorySaver keyed by thread id; model nodes retry connection failures (safe before the first token) and idle-out stalled generations at 45s, while the tools node never retries so UI frames stream exactly once. Beyond the loop: chat can route to a subscription CLI (Claude Code, Codex, Gemini, or Copilot), one-shot and digest-grounded with no API keys; Claude Code hooks back into Grapevine's own /mcp endpoint to keep event search, ETAs, and calendar saves; and external agents drive the same core over REST (the installable OpenClaw skill) and MCP (Claude Code and Claude Desktop).">
 </p>
 
 - **Typed graph state** (LangGraph `StateSchema`, plain Zod 4): the transcript
@@ -178,7 +187,7 @@ with no paid APIs.
 &nbsp;![local · no paid APIs](https://img.shields.io/badge/local-no_paid_APIs-0b3b2e)
 
 <p align="center">
-  <img src="docs/guardrails.png" width="900" alt="Guardrails, defense in depth: a user message passes an input rail (Llama Prompt Guard 2, 86M ONNX) that blocks on malicious ≥ 0.80; benign messages enter the LangGraph agent (identity-pinned system prompt, agent and tools nodes); a content rail re-checks untrusted tool output and withholds indirect-injection hits; a deterministic output persona guard replaces identity leaks before the reply reaches the browser. Every rail fails safe.">
+  <img src="docs/guardrails.png" width="900" alt="Guardrails, defense in depth: a user message passes an input rail (Llama Prompt Guard 2, 86M ONNX) that blocks on malicious ≥ 0.80 before either engine runs; benign messages enter the engine, a LangGraph agent on Ollama or a CLI provider (Claude Code, Codex, Gemini, Copilot), with the same rails bracketing both paths; a content rail re-checks the agent's search_web and read_page text and withholds indirect-injection hits (web discovery has its own verify gate); a deterministic output persona guard, keyed to the active model or CLI provider, replaces identity leaks before the reply reaches the browser. Every rail fails safe.">
 </p>
 
 Four layers, each covering the gap the previous one leaves:
@@ -199,7 +208,7 @@ Why this shape:
   probabilistic; the one failure we care about most, the model naming its
   vendor, should be *impossible*, not merely improbable. It streams with a
   64-character hold-back so a leak split across token chunks can't slip
-  through, and it is keyed to the active Ollama model.
+  through, and it is keyed to the active model or CLI provider.
 
 A red-team smoke test, including the exact persona-break from the incident
 above, ships alongside:
