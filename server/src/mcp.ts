@@ -6,18 +6,30 @@
  *
  * Transport: Streamable HTTP at POST /mcp, stateless (a fresh server+transport
  * pair per request — no session bookkeeping, works across server restarts).
- * Auth mirrors the app's local-first stance: open when AGENT_API_KEY is unset,
- * otherwise the key must arrive as X-Agent-Key, a Bearer token, or — for
- * clients that can't set headers, like Claude Desktop/claude.ai custom
- * connectors — a ?key= query parameter on the endpoint URL. Writes act on the
- * account named by AGENT_USER_EMAIL, same as /api/ext/v1.
  *
- * Claude Desktop custom connectors: expose this server over HTTPS (tunnel or
- * reverse proxy, see MCP_PUBLIC_URL), then add
- *   https://your-host/mcp?key=<AGENT_API_KEY>
- * under Settings → Connectors → Add custom connector. The endpoint answers
- * CORS preflights so browser-based MCP clients (e.g. the MCP inspector) work
- * too; GET/DELETE return 405 as the spec allows for stateless servers.
+ * Auth is OAuth 2.1, with Supabase Auth as the authorization server (the same
+ * one the web app signs in with). The pieces:
+ *   - RFC 9728 protected-resource metadata at
+ *     /.well-known/oauth-protected-resource[/mcp], pointing at Supabase's
+ *     issuer — whose RFC 8414 discovery advertises /authorize + /token with
+ *     PKCE and dynamic client registration (RFC 7591).
+ *   - Unauthenticated requests get 401 + WWW-Authenticate: Bearer
+ *     resource_metadata="…", which is what makes an MCP client (Claude
+ *     Desktop / claude.ai connectors, Claude Code) open the browser consent
+ *     flow on its own — the connector dialog needs nothing but the /mcp URL.
+ *   - Access tokens are ordinary Supabase JWTs, verified locally against the
+ *     project JWKS. Each caller acts as the Grapevine account they signed in
+ *     with — calendar saves and interest writes are per-user now.
+ *
+ * Headless fallbacks: AGENT_API_KEY as X-Agent-Key/Bearer still works for
+ * scripts (and the in-process CLI loopback uses a per-boot internal key);
+ * writes on that path act on AGENT_USER_EMAIL, same as /api/ext/v1. The old
+ * ?key= query-param auth is gone — OAuth covers the URL-only connector case
+ * it existed for.
+ *
+ * The endpoint answers CORS preflights so browser-based MCP clients (e.g. the
+ * MCP inspector) work too; GET/DELETE return 405 as the spec allows for
+ * stateless servers.
  *
  * Tool schemas are plain JSON Schema via the low-level Server API, sharing the
  * executors in agent/context.ts with the in-app agent and the ext REST API.
@@ -42,6 +54,7 @@ import {
   vetTopics,
   type SearchParams,
 } from "./agent/context.js";
+import { INTERNAL_MCP_KEY, ISSUER, userFromClaims, verifySupabaseToken } from "./auth.js";
 import { removeEventForUser, saveEventForUser } from "./calendar.js";
 import { runDiscovery } from "./discovery.js";
 import { store } from "./store.js";
@@ -207,8 +220,13 @@ function fail(message: string) {
   return { content: [{ type: "text" as const, text: message }], isError: true };
 }
 
-/** The account MCP writes act on — bound by env, never by the caller. */
-async function boundUser(): Promise<User | { error: string }> {
+/**
+ * The account MCP writes act on. OAuth callers carry their own user (from the
+ * verified token); key-authed and open-mode callers fall back to the account
+ * named by AGENT_USER_EMAIL, same as /api/ext/v1.
+ */
+async function boundUser(oauthUser: User | null): Promise<User | { error: string }> {
+  if (oauthUser) return oauthUser;
   const email = process.env.AGENT_USER_EMAIL;
   if (!email) return { error: "set AGENT_USER_EMAIL in server/.env to enable calendar/interest writes" };
   const user = await store.userByEmail(email);
@@ -216,7 +234,7 @@ async function boundUser(): Promise<User | { error: string }> {
   return user;
 }
 
-async function callTool(name: string, args: Record<string, unknown>) {
+async function callTool(name: string, args: Record<string, unknown>, oauthUser: User | null) {
   const ctx = await buildCtx();
   switch (name) {
     case "search_events": {
@@ -254,7 +272,7 @@ async function callTool(name: string, args: Record<string, unknown>) {
       return "error" in result ? fail(String(result.error)) : ok(result);
     }
     case "list_saved_events": {
-      const user = await boundUser();
+      const user = await boundUser(oauthUser);
       if ("error" in user) return fail(user.error);
       const entries = await store.userCalendar(user.id);
       const events = entries
@@ -265,7 +283,7 @@ async function callTool(name: string, args: Record<string, unknown>) {
     }
     case "save_event":
     case "unsave_event": {
-      const user = await boundUser();
+      const user = await boundUser(oauthUser);
       if ("error" in user) return fail(user.error);
       const id = String(args.event_id ?? "");
       const result =
@@ -336,7 +354,7 @@ async function callTool(name: string, args: Record<string, unknown>) {
       return deleted ? ok({ deleted: true, id }) : fail("unknown scheduled search");
     }
     case "update_interests": {
-      const user = await boundUser();
+      const user = await boundUser(oauthUser);
       if ("error" in user) return fail(user.error);
       const addLoves = vetTopics(args.addLoves);
       const addAvoids = vetTopics(args.addAvoids);
@@ -366,12 +384,12 @@ async function callTool(name: string, args: Record<string, unknown>) {
   }
 }
 
-function buildServer(): Server {
+function buildServer(oauthUser: User | null): Server {
   const server = new Server(SERVER_INFO, { capabilities: { tools: {} } });
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
     try {
-      return await callTool(req.params.name, req.params.arguments ?? {});
+      return await callTool(req.params.name, req.params.arguments ?? {}, oauthUser);
     } catch (err) {
       return fail(String(err).slice(0, 300));
     }
@@ -383,21 +401,58 @@ function buildServer(): Server {
 // HTTP wiring
 // ---------------------------------------------------------------------------
 
-export function mcpKeyRequired(): boolean {
-  return !!process.env.AGENT_API_KEY;
+/** "oauth" unless MCP_OPEN=1 restores the old unauthenticated behavior. */
+export function mcpAuthMode(): "oauth" | "open" {
+  return process.env.MCP_OPEN === "1" ? "open" : "oauth";
 }
 
-function mcpAuth(req: Request, res: Response, next: () => void) {
+const RESOURCE_METADATA_PATH = "/.well-known/oauth-protected-resource";
+
+/**
+ * The origin MCP clients reached us on. MCP_PUBLIC_URL wins when set (tunnel
+ * or reverse proxy); otherwise trust the request itself — index.ts enables
+ * "trust proxy" so X-Forwarded-Proto from a tunnel yields https here.
+ */
+function publicOrigin(req: Request): string {
+  const base = process.env.MCP_PUBLIC_URL ?? `${req.protocol}://${req.get("host")}`;
+  return base.replace(/\/$/, "");
+}
+
+declare module "express-serve-static-core" {
+  interface Request {
+    /** Set by mcpAuth when the caller presented a valid Supabase JWT. */
+    mcpUser?: User;
+  }
+}
+
+/**
+ * OAuth 2.1 resource auth. Order matters: a Bearer value is first tried as a
+ * Supabase JWT (per-user), then as the shared agent key (headless scripts).
+ * Anything else gets the RFC 9728 challenge that kicks MCP clients into the
+ * browser consent flow.
+ */
+async function mcpAuth(req: Request, res: Response, next: () => void) {
+  const header = req.get("Authorization") ?? "";
+  const bearer = header.startsWith("Bearer ") ? header.slice(7) : undefined;
+  if (bearer) {
+    const user = await userFromClaims(await verifySupabaseToken(bearer));
+    if (user) {
+      req.mcpUser = user;
+      return next();
+    }
+  }
+  const given = req.get("X-Agent-Key") ?? bearer;
   const key = process.env.AGENT_API_KEY;
-  if (!key) return next(); // local-first: open like the rest of the HTTP API
-  // ?key= exists for clients that can't set headers (Claude Desktop/claude.ai
-  // custom connectors take only a URL). Treat that URL as a secret.
-  const given =
-    req.get("X-Agent-Key") ??
-    req.get("Authorization")?.replace(/^Bearer\s+/i, "") ??
-    (typeof req.query.key === "string" ? req.query.key : undefined);
-  if (given !== key) return res.status(401).json({ error: "bad agent key" });
-  next();
+  if (given && ((key && given === key) || given === INTERNAL_MCP_KEY)) return next();
+  if (mcpAuthMode() === "open") return next(); // explicit MCP_OPEN=1 opt-in
+  res.setHeader(
+    "WWW-Authenticate",
+    `Bearer resource_metadata="${publicOrigin(req)}${RESOURCE_METADATA_PATH}"`,
+  );
+  return res.status(401).json({
+    error:
+      "unauthorized — sign in via OAuth (see the WWW-Authenticate resource_metadata) or send AGENT_API_KEY as X-Agent-Key",
+  });
 }
 
 /**
@@ -412,7 +467,10 @@ function mcpCors(req: Request, res: Response, next: () => void) {
     "Access-Control-Allow-Headers",
     "Content-Type, Authorization, X-Agent-Key, Mcp-Session-Id, Mcp-Protocol-Version, Last-Event-ID",
   );
-  res.setHeader("Access-Control-Expose-Headers", "Mcp-Session-Id, Mcp-Protocol-Version");
+  res.setHeader(
+    "Access-Control-Expose-Headers",
+    "Mcp-Session-Id, Mcp-Protocol-Version, WWW-Authenticate",
+  );
   if (req.method === "OPTIONS") return res.status(204).end();
   next();
 }
@@ -420,10 +478,48 @@ function mcpCors(req: Request, res: Response, next: () => void) {
 export const mcp = Router();
 
 mcp.use("/mcp", mcpCors);
+mcp.use(RESOURCE_METADATA_PATH, mcpCors);
+mcp.use("/.well-known/oauth-authorization-server", mcpCors);
+
+/**
+ * RFC 9728 protected-resource metadata — the discovery document the 401
+ * challenge points at. Both the bare path and the /mcp-suffixed variant are
+ * served: clients derive the latter from the resource URL's path (RFC 9728
+ * §3), and Claude tries it first.
+ */
+mcp.get([RESOURCE_METADATA_PATH, `${RESOURCE_METADATA_PATH}/mcp`], (req, res) => {
+  res.json({
+    resource: `${publicOrigin(req)}/mcp`,
+    authorization_servers: [ISSUER],
+    bearer_methods_supported: ["header"],
+    resource_name: "Grapevine",
+    scopes_supported: ["openid", "email", "profile"],
+  });
+});
+
+/**
+ * Compatibility shim for pre-2025-06-18 MCP clients that skip resource
+ * metadata and fetch RFC 8414 authorization-server metadata straight from the
+ * MCP origin. Mirrors Supabase's document (cached; refetched hourly).
+ */
+let asMetadata: { body: unknown; at: number } | null = null;
+mcp.get("/.well-known/oauth-authorization-server", async (_req, res) => {
+  try {
+    if (!asMetadata || Date.now() - asMetadata.at > 3_600_000) {
+      const url = ISSUER.replace("/auth/v1", "/.well-known/oauth-authorization-server/auth/v1");
+      const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      if (!r.ok) throw new Error(`upstream ${r.status}`);
+      asMetadata = { body: await r.json(), at: Date.now() };
+    }
+    res.json(asMetadata.body);
+  } catch (err) {
+    res.status(502).json({ error: `authorization server metadata unavailable: ${String(err).slice(0, 120)}` });
+  }
+});
 
 mcp.post("/mcp", mcpAuth, async (req, res) => {
   // Stateless: fresh pair per request so concurrent clients can't collide.
-  const server = buildServer();
+  const server = buildServer(req.mcpUser ?? null);
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,

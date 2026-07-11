@@ -7,18 +7,22 @@ import { auth, sessionUser } from "./auth.js";
 import { calendar } from "./calendar.js";
 import { runDiscovery, runSavedSearch, startDiscoveryScheduler } from "./discovery.js";
 import { backfillImages, enrichEventImages } from "./images.js";
-import { mcp, mcpKeyRequired } from "./mcp.js";
+import { mcp, mcpAuthMode } from "./mcp.js";
 import { detectProviders } from "./providers.js";
 import { push, startPushScheduler } from "./push.js";
 import { store } from "./store.js";
 import { listInstalled, ollamaBase } from "./ollama.js";
 import { catalog, logo } from "./catalog.js";
+import { systemInfo } from "./system.js";
 import { eta, geocode } from "./mapbox.js";
 import { extractEvents, rateEvent } from "./ingest.js";
 import { kickInbox, listInbox, reprocessInbox, startInboxPoll } from "./inbox.js";
 import { LLM_PROVIDERS, REACTIONS, type CityEvent, type Reaction } from "./types.js";
 
 const app = express();
+// Behind a tunnel/reverse proxy (the MCP connector path), X-Forwarded-Proto
+// must win so OAuth discovery URLs come out https.
+app.set("trust proxy", true);
 app.use(express.json({ limit: "2mb" }));
 
 // ---------- auth (Google sign-in, sessions, /api/me) ----------
@@ -142,14 +146,13 @@ app.get("/api/mcp/info", (_req, res) => {
   // overrides it when the server sits behind a public reverse proxy.
   const base = process.env.MCP_PUBLIC_URL ?? `http://localhost:${port}`;
   const url = `${base.replace(/\/$/, "")}/mcp`;
-  const keyRequired = mcpKeyRequired();
   res.json({
     url,
     transport: "http",
-    keyRequired,
-    // Claude Desktop / claude.ai custom connectors take only a URL, so the
-    // key rides as a query param. Placeholder on purpose — never the key.
-    connectorUrl: keyRequired ? `${url}?key=<AGENT_API_KEY>` : url,
+    // "oauth": clients sign in via the Supabase-backed consent flow (or send
+    // AGENT_API_KEY as a header for headless scripts). "open": MCP_OPEN=1.
+    auth: mcpAuthMode(),
+    connectorUrl: url,
   });
 });
 
@@ -228,6 +231,11 @@ app.post("/api/ollama/pull", async (req, res) => {
 
 app.get("/api/catalog", async (_req, res) => {
   res.json(await catalog());
+});
+
+/** Local hardware (VRAM/RAM) so the catalog can say what fits. */
+app.get("/api/system", async (_req, res) => {
+  res.json(await systemInfo());
 });
 
 app.get("/api/logo/:id", async (req, res) => {

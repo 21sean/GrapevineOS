@@ -20,6 +20,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { INTERNAL_MCP_KEY } from "./auth.js";
 
 export type CliProviderId = "claude" | "codex" | "gemini" | "copilot";
 
@@ -299,9 +300,8 @@ export async function cliChat(
               grapevine: {
                 type: "http",
                 url: mcpEndpoint(),
-                ...(process.env.AGENT_API_KEY && {
-                  headers: { "X-Agent-Key": process.env.AGENT_API_KEY },
-                }),
+                // Per-boot internal key — the loopback never does OAuth.
+                headers: { "X-Agent-Key": INTERNAL_MCP_KEY },
               },
             },
           }),
