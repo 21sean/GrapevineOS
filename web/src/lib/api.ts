@@ -194,7 +194,7 @@ export const api = {
           models: {
             tag: string
             label: string
-            params: string
+            sizeGB: number
             downloadSize: string
             blurb: string
             context?: number
@@ -204,6 +204,17 @@ export const api = {
           }[]
         }[]
       >(r),
+    ),
+
+  /** Local hardware the server detected — drives the can-it-run badges. */
+  system: () =>
+    fetch("/api/system").then((r) =>
+      json<{
+        ramGB: number
+        vramGB: number | null
+        gpu: string | null
+        unifiedMemory: boolean
+      }>(r),
     ),
 
   /** Streams NDJSON pull progress; calls onProgress with 0–100 (or -1 while indeterminate). */

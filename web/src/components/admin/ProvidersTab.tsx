@@ -244,47 +244,43 @@ export function ProvidersTab() {
             <Snippet text={mcp.url} />
           </div>
           <div className="flex flex-col gap-1.5">
+            <SnippetLabel>Claude Desktop / claude.ai — custom connector</SnippetLabel>
+            <Snippet text={mcp.connectorUrl} />
+            <p className="text-xs text-muted-foreground">
+              Settings → Connectors → Add custom connector → paste this URL —
+              nothing else. {mcp.auth === "oauth" &&
+                "Claude discovers the OAuth setup on its own, opens a browser window to sign in with your Grapevine account, and you approve once. "}
+              Connectors need the server reachable over HTTPS — run a tunnel
+              (e.g. <code className="font-mono">cloudflared tunnel --url http://localhost:8787</code>)
+              and set MCP_PUBLIC_URL in server/.env to the tunnel URL so this
+              snippet updates.
+            </p>
+          </div>
+          <div className="flex flex-col gap-1.5">
             <SnippetLabel>Claude Code — one command</SnippetLabel>
-            <Snippet
-              text={`claude mcp add --transport http grapevine ${mcp.url}${
-                mcp.keyRequired ? ' --header "X-Agent-Key: <AGENT_API_KEY>"' : ""
-              }`}
-            />
+            <Snippet text={`claude mcp add --transport http grapevine ${mcp.url}`} />
+            {mcp.auth === "oauth" && (
+              <p className="text-xs text-muted-foreground">
+                First use triggers the same browser sign-in; run{" "}
+                <code className="font-mono">/mcp</code> in Claude Code to
+                authenticate if it doesn't prompt on its own.
+              </p>
+            )}
           </div>
           <div className="flex flex-col gap-1.5">
             <SnippetLabel>Project .mcp.json</SnippetLabel>
             <Snippet
               text={JSON.stringify({
                 mcpServers: {
-                  grapevine: {
-                    type: "http",
-                    url: mcp.url,
-                    ...(mcp.keyRequired && {
-                      headers: { "X-Agent-Key": "<AGENT_API_KEY>" },
-                    }),
-                  },
+                  grapevine: { type: "http", url: mcp.url },
                 },
               })}
             />
           </div>
-          <div className="flex flex-col gap-1.5">
-            <SnippetLabel>Claude Desktop / claude.ai — custom connector</SnippetLabel>
-            <Snippet text={mcp.connectorUrl} />
-            <p className="text-xs text-muted-foreground">
-              Settings → Connectors → Add custom connector → paste this URL
-              {mcp.keyRequired && " (with your real AGENT_API_KEY filled in — connectors can't send headers, so the key rides in the URL; treat the URL as a secret)"}
-              . Custom connectors need the server reachable over HTTPS — run a
-              tunnel (e.g. <code className="font-mono">cloudflared tunnel --url http://localhost:8787</code>)
-              and set MCP_PUBLIC_URL in server/.env to the tunnel URL so this
-              snippet updates.
-            </p>
-          </div>
           <p className="text-xs text-muted-foreground">
-            {mcp.keyRequired
-              ? "Requests must carry AGENT_API_KEY (server/.env) as X-Agent-Key, a Bearer token, or ?key=."
-              : "Open on localhost — set AGENT_API_KEY in server/.env to require a key."}{" "}
-            Calendar and interest writes act on the account named by
-            AGENT_USER_EMAIL.
+            {mcp.auth === "oauth"
+              ? "Each connected client acts as the Grapevine account it signed in with — calendar saves and interests are per-user. Headless scripts can still send AGENT_API_KEY (server/.env) as an X-Agent-Key header; those writes act on AGENT_USER_EMAIL."
+              : "MCP_OPEN=1 — the endpoint is open and writes act on the account named by AGENT_USER_EMAIL. Unset MCP_OPEN to require OAuth sign-in."}
           </p>
         </div>
       )}

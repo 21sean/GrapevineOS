@@ -174,28 +174,52 @@ A run reads at most a handful of pages and makes one extraction plus one
 verification LLM call per readable page, so a daily cadence is light even on
 a laptop GPU.
 
-## MCP for Claude Desktop / claude.ai (custom connector)
+## MCP for Claude Desktop / claude.ai (custom connector, OAuth)
 
-Claude Code on the same machine can talk to `http://localhost:8787/mcp`
-directly (snippets in **Admin → Providers**). Claude Desktop and claude.ai
-**custom connectors** instead connect from Anthropic's side, so the endpoint
-must be reachable over public HTTPS:
+The MCP endpoint speaks real OAuth 2.1, with Supabase Auth as the
+authorization server — the same accounts that sign in on the web app. Adding
+the connector is: paste the `/mcp` URL, a browser window opens, sign in with
+Google/GitHub, approve. No key ever appears in the dialog or the URL. Under
+the hood: the server answers unauthenticated requests with `401` +
+`WWW-Authenticate: resource_metadata` (RFC 9728), Claude discovers Supabase's
+authorization server from it (RFC 8414), registers itself via dynamic client
+registration (RFC 7591), and runs the PKCE authorization-code flow through
+the app's `/oauth/consent` page.
+
+One-time Supabase dashboard setup (plus the URL config from the auth section
+above):
+
+1. **Authentication → OAuth Server**: enable the OAuth 2.1 server (beta),
+   set **Authorization Path** to `/oauth/consent`, and enable **dynamic
+   client registration** (that's what lets connectors register themselves —
+   without it you'd pre-register each client by hand).
+2. **Authentication → URL Configuration**: the Site URL must be the origin
+   that serves the web app (`http://localhost:5174` in dev, your production
+   origin when deployed) — the consent page lives at Site URL +
+   `/oauth/consent`. Add `<origin>/oauth/consent` to the redirect allow-list
+   so mid-consent sign-in can land back there.
+
+Then expose the endpoint (connectors dial in from Anthropic's side, so it
+needs public HTTPS):
 
 1. Expose the API server: `cloudflared tunnel --url http://localhost:8787`
    (or ngrok, or a reverse proxy on a deployed box).
 2. Set `MCP_PUBLIC_URL=https://<your-tunnel-host>` in `server/.env` so
-   Admin → Providers advertises the right endpoint.
-3. Set `AGENT_API_KEY` (you are about to put this server on the internet) and
-   restart.
-4. In Claude Desktop or claude.ai: Settings → Connectors → **Add custom
-   connector** → URL `https://<your-tunnel-host>/mcp?key=<AGENT_API_KEY>`.
-   Connectors can't send custom headers, so the key rides as a query
-   parameter — treat that URL as a secret. Skip the OAuth fields; the server
-   doesn't use OAuth.
+   Admin → Providers advertises the right endpoint, and restart.
+3. In Claude Desktop or claude.ai: Settings → Connectors → **Add custom
+   connector** → URL `https://<your-tunnel-host>/mcp`. Sign in and approve
+   when the browser window opens.
+
+Claude Code on the same machine skips the tunnel:
+`claude mcp add --transport http grapevine http://localhost:8787/mcp`, then
+`/mcp` inside Claude Code to run the same sign-in.
 
 Once connected, Claude can search events, get details and ETAs, save to the
-calendar (writes act on `AGENT_USER_EMAIL`), tune interests, fix rarities,
-run verified web discovery, and manage scheduled searches.
+calendar, tune interests, fix rarities, run verified web discovery, and
+manage scheduled searches. Writes act on the account that signed in.
+Headless scripts (no browser) can still send `AGENT_API_KEY` as an
+`X-Agent-Key` header; those writes act on `AGENT_USER_EMAIL`. `MCP_OPEN=1`
+drops auth entirely for local tinkering.
 
 ## Running the production build locally
 

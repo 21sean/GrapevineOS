@@ -97,8 +97,9 @@ export interface CliProviderStatus {
 export interface McpInfo {
   url: string
   transport: string
-  keyRequired: boolean
-  /** URL form for Claude Desktop custom connectors (?key= placeholder). */
+  /** "oauth": sign-in via the consent page; "open": MCP_OPEN=1 dev mode. */
+  auth: "oauth" | "open"
+  /** What goes in the Claude Desktop / claude.ai connector dialog — just the URL. */
   connectorUrl: string
 }
 

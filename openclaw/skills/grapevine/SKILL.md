@@ -155,7 +155,8 @@ next page load.
 ## Prefer MCP when available
 
 The same tools (plus `discover_events`, `schedule_search`, …) are served over
-Model Context Protocol at `POST $GRAPEVINE_URL/mcp` (Streamable HTTP, same
-key as `X-Agent-Key`/Bearer — or `?key=` in the URL for clients that can't
-set headers). If your runtime speaks MCP, connect there instead of shelling
-out to curl.
+Model Context Protocol at `POST $GRAPEVINE_URL/mcp` (Streamable HTTP). MCP
+auth is OAuth 2.1 (browser sign-in via the server's consent page) for
+interactive clients; headless runtimes send the same key as an `X-Agent-Key`
+header. If your runtime speaks MCP, connect there instead of shelling out to
+curl.

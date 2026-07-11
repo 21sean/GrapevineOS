@@ -35,12 +35,19 @@ export const supabase: SupabaseClient | null =
 
 export type OAuthProvider = "google" | "github"
 
-/** Full-page redirect into the provider's consent screen (PKCE flow). */
-export async function signInWithProvider(provider: OAuthProvider): Promise<void> {
+/**
+ * Full-page redirect into the provider's consent screen (PKCE flow).
+ * redirectTo defaults to the app root; the OAuth consent page passes its own
+ * URL so the authorization_id survives the round trip.
+ */
+export async function signInWithProvider(
+  provider: OAuthProvider,
+  redirectTo: string = window.location.origin,
+): Promise<void> {
   if (!supabase) throw new Error("Sign-in isn't configured (missing Supabase env)")
   const { error } = await supabase.auth.signInWithOAuth({
     provider,
-    options: { redirectTo: window.location.origin },
+    options: { redirectTo },
   })
   if (error) throw error
 }

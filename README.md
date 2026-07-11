@@ -249,12 +249,18 @@ external assistants two ways:
   server restarts. Claude Code, Claude Desktop, or any MCP client can search
   events, look up details, get ETAs, save to the calendar, tune interests, run
   verified web discovery (`discover_events`), and manage its scheduled
-  searches. When `AGENT_API_KEY` is set the key arrives as `X-Agent-Key`, a
-  Bearer token, or `?key=` in the URL for clients that only take a URL -
-  which is exactly what **Claude Desktop / claude.ai custom connectors** need:
-  expose the server over HTTPS (tunnel + `MCP_PUBLIC_URL`), then add
-  `https://your-host/mcp?key=<AGENT_API_KEY>` under Settings -> Connectors.
-  Copy-paste snippets live in **Admin -> Providers**.
+  searches. Auth is **OAuth 2.1 with Supabase Auth as the authorization
+  server**: the endpoint serves RFC 9728 protected-resource metadata and
+  answers unauthenticated calls with a `WWW-Authenticate` challenge, the
+  client registers itself (dynamic client registration) and runs the PKCE
+  code flow through the app's `/oauth/consent` page, and every access token
+  is a Supabase JWT verified against the project JWKS. So adding a **Claude
+  Desktop / claude.ai custom connector** is: expose the server over HTTPS
+  (tunnel + `MCP_PUBLIC_URL`), paste `https://your-host/mcp` under
+  Settings -> Connectors, sign in, approve. Each connected client acts as the
+  account it signed in with; headless scripts can still send `AGENT_API_KEY`
+  as an `X-Agent-Key` header. Copy-paste snippets live in
+  **Admin -> Providers**.
 - **External REST API** at `/api/ext/v1/*`, gated by an `X-Agent-Key` header.
   Endpoints cover event search, event detail, ETAs, calendar read/write,
   interests, and web discovery (run now or scheduled). A ready-to-install

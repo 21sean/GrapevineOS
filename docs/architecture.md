@@ -298,23 +298,29 @@ Claude Desktop connectors, and the OpenClaw skill belong. Source of truth:
   3. **MCP server**: Streamable HTTP `POST /mcp`, **stateless**, 12 tools
      (`search_events · get_event · get_eta · list_saved_events · save_event ·
      unsave_event · set_event_rarity · discover_events · list_scheduled_searches
-     · schedule_search · unschedule_search · update_interests`). Auth: open when
-     `AGENT_API_KEY` unset, else `X-Agent-Key` / `Bearer` / **`?key=`**. Tag
-     `mcp.ts`.
+     · schedule_search · unschedule_search · update_interests`). Auth: **OAuth
+     2.1** with Supabase Auth as the authorization server. RFC 9728
+     protected-resource metadata at `/.well-known/oauth-protected-resource`,
+     401 + `WWW-Authenticate` challenge, PKCE code flow with dynamic client
+     registration, access tokens verified against the project JWKS. Fallbacks:
+     `AGENT_API_KEY` as `X-Agent-Key` (headless), per-boot internal key (CLI
+     loopback), `MCP_OPEN=1` (no auth, dev). Tag `mcp.ts`.
 - **Consumers (outer ring, pill nodes):**
   - **OpenClaw** → External REST (the installable skill at
     `openclaw/skills/grapevine/SKILL.md`; curl over `X-Agent-Key`). It is told
     to **prefer MCP when available.**
   - **Claude Code** → MCP (both as an external client and, in provider mode,
     looping back into this same `/mcp`).
-  - **Claude Desktop / claude.ai custom connectors** → MCP via the **`?key=`
-    URL** (`https://your-host/mcp?key=<AGENT_API_KEY>`), needing HTTPS plus
-    `MCP_PUBLIC_URL` (tunnel/reverse proxy); the endpoint answers CORS
-    preflights; `GET`/`DELETE` → 405.
-- **Callout:** "Writes are bound, not delegated. Calendar and interest writes
-  act on the one account named by `AGENT_USER_EMAIL`; a caller can never name
-  someone else's." Optionally a second: "Dry-run by default: discovery over
-  MCP/REST reports before it writes."
+  - **Claude Desktop / claude.ai custom connectors** → MCP over OAuth: paste
+    `https://your-host/mcp`, the browser consent flow (`/oauth/consent` in
+    the web app) does the rest; needs HTTPS plus `MCP_PUBLIC_URL`
+    (tunnel/reverse proxy); the endpoint answers CORS preflights;
+    `GET`/`DELETE` → 405.
+- **Callout:** "OAuth callers act as themselves: calendar and interest writes
+  bind to the signed-in account. Key-authed and open-mode callers bind to the
+  one account named by `AGENT_USER_EMAIL`; a caller can never name someone
+  else's." Optionally a second: "Dry-run by default: discovery over MCP/REST
+  reports before it writes."
 
 ### 4.3 Providers: *"Bring your own brain"* (optional; can fold into §3.1)
 
@@ -350,7 +356,7 @@ If you want a clean standalone for PR #9 rather than cramming it into
 | Web discovery | `server/src/discovery.ts` | `MAX_RESULTS 8`, `MAX_PAGES 4`, `PAGE_CHARS 12000`, `MAX_DAYS_OUT 400`, `DISCOVERY_MIN_CONFIDENCE 0.7` (drops to 0.5 if corroborated), verdicts `confirmed/corrected/unsupported`, fails closed, dry-run default, scheduler `DISCOVERY_TICK_SECONDS 300` / `DISCOVERY_SCHEDULE=0` / cadence 1-336 h |
 | CLI providers | `server/src/providers.ts`, `llm.ts` | ids `claude · codex · gemini · copilot`; subscription-authed; `cliSupportsTools` = claude only; MCP loopback via `--mcp-config`/`--allowedTools mcp__grapevine`; `MAX_EXCHANGES 8`; `CLI_TIMEOUT_MS 110000` |
 | Provider settings | `server/src/types.ts`, `store.ts`, `web/.../admin/ProvidersTab.tsx` | `chatProvider` and `extractProvider`, independent, both default `ollama` |
-| MCP server | `server/src/mcp.ts`, `index.ts` (`/api/mcp/info`) | Streamable HTTP `POST /mcp`, stateless, 12 tools, auth `X-Agent-Key`/`Bearer`/`?key=`, CORS, 405 on GET/DELETE, `MCP_PUBLIC_URL`, writes bind `AGENT_USER_EMAIL` |
+| MCP server | `server/src/mcp.ts`, `index.ts` (`/api/mcp/info`) | Streamable HTTP `POST /mcp`, stateless, 12 tools, OAuth 2.1 (Supabase AS, RFC 9728 metadata + 401 challenge, JWKS-verified Bearer, per-user writes), fallbacks `X-Agent-Key`/internal loopback key/`MCP_OPEN=1`, CORS, 405 on GET/DELETE, `MCP_PUBLIC_URL` |
 | External REST | `server/src/agent/index.ts` | `/api/ext/v1/*`, `X-Agent-Key`, endpoints: events, events/:id, events/:id/rarity, eta, calendar (GET/POST/DELETE), discovery/run, discovery/searches (GET/POST/DELETE), interests |
 | Shared executors | `server/src/agent/context.ts` | `searchEvents · getEvent · getEta · setEventRarity · vetTopics …`, one layer behind agent + REST + MCP |
 | Agent graph | `server/src/agent/graph.ts` | nodes `agent · tools · finalize`; `MAX_TOOL_ROUNDS 6`; Zod 4 StateSchema; `toolRounds` + `Overwrite(0)`; `MemorySaver` per `thread_id`; retry connection-only + 45s idle on model nodes, none on tools |
