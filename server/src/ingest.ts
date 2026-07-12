@@ -70,6 +70,21 @@ export function slugId(title: string, start: string): string {
   return `${slug}-${hash}`;
 }
 
+/**
+ * Only accept http(s) ticket links. The value is LLM-extracted from untrusted
+ * newsletter/web content and later rendered as an <a href> and fetched
+ * server-side, so a javascript:/data: URL must never be stored.
+ */
+function httpUrl(v: unknown): string | undefined {
+  if (typeof v !== "string" || !v.trim()) return undefined;
+  try {
+    const u = new URL(v.trim());
+    return u.protocol === "http:" || u.protocol === "https:" ? v.trim() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Run LLM extraction over a raw email or web page, then geocode the venues. */
 export async function extractEvents(opts: {
   text: string;
@@ -126,7 +141,7 @@ export async function extractEvents(opts: {
       ...(normalizeRRule(it.recurrence) && { recurrence: normalizeRRule(it.recurrence)! }),
       price: String(it.price ?? (it.free ? "Free" : "")),
       free: Boolean(it.free),
-      ticketUrl: it.ticketUrl || undefined,
+      ticketUrl: httpUrl(it.ticketUrl),
       ticketProvider: it.ticketProvider || undefined,
       source: opts.source,
       sourceKind: opts.sourceKind ?? "newsletter",

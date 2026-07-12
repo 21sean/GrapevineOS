@@ -11,6 +11,7 @@
  */
 import jpeg from "jpeg-js";
 import { PNG } from "pngjs";
+import { isBlockedUrl } from "./agent/websearch.js";
 import { store } from "./store.js";
 import type { CityEvent } from "./types.js";
 
@@ -127,13 +128,16 @@ async function enrichOne(
   e: CityEvent,
 ): Promise<{ imageUrl: string; imageColor?: string } | null> {
   // Ticket page first; web-discovered events fall back to the page they
-  // were verified against.
+  // were verified against. Both come from LLM extraction over untrusted
+  // newsletter/web content, so gate them (and the og:image they yield) against
+  // the same SSRF guard the agent's page reader uses — an event field must not
+  // aim this fetch at localhost or a private-range host.
   const pageUrl = e.ticketUrl ?? e.sourceUrl;
-  if (!pageUrl) return null;
+  if (!pageUrl || isBlockedUrl(pageUrl)) return null;
   const html = await fetchText(pageUrl, MAX_HTML_BYTES, PAGE_TIMEOUT_MS).catch(() => null);
   if (!html) return null;
   const imageUrl = extractImageUrl(html, pageUrl);
-  if (!imageUrl) return null;
+  if (!imageUrl || isBlockedUrl(imageUrl)) return null;
   const img = await fetchImage(imageUrl).catch(() => null);
   const color = img ? dominantColor(img.bytes, img.contentType) : null;
   const patch = { imageUrl, ...(color && { imageColor: color }) };

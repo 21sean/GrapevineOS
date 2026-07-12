@@ -44,7 +44,7 @@ import { useGrapevine } from "@/lib/store"
 import { fmtTime, isLive, statusLabel } from "@/lib/time"
 import { nextOccurrence, recurrenceSummary } from "@/lib/recurrence"
 import { CATEGORY_META, REACTION_META, type Reaction } from "@/lib/types"
-import { cn } from "@/lib/utils"
+import { cn, safeHttpUrl } from "@/lib/utils"
 
 // Desktop panel width bounds; the default (448) lives in the store.
 const DETAIL_MIN = 360
@@ -171,6 +171,8 @@ export function EventDetail() {
 
   const gmaps = `https://www.google.com/maps/dir/?api=1&destination=${event.lat},${event.lng}`
   const saved = calendar?.synced.includes(event.id) ?? false
+  // ticketUrl is LLM-extracted from untrusted sources — only link it if it's http(s).
+  const ticketUrl = safeHttpUrl(event.ticketUrl)
 
   async function toggleCalendar() {
     if (!event) return
@@ -434,9 +436,9 @@ export function EventDetail() {
           </Tooltip>
         </div>
 
-        {event.ticketUrl ? (
+        {ticketUrl ? (
           <Button asChild className="w-full">
-            <a href={event.ticketUrl} target="_blank" rel="noreferrer">
+            <a href={ticketUrl} target="_blank" rel="noreferrer">
               Get tickets · {event.ticketProvider ?? "provider"} · {event.price}
               <ExternalLinkIcon data-icon="inline-end" />
             </a>

@@ -177,12 +177,18 @@ export type ReadPageResult =
  * The model picks the URLs, so treat every fetch as untrusted: only plain
  * http(s), and never anything that resolves into the local network (Ollama,
  * Supabase CLI, this very server). Hostname-level checks only — good enough
- * for a local single-user app.
+ * for a local single-user app (DNS rebinding and redirect hops can still reach
+ * private hosts; this stops a URL from naming one directly).
  */
-function blockedHost(hostname: string): boolean {
+export function blockedHost(hostname: string): boolean {
   const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (h === "localhost" || h.endsWith(".local") || h.endsWith(".internal")) return true;
-  if (h === "::1" || h.startsWith("fe80:") || h.startsWith("fc") || h.startsWith("fd")) return true;
+  if (h === "::" || h === "::1" || h.startsWith("fe80:") || h.startsWith("fc") || h.startsWith("fd"))
+    return true;
+  // Any IPv4-mapped IPv6 literal — the URL parser serializes ::ffff:127.0.0.1
+  // to ::ffff:7f00:1, so match the whole class rather than the dotted form;
+  // it is never a legitimate public target.
+  if (h.startsWith("::ffff:")) return true;
   const m = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(h);
   if (m) {
     const [a, b] = [Number(m[1]), Number(m[2])];
@@ -192,6 +198,23 @@ function blockedHost(hostname: string): boolean {
     if (a === 192 && b === 168) return true;
   }
   return false;
+}
+
+/**
+ * SSRF gate for any server-side fetch of a URL that arrived from untrusted
+ * content (LLM output, a scraped page): rejects non-http(s) schemes and hosts
+ * that name the local/link-local/private ranges directly. Shared by the agent
+ * page reader here and the image-enrichment pass in images.ts.
+ */
+export function isBlockedUrl(rawUrl: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return true;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return true;
+  return blockedHost(url.hostname);
 }
 
 export async function readPage(
