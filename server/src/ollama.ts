@@ -1,3 +1,4 @@
+import { parseLooseJSON } from "./llm-json.js";
 import { store } from "./store.js";
 
 export async function ollamaBase(): Promise<string> {
@@ -113,15 +114,7 @@ export async function chatJSON(opts: {
   }
 
   const body = (await res.json()) as any;
-  let content: string = body.message?.content ?? "";
-  content = content
-    .replace(/<think>[\s\S]*?<\/think>/g, "")
-    .replace(/^```(?:json)?/m, "")
-    .replace(/```\s*$/m, "")
-    .trim();
-  try {
-    return JSON.parse(content);
-  } catch {
-    throw new Error(`model returned unparseable JSON: ${content.slice(0, 200)}`);
-  }
+  // Same salvage parser the CLI providers use — identical model output must
+  // parse identically no matter which engine produced it.
+  return parseLooseJSON(body.message?.content ?? "");
 }

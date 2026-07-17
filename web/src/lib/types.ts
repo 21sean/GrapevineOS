@@ -9,74 +9,26 @@ import {
   type LucideIcon,
 } from "lucide-react"
 
-export type Category =
-  | "music"
-  | "food"
-  | "sports"
-  | "arts"
-  | "market"
-  | "festival"
-  | "community"
+// Domain shapes shared with the server — one definition for both runtimes.
+export * from "../../../shared/types"
+import type {
+  Category,
+  ChatMessage,
+  CityEvent,
+  LlmProviderId,
+  Reaction,
+} from "../../../shared/types"
 
-export type Rarity = "common" | "notable" | "rare"
-
-export interface CityEvent {
-  id: string
-  title: string
-  description: string
-  category: Category
-  tags: string[]
-  venue: string
-  address?: string
-  lng: number
-  lat: number
-  start: string
-  end: string
-  /** RFC 5545 RRULE (e.g. "FREQ=WEEKLY;BYDAY=SA") when the event repeats;
-   * absent for one-offs. start/end are the anchor occurrence + duration. */
-  recurrence?: string
-  price: string
-  free: boolean
-  ticketUrl?: string
-  ticketProvider?: string
-  source: string
-  sourceKind: "newsletter" | "manual" | "seed" | "search"
-  /** Page a web-discovered event was verified against. */
-  sourceUrl?: string
-  rating: number
-  ratingRationale?: string
-  promoted: boolean
-  rarity: Rarity
-  /** og:image scraped from the ticket/source page at ingest. */
-  imageUrl?: string
-  /** Dominant color of that image, "#rrggbb" — paints before/without it. */
-  imageColor?: string
-}
+/** @deprecated alias kept for existing imports — same union as LlmProviderId. */
+export type ChatProviderId = LlmProviderId
 
 // ---------- reactions (the per-user feedback loop) ----------
-
-/** One tap of feedback; feeds the personal score and teaches tag affinity. */
-export type Reaction = "going" | "went" | "not_for_me"
 
 export const REACTION_META: Record<Reaction, { label: string; blurb: string }> = {
   going: { label: "Going", blurb: "boosts this and events like it" },
   went: { label: "Went — great", blurb: "teaches your taste" },
   not_for_me: { label: "Not for me", blurb: "sinks this and events like it" },
 }
-
-export interface Settings {
-  city: string
-  center: [number, number]
-  tz: string
-  model: string
-  ollamaUrl: string
-  /** Who answers chat: the local Ollama agent or a subscription-authed CLI. */
-  chatProvider: ChatProviderId
-  /** Who runs newsletter extraction and buzz ratings (default: ollama). */
-  extractProvider: ChatProviderId
-}
-
-export type ChatProviderId = "ollama" | "claude" | "codex" | "gemini" | "copilot"
 
 /** One row from GET /api/providers — a locally installed, OAuth-authed CLI. */
 export interface CliProviderStatus {
@@ -103,15 +55,6 @@ export interface McpInfo {
   connectorUrl: string
 }
 
-export interface Source {
-  id: string
-  name: string
-  address: string
-  kind: string
-  note: string
-  active: boolean
-}
-
 export interface CategoryMeta {
   label: string
   color: string
@@ -127,8 +70,6 @@ export const CATEGORY_META: Record<Category, CategoryMeta> = {
   festival: { label: "Festivals", color: "#edbe54", icon: PartyPopper },
   community: { label: "Community", color: "#8fa3bf", icon: Users },
 }
-
-export const CATEGORIES = Object.keys(CATEGORY_META) as Category[]
 
 /** Interest vocabulary shown in the pillbox selector; event tags draw from it. */
 export const INTEREST_TOPICS = [
@@ -165,30 +106,7 @@ export interface Interests {
   avoids: string[]
 }
 
-/** One newsletter/email run through the extraction pipeline (server log). */
-export interface IngestRecord {
-  id: string
-  receivedAt: string
-  source: string
-  kind: "email" | "manual" | "search"
-  subject?: string
-  extracted: number
-  added: number
-  events: { id: string; title: string; start: string }[]
-}
-
 // ---------- web discovery (AI web search → verified events) ----------
-
-/** One saved web search the server re-runs on a cadence. */
-export interface DiscoverySearch {
-  id: string
-  query: string
-  cadenceHours: number
-  active: boolean
-  createdAt: string
-  lastRunAt?: string
-  lastStatus?: string
-}
 
 /** One extracted event candidate with its verification outcome. */
 export interface DiscoveryCandidate {
@@ -337,18 +255,8 @@ export interface GcalEventPatch {
 
 // ---------- chat history (Ask Grapevine, signed-in users) ----------
 
-export interface ChatThreadMeta {
-  id: string
-  title: string
-  provider: string
-  updatedAt: string
-}
-
-export interface ChatMessageRec {
-  role: "user" | "assistant"
-  content: string
-  createdAt: string
-}
+/** @deprecated alias kept for existing imports — same shape as ChatMessage. */
+export type ChatMessageRec = ChatMessage
 
 /** A raw newsletter sitting in Cloudflare KV, as shown in the admin inbox. */
 export interface InboxEmail {
