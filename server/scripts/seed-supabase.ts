@@ -1,5 +1,5 @@
 /**
- * One-time data migration: loads the legacy server/data/*.json stores into
+ * One-time data migration: loads the legacy JSON stores (now scripts/seed-data/) into
  * Supabase. Idempotent — every insert is an upsert keyed on the natural
  * unique column, so re-running it never duplicates rows.
  *
@@ -21,7 +21,7 @@ import type {
   Source,
 } from "../src/types.js";
 
-const DATA_DIR = path.resolve(import.meta.dirname, "../data");
+const DATA_DIR = path.resolve(import.meta.dirname, "seed-data");
 
 function readJson<T>(file: string, fallback: T): T {
   try {
@@ -96,7 +96,7 @@ await db
       rating_rationale: e.ratingRationale ?? null,
       promoted: e.promoted,
       rarity: e.rarity,
-      dedupe_key: eventKey(e),
+      dedupe_key: eventKey(e, settings?.tz ?? "America/Los_Angeles"),
     })),
     { onConflict: "dedupe_key", ignoreDuplicates: true },
   )

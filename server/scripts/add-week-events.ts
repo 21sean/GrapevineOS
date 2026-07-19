@@ -17,6 +17,9 @@ import { normalizeRRule } from "../src/recurrence.js";
 import { eventKey } from "../src/store.js";
 import type { Category, Rarity } from "../src/types.js";
 
+// Seed data is authored in San Diego wall-clock time.
+const TZ = "America/Los_Angeles";
+
 const SD_CENTER: [number, number] = [-117.1611, 32.7157];
 const SOURCE_ID = "web-research";
 
@@ -522,7 +525,7 @@ for (const e of EVENTS) {
         rating_rationale: e.ratingRationale,
         promoted: false,
         rarity: e.rarity,
-        dedupe_key: eventKey({ title: e.title, start: e.start, recurrence: e.recurrence }),
+        dedupe_key: eventKey({ title: e.title, start: e.start, recurrence: e.recurrence }, TZ),
       },
       { onConflict: "dedupe_key", ignoreDuplicates: true },
     )
@@ -539,7 +542,7 @@ for (const r of REPAIRS) {
       starts_at: r.start,
       ends_at: r.end,
       recurrence: normalizeRRule(r.recurrence),
-      dedupe_key: eventKey({ title: r.title, start: r.start, recurrence: r.recurrence }),
+      dedupe_key: eventKey({ title: r.title, start: r.start, recurrence: r.recurrence }, TZ),
     })
     .eq("id", r.id)
     .throwOnError();

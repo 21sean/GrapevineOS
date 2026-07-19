@@ -6,10 +6,6 @@ dist/
 *.log
 .DS_Store
 .wrangler/
-server/data/geocache.json
-server/data/users.json
-server/data/sessions.json
-server/data/calendar.json
 .playwright-mcp/
 *.jpeg
 *.png

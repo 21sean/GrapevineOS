@@ -2,9 +2,11 @@
 #
 # Every newsletter sent to *@sean.ventures lands here via Email Routing's
 # catch-all. The worker parses the email and inserts it into the Supabase
-# raw_emails table; the local server polls unprocessed rows. The RAW_EMAILS
-# KV namespace stays bound as a dead letter — used only if the Supabase
-# insert fails, so an outage never drops an email.
+# raw_emails table, then (when INGEST_URL is set) pings the server so the new
+# row is processed immediately — the pipeline is event-driven; the server only
+# polls if INBOX_POLL_SECONDS is set as a safety net. The RAW_EMAILS KV
+# namespace stays bound as a dead letter — used only if the Supabase insert
+# fails, so an outage never drops an email.
 #
 # One-time setup:
 #   1. Dashboard > Email > Email Routing > enable (adds MX/SPF records)   [done]
