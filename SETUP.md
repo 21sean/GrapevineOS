@@ -142,7 +142,8 @@ One-time dashboard setup (Authentication → Sign In / Providers):
 - The browser uses a **scoped public token** (`pk.`, styles/tiles/fonts
   only) in `web/.env.local`.
 - The **secret token** (`sk.`) never leaves `server/.env`; it powers
-  geocoding and traffic-aware ETAs through `/api/geocode` and `/api/eta`.
+  server-side geocoding (during ingest) and traffic-aware ETAs through
+  `/api/eta`.
 - **Caching keeps you far under the free tier** (100k geocodes + 100k
   directions/mo): geocodes persist to the `geocode_cache` table forever
   (venues don't move; misses are cached too, so a bad venue string is billed

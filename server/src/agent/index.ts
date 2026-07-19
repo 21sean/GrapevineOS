@@ -20,7 +20,13 @@ import { AIMessage, HumanMessage, type BaseMessage } from "@langchain/core/messa
 import { Router, type Request, type Response } from "express";
 import { sessionUser } from "../auth.js";
 import { removeEventForUser, saveEventForUser } from "../calendar.js";
-import { runDiscovery } from "../discovery.js";
+import {
+  clampCadence,
+  runDiscovery,
+  runSavedSearch,
+  validQuery,
+  wantsCommit,
+} from "../discovery.js";
 import {
   GUARD_MODEL_LABEL,
   inputRefusalMessage,
@@ -41,17 +47,20 @@ import {
 import { store } from "../store.js";
 import type { User } from "../types.js";
 import {
+  boundAgentUser,
   buildCtx,
   buildSystemPrompt,
   coercePos,
   getEta,
   getEvent,
   INTEREST_TOPICS,
+  interestPatchEmpty,
+  mergeInterests,
+  parseInterestPatch,
   parseLngLat,
   searchEvents,
   searchShape,
   setEventRarity,
-  vetTopics,
   type ChatContext,
   type SearchParams,
 } from "./context.js";
@@ -468,16 +477,9 @@ function extAuth(req: Request, res: Response, next: () => void) {
 
 /** The account external writes act on — bound by env, not by the caller. */
 async function extUser(res: Response): Promise<User | null> {
-  const email = process.env.AGENT_USER_EMAIL;
-  if (!email) {
-    res.status(503).json({ error: "set AGENT_USER_EMAIL to enable external writes" });
-    return null;
-  }
-  const user = await store.userByEmail(email);
-  if (!user) {
-    res
-      .status(503)
-      .json({ error: `no Grapevine account for ${email} — sign in on the web app once first` });
+  const user = await boundAgentUser();
+  if ("error" in user) {
+    res.status(503).json({ error: user.error });
     return null;
   }
   return user;
@@ -600,14 +602,14 @@ agent.delete("/api/ext/v1/calendar/:eventId", extAuth, async (req, res) => {
 
 /**
  * Run a discovery search now. Body: { query, dry_run? }. Dry runs verify and
- * report without writing — the polite default for external agents; pass
- * dry_run:false to commit the verified events.
+ * report without writing — the default on every surface; pass dry_run:false
+ * to commit the verified events.
  */
 agent.post("/api/ext/v1/discovery/run", extAuth, async (req, res) => {
-  const query = String(req.body?.query ?? "").trim();
-  if (query.length < 3) return res.status(400).json({ error: "query required (3+ chars)" });
+  const query = validQuery(req.body?.query);
+  if (!query) return res.status(400).json({ error: "query must be 3-200 chars" });
   try {
-    res.json(await runDiscovery({ query, commit: req.body?.dry_run === false }));
+    res.json(await runDiscovery({ query, commit: wantsCommit(req.body) }));
   } catch (err) {
     res.status(502).json({ error: String(err).slice(0, 300) });
   }
@@ -623,14 +625,41 @@ agent.get("/api/ext/v1/discovery/searches", extAuth, async (_req, res) => {
 
 /** Save a scheduled search: { query, cadence_hours? } (1-336, default 24). */
 agent.post("/api/ext/v1/discovery/searches", extAuth, async (req, res) => {
-  const query = String(req.body?.query ?? "").trim();
-  if (query.length < 3 || query.length > 200) {
-    return res.status(400).json({ error: "query must be 3-200 chars" });
-  }
-  const n = Number(req.body?.cadence_hours);
-  const cadence = Number.isFinite(n) ? Math.min(Math.max(1, Math.round(n)), 336) : 24;
+  const query = validQuery(req.body?.query);
+  if (!query) return res.status(400).json({ error: "query must be 3-200 chars" });
   try {
-    res.json(await store.addDiscoverySearch(query, cadence));
+    res.json(await store.addDiscoverySearch(query, clampCadence(req.body?.cadence_hours)));
+  } catch (err) {
+    res.status(502).json({ error: String(err).slice(0, 300) });
+  }
+});
+
+/** Pause/resume or re-pace a scheduled search: { active?, cadence_hours? } —
+ * same capability the internal API has, so external agents can manage what
+ * they create. */
+agent.patch("/api/ext/v1/discovery/searches/:id", extAuth, async (req, res) => {
+  const patch: { active?: boolean; cadenceHours?: number } = {};
+  if (req.body?.active !== undefined) patch.active = Boolean(req.body.active);
+  if (req.body?.cadence_hours !== undefined)
+    patch.cadenceHours = clampCadence(req.body.cadence_hours);
+  if (!Object.keys(patch).length) {
+    return res.status(400).json({ error: "nothing to update (active, cadence_hours)" });
+  }
+  try {
+    const updated = await store.updateDiscoverySearch(String(req.params.id), patch);
+    if (!updated) return res.status(404).json({ error: "unknown search" });
+    res.json(updated);
+  } catch (err) {
+    res.status(502).json({ error: String(err).slice(0, 300) });
+  }
+});
+
+/** Run one saved search immediately (also stamps last_run/status). */
+agent.post("/api/ext/v1/discovery/searches/:id/run", extAuth, async (req, res) => {
+  try {
+    const search = await store.discoverySearchById(String(req.params.id));
+    if (!search) return res.status(404).json({ error: "unknown search" });
+    res.json(await runSavedSearch(search));
   } catch (err) {
     res.status(502).json({ error: String(err).slice(0, 300) });
   }
@@ -650,34 +679,14 @@ agent.post("/api/ext/v1/interests", extAuth, async (req, res) => {
   try {
     const user = await extUser(res);
     if (!user) return;
-    const body = req.body ?? {};
-    const addLoves = vetTopics(body.addLoves);
-    const addAvoids = vetTopics(body.addAvoids);
-    const removeLoves = vetTopics(body.removeLoves);
-    const removeAvoids = vetTopics(body.removeAvoids);
-    if (!addLoves.length && !addAvoids.length && !removeLoves.length && !removeAvoids.length)
+    const patch = parseInterestPatch(req.body ?? {});
+    if (interestPatchEmpty(patch))
       return res
         .status(400)
         .json({ error: `no valid topics — allowed: ${INTEREST_TOPICS.join(", ")}` });
 
     const current = (user.prefs?.interests ?? {}) as { loves?: string[]; avoids?: string[] };
-    // A topic can't be loved and avoided at once — the newer signal wins.
-    const loves = [
-      ...new Set([
-        ...(current.loves ?? []).filter(
-          (t) => !removeLoves.includes(t) && !addAvoids.includes(t),
-        ),
-        ...addLoves,
-      ]),
-    ];
-    const avoids = [
-      ...new Set([
-        ...(current.avoids ?? []).filter(
-          (t) => !removeAvoids.includes(t) && !addLoves.includes(t),
-        ),
-        ...addAvoids,
-      ]),
-    ];
+    const { loves, avoids } = mergeInterests(current, patch);
     const updated = await store.updateUserPrefs(user.id, { interests: { loves, avoids } });
     res.json({
       interests: updated?.prefs?.interests ?? { loves, avoids },

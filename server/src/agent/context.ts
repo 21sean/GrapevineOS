@@ -5,10 +5,13 @@
  * graph's tools. Everything here is framework-free — LangGraph wiring lives
  * in graph.ts/tools.ts, HTTP in index.ts.
  */
+import { dayInTz } from "../../../shared/time.js";
 import { eta, geocode } from "../mapbox.js";
 import { nextOccurrence, recurrenceSummary } from "../recurrence.js";
 import { store } from "../store.js";
 import { CATEGORIES, type CityEvent, type Settings, type User } from "../types.js";
+
+export { dayInTz };
 
 /** Mirror of web/src/lib/types.ts INTEREST_TOPICS — keep in sync. */
 export const INTEREST_TOPICS = [
@@ -71,16 +74,6 @@ export async function buildCtx(userPos?: [number, number]): Promise<AgentCtx> {
 
 export function fmt(iso: string, tz: string, opts: Intl.DateTimeFormatOptions): string {
   return new Intl.DateTimeFormat("en-US", { timeZone: tz, ...opts }).format(new Date(iso));
-}
-
-/** "2026-07-11" in the city's timezone — string-comparable. */
-export function dayInTz(iso: string, tz: string): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: tz,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date(iso));
 }
 
 /** "Sat Jul 11 6:00–9:00 PM", spelling out the end day when it differs. */
@@ -206,7 +199,8 @@ export async function searchEvents(
     const coords = parseLngLat(params.near);
     if (coords) origin = coords;
     else {
-      const hit = await geocode(params.near, center);
+      // geocode throws on transport errors; a search should degrade, not die.
+      const hit = await geocode(params.near, center).catch(() => null);
       if (hit) origin = [hit.lng, hit.lat];
       else originNote = `couldn't locate "${params.near}" — distance filter skipped`;
     }
@@ -312,6 +306,11 @@ export function parseLngLat(s: string): [number, number] | undefined {
     : undefined;
 }
 
+/** [lng,lat] from either shape a caller might send: array or "lng,lat". */
+export function anyLngLat(v: unknown): [number, number] | undefined {
+  return typeof v === "string" ? parseLngLat(v) : coercePos(v);
+}
+
 /** Interests filtered to the fixed vocabulary, lowercased and deduped. */
 export function vetTopics(v: unknown): string[] {
   if (!Array.isArray(v)) return [];
@@ -325,6 +324,77 @@ export function vetTopics(v: unknown): string[] {
 export function vetEventIds(v: unknown, ctx: AgentCtx): string[] {
   if (!Array.isArray(v)) return [];
   return [...new Set(v.map(String).filter((id) => ctx.byId.has(id)))];
+}
+
+// ---------------------------------------------------------------------------
+// Interests + bound account — shared by every write surface (in-app tool
+// proposals, external REST API, MCP), so the semantics can't drift apart.
+// ---------------------------------------------------------------------------
+
+export interface InterestPatch {
+  addLoves: string[];
+  addAvoids: string[];
+  removeLoves: string[];
+  removeAvoids: string[];
+}
+
+/**
+ * Read an interests patch using the canonical snake_case names the in-app
+ * tool schema uses (add_loves, …); the camelCase spellings the external
+ * surfaces historically advertised keep working.
+ */
+export function parseInterestPatch(body: Record<string, unknown>): InterestPatch {
+  const pick = (snake: string, camel: string) => vetTopics(body[snake] ?? body[camel]);
+  return {
+    addLoves: pick("add_loves", "addLoves"),
+    addAvoids: pick("add_avoids", "addAvoids"),
+    removeLoves: pick("remove_loves", "removeLoves"),
+    removeAvoids: pick("remove_avoids", "removeAvoids"),
+  };
+}
+
+export function interestPatchEmpty(p: InterestPatch): boolean {
+  return (
+    !p.addLoves.length && !p.addAvoids.length && !p.removeLoves.length && !p.removeAvoids.length
+  );
+}
+
+/** A topic can't be loved and avoided at once — the newer signal wins. */
+export function mergeInterests(
+  current: { loves?: string[]; avoids?: string[] },
+  p: InterestPatch,
+): { loves: string[]; avoids: string[] } {
+  const loves = [
+    ...new Set([
+      ...(current.loves ?? []).filter(
+        (t) => !p.removeLoves.includes(t) && !p.addAvoids.includes(t),
+      ),
+      ...p.addLoves,
+    ]),
+  ];
+  const avoids = [
+    ...new Set([
+      ...(current.avoids ?? []).filter(
+        (t) => !p.removeAvoids.includes(t) && !p.addLoves.includes(t),
+      ),
+      ...p.addAvoids,
+    ]),
+  ];
+  return { loves, avoids };
+}
+
+/** The account external (key-authed) writes act on — bound by env, never by
+ * the caller. OAuth-authenticated MCP callers carry their own user instead. */
+export async function boundAgentUser(): Promise<User | { error: string }> {
+  const email = process.env.AGENT_USER_EMAIL;
+  if (!email) {
+    return { error: "set AGENT_USER_EMAIL in server/.env to enable calendar/interest writes" };
+  }
+  const user = await store.userByEmail(email);
+  if (!user) {
+    return { error: `no Grapevine account for ${email} — sign in on the web app once first` };
+  }
+  return user;
 }
 
 export const RARITIES = ["common", "notable", "rare"] as const;

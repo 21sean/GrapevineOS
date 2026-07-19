@@ -42,23 +42,26 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { Router, type Request, type Response } from "express";
 import {
+  anyLngLat,
+  boundAgentUser,
   buildCtx,
   getEta,
   getEvent,
   INTEREST_TOPICS,
-  parseLngLat,
+  interestPatchEmpty,
+  mergeInterests,
+  parseInterestPatch,
   RARITIES,
   searchEvents,
   searchShape,
   setEventRarity,
-  vetTopics,
   type SearchParams,
 } from "./agent/context.js";
 import { INTERNAL_MCP_KEY, ISSUER, userFromClaims, verifySupabaseToken } from "./auth.js";
 import { removeEventForUser, saveEventForUser } from "./calendar.js";
-import { runDiscovery } from "./discovery.js";
+import { clampCadence, runDiscovery, validQuery, wantsCommit } from "./discovery.js";
 import { store } from "./store.js";
-import type { User } from "./types.js";
+import { CATEGORIES, type User } from "./types.js";
 
 export const SERVER_INFO = { name: "grapevine", version: "0.1.0" };
 
@@ -73,7 +76,8 @@ const TOOLS = [
         query: { type: "string", description: "free-text match on title/description/venue/tags" },
         categories: {
           type: "array",
-          items: { type: "string", enum: ["music", "food", "sports", "arts", "market", "festival", "community"] },
+          // Derived from the shared registry — never a hand-copied list.
+          items: { type: "string", enum: [...CATEGORIES] },
         },
         tags: { type: "array", items: { type: "string" } },
         date_from: { type: "string", description: "YYYY-MM-DD (city-local)" },
@@ -104,8 +108,8 @@ const TOOLS = [
       type: "object",
       properties: {
         to_event_id: { type: "string" },
-        to: { type: "string", description: '"lng,lat" — alternative to to_event_id' },
-        from: { type: "string", description: '"lng,lat" origin (default: city center)' },
+        to: { description: '[lng, lat] array or "lng,lat" string — alternative to to_event_id' },
+        from: { description: '[lng, lat] array or "lng,lat" string origin (default: city center)' },
       },
     },
   },
@@ -199,14 +203,17 @@ const TOOLS = [
   },
   {
     name: "update_interests",
-    description: `Tune the linked account's taste profile. Allowed topics: ${INTEREST_TOPICS.join(", ")}.`,
+    description:
+      `Tune the linked account's taste profile — writes immediately, so only call it after the user explicitly confirmed the change. Allowed topics: ${INTEREST_TOPICS.join(", ")}.`,
     inputSchema: {
       type: "object",
+      // Same argument names as the in-app tool; the legacy camelCase
+      // spellings (addLoves, …) are still accepted.
       properties: {
-        addLoves: { type: "array", items: { type: "string" } },
-        addAvoids: { type: "array", items: { type: "string" } },
-        removeLoves: { type: "array", items: { type: "string" } },
-        removeAvoids: { type: "array", items: { type: "string" } },
+        add_loves: { type: "array", items: { type: "string" } },
+        add_avoids: { type: "array", items: { type: "string" } },
+        remove_loves: { type: "array", items: { type: "string" } },
+        remove_avoids: { type: "array", items: { type: "string" } },
       },
     },
   },
@@ -227,11 +234,7 @@ function fail(message: string) {
  */
 async function boundUser(oauthUser: User | null): Promise<User | { error: string }> {
   if (oauthUser) return oauthUser;
-  const email = process.env.AGENT_USER_EMAIL;
-  if (!email) return { error: "set AGENT_USER_EMAIL in server/.env to enable calendar/interest writes" };
-  const user = await store.userByEmail(email);
-  if (!user) return { error: `no Grapevine account for ${email} — sign in on the web app once first` };
-  return user;
+  return boundAgentUser();
 }
 
 async function callTool(name: string, args: Record<string, unknown>, oauthUser: User | null) {
@@ -263,10 +266,14 @@ async function callTool(name: string, args: Record<string, unknown>, oauthUser: 
       return "error" in result ? fail(String(result.error)) : ok(result);
     }
     case "get_eta": {
-      const to = typeof args.to === "string" ? parseLngLat(args.to) : undefined;
-      const from = typeof args.from === "string" ? parseLngLat(args.from) : undefined;
+      // Same payload the in-app tool takes ([lng,lat]); "lng,lat" strings
+      // stay accepted for existing clients.
       const result = await getEta(
-        { to_event_id: args.to_event_id as string | undefined, to, from },
+        {
+          to_event_id: args.to_event_id as string | undefined,
+          to: anyLngLat(args.to),
+          from: anyLngLat(args.from),
+        },
         ctx,
       );
       return "error" in result ? fail(String(result.error)) : ok(result);
@@ -303,9 +310,9 @@ async function callTool(name: string, args: Record<string, unknown>, oauthUser: 
       });
     }
     case "discover_events": {
-      const query = String(args.query ?? "").trim();
-      if (query.length < 3) return fail("query required (3+ chars)");
-      const result = await runDiscovery({ query, commit: args.dry_run === false });
+      const query = validQuery(args.query);
+      if (!query) return fail("query must be 3-200 chars");
+      const result = await runDiscovery({ query, commit: wantsCommit(args) });
       if (result.error) return fail(`discovery failed: ${result.error}`);
       // Compact shape: verdicts and evidence stay, page text never leaves.
       const shape = (c: (typeof result.verified)[number]) => ({
@@ -323,7 +330,7 @@ async function callTool(name: string, args: Record<string, unknown>, oauthUser: 
       });
       return ok({
         query: result.query,
-        dry_run: args.dry_run !== false,
+        dry_run: !wantsCommit(args),
         pages_read: result.pagesRead,
         extracted: result.extracted,
         added: result.added,
@@ -336,11 +343,9 @@ async function callTool(name: string, args: Record<string, unknown>, oauthUser: 
       return ok({ count: searches.length, searches });
     }
     case "schedule_search": {
-      const query = String(args.query ?? "").trim();
-      if (query.length < 3 || query.length > 200) return fail("query must be 3-200 chars");
-      const n = Number(args.cadence_hours);
-      const cadence = Number.isFinite(n) ? Math.min(Math.max(1, Math.round(n)), 336) : 24;
-      const saved = await store.addDiscoverySearch(query, cadence);
+      const query = validQuery(args.query);
+      if (!query) return fail("query must be 3-200 chars");
+      const saved = await store.addDiscoverySearch(query, clampCadence(args.cadence_hours));
       return ok({ scheduled: true, ...saved });
     }
     case "unschedule_search": {
@@ -356,26 +361,11 @@ async function callTool(name: string, args: Record<string, unknown>, oauthUser: 
     case "update_interests": {
       const user = await boundUser(oauthUser);
       if ("error" in user) return fail(user.error);
-      const addLoves = vetTopics(args.addLoves);
-      const addAvoids = vetTopics(args.addAvoids);
-      const removeLoves = vetTopics(args.removeLoves);
-      const removeAvoids = vetTopics(args.removeAvoids);
-      if (!addLoves.length && !addAvoids.length && !removeLoves.length && !removeAvoids.length)
+      const patch = parseInterestPatch(args);
+      if (interestPatchEmpty(patch))
         return fail(`no valid topics — allowed: ${INTEREST_TOPICS.join(", ")}`);
       const current = (user.prefs?.interests ?? {}) as { loves?: string[]; avoids?: string[] };
-      // A topic can't be loved and avoided at once — the newer signal wins.
-      const loves = [
-        ...new Set([
-          ...(current.loves ?? []).filter((t) => !removeLoves.includes(t) && !addAvoids.includes(t)),
-          ...addLoves,
-        ]),
-      ];
-      const avoids = [
-        ...new Set([
-          ...(current.avoids ?? []).filter((t) => !removeAvoids.includes(t) && !addLoves.includes(t)),
-          ...addAvoids,
-        ]),
-      ];
+      const { loves, avoids } = mergeInterests(current, patch);
       const updated = await store.updateUserPrefs(user.id, { interests: { loves, avoids } });
       return ok({ interests: updated?.prefs?.interests ?? { loves, avoids } });
     }

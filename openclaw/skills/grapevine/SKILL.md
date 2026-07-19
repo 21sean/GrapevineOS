@@ -115,6 +115,8 @@ existing query again just updates its cadence.
 ```
 GET    /api/ext/v1/discovery/searches          # list, with last_run/status
 POST   /api/ext/v1/discovery/searches          # {"query":"...","cadence_hours":24}
+PATCH  /api/ext/v1/discovery/searches/:id      # {"active":false} pause, {"cadence_hours":168} re-pace
+POST   /api/ext/v1/discovery/searches/:id/run  # run one saved search now
 DELETE /api/ext/v1/discovery/searches/:id      # stop re-running it
 ```
 
@@ -128,10 +130,11 @@ read `/api/ext/v1/events?from=...` rather than re-running discovery.
 ```
 curl -s -X POST "$GRAPEVINE_URL/api/ext/v1/interests" \
   -H "X-Agent-Key: $GRAPEVINE_AGENT_KEY" -H "Content-Type: application/json" \
-  -d '{"addLoves":["jazz"],"addAvoids":["edm"]}'
+  -d '{"add_loves":["jazz"],"add_avoids":["edm"]}'
 ```
 
-Body keys: `addLoves`, `addAvoids`, `removeLoves`, `removeAvoids` — arrays
+Body keys: `add_loves`, `add_avoids`, `remove_loves`, `remove_avoids` (the
+legacy camelCase spellings still work) — arrays
 drawn ONLY from: live music, jazz, edm, comedy, theater, art, immersive,
 markets, vintage, food trucks, coffee, beer, running, yoga, wellness,
 outdoors, beach, water, baseball, family, fireworks, parade, nightlife,
