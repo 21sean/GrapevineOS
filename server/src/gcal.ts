@@ -5,6 +5,7 @@
  * offline access) and lives encrypted in Supabase Vault; short-lived access
  * tokens are minted from it here and cached in memory only.
  */
+import { calendarEventBody } from "./calendar-body.js";
 import { store } from "./store.js";
 import type { CityEvent, User } from "./types.js";
 
@@ -72,16 +73,10 @@ async function accessToken(user: User): Promise<string> {
 }
 
 function gcalBody(e: CityEvent, tz: string) {
-  const description = [
-    e.description,
-    e.ticketUrl ? `Tickets: ${e.ticketUrl}` : "",
-    `via Grapevine (${e.source})`,
-  ]
-    .filter(Boolean)
-    .join("\n\n");
+  const { description, location } = calendarEventBody(e);
   return {
     summary: e.title,
-    location: e.address ? `${e.venue}, ${e.address}` : e.venue,
+    location,
     description,
     start: { dateTime: e.start, timeZone: tz },
     end: { dateTime: e.end, timeZone: tz },
