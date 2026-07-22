@@ -43,6 +43,7 @@ import {
 } from "@/components/ui/empty"
 import { DateQuickChips } from "@/components/DateFilters"
 import { EventCard } from "@/components/EventCard"
+import { useFilterToggles, type FilterToggle } from "@/hooks/useFilterToggles"
 import { useOrderedEvents } from "@/hooks/useOrderedEvents"
 import { activeFilterCount } from "@/lib/score"
 import { useGrapevine } from "@/lib/store"
@@ -63,6 +64,14 @@ const FARMERS_OPTIONS: { value: FarmersFilter; label: string }[] = [
   { value: "hide", label: "Hide" },
 ]
 
+// The rail's look for the shared toggle descriptors (see useFilterToggles).
+const TOGGLE_ICONS: Record<FilterToggle["key"], React.ReactNode> = {
+  live: <RadioIcon className="size-3.5 text-live" />,
+  rare: <GemIcon className="size-3.5 text-wine" />,
+  free: <TicketIcon className="size-3.5 text-live" />,
+  hidePromoted: <MegaphoneOffIcon className="size-3.5 text-muted-foreground" />,
+}
+
 // Rail-sized chips for the date quick filters; the dock passes its own.
 const RAIL_CHIP =
   "flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
@@ -74,7 +83,7 @@ const RAIL_MAX = 560
 
 export function FilterRail() {
   const filters = useGrapevine((s) => s.filters)
-  const setFilters = useGrapevine((s) => s.setFilters)
+  const { toggles, farmers } = useFilterToggles()
   const railWidth = useGrapevine((s) => s.railWidth)
   const setRailWidth = useGrapevine((s) => s.setRailWidth)
   const hiddenCount = useGrapevine((s) => s.hiddenIds.length)
@@ -114,35 +123,28 @@ export function FilterRail() {
     >
       <div className="flex flex-col gap-3 p-4 pb-3">
         <div className="flex flex-col gap-1.5">
-          <ToggleRow
-            icon={<RadioIcon className="size-3.5 text-live" />}
-            label="Live now"
-            checked={filters.liveOnly}
-            onChange={(v) => setFilters({ liveOnly: v })}
-          />
-          <ToggleRow
-            icon={<GemIcon className="size-3.5 text-wine" />}
-            label="Rare finds"
-            hint="parades, races, one-offs"
-            checked={filters.rareOnly}
-            onChange={(v) => setFilters({ rareOnly: v })}
-          />
-          <ToggleRow
-            icon={<TicketIcon className="size-3.5 text-live" />}
-            label="Free only"
-            checked={filters.freeOnly}
-            onChange={(v) => setFilters({ freeOnly: v })}
-          />
-          <FarmersRow
-            value={filters.farmers}
-            onChange={(farmers) => setFilters({ farmers })}
-          />
-          <ToggleRow
-            icon={<MegaphoneOffIcon className="size-3.5 text-muted-foreground" />}
-            label="Hide promoted"
-            checked={filters.hidePromoted}
-            onChange={(v) => setFilters({ hidePromoted: v })}
-          />
+          {/* farmers slots between the free and hide-promoted rows */}
+          {toggles.slice(0, 3).map((t) => (
+            <ToggleRow
+              key={t.key}
+              icon={TOGGLE_ICONS[t.key]}
+              label={t.label}
+              hint={t.hint}
+              checked={t.active}
+              onChange={t.toggle}
+            />
+          ))}
+          <FarmersRow value={farmers.value} onChange={farmers.setValue} />
+          {toggles.slice(3).map((t) => (
+            <ToggleRow
+              key={t.key}
+              icon={TOGGLE_ICONS[t.key]}
+              label={t.label}
+              hint={t.hint}
+              checked={t.active}
+              onChange={t.toggle}
+            />
+          ))}
           {/* one-tap date windows; a custom range (agent- or picker-set)
               shows on the picker chip with its own clear button */}
           <div className="flex items-start gap-2 pt-0.5">

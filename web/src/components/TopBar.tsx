@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { lazy, Suspense, useState } from "react"
 import {
   CalendarDaysIcon,
   HeartIcon,
@@ -7,7 +7,6 @@ import {
   Settings2Icon,
   SparklesIcon,
 } from "lucide-react"
-import { AccountDialog } from "@/components/AccountDialog"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -18,6 +17,14 @@ import {
 import { selectLiveCount } from "@/lib/derived"
 import { useGrapevine } from "@/lib/store"
 import { cn } from "@/lib/utils"
+
+// The largest dialog in the app — load its chunk on first open instead of
+// shipping it with the main bundle (same discipline as App's lazy dialogs).
+const AccountDialog = lazy(() =>
+  import("@/components/AccountDialog").then((m) => ({
+    default: m.AccountDialog,
+  })),
+)
 
 export function TopBar() {
   const city = useGrapevine((s) => s.settings?.city)
@@ -32,6 +39,11 @@ export function TopBar() {
   const setSignInOpen = useGrapevine((s) => s.setSignInOpen)
   const user = useGrapevine((s) => s.user)
   const [accountOpen, setAccountOpen] = useState(false)
+  // Latch so the dialog stays mounted after closing — otherwise the close
+  // animation would be cut off. Render-phase state adjustment, per the React
+  // docs (same pattern as App's lazy dialogs).
+  const [accountEverOpened, setAccountEverOpened] = useState(false)
+  if (accountOpen && !accountEverOpened) setAccountEverOpened(true)
 
   return (
     // Safe-area maxes keep the pills clear of the notch and rounded corners
@@ -171,8 +183,14 @@ export function TopBar() {
         )}
       </div>
 
-      {user && (
-        <AccountDialog open={accountOpen} onOpenChange={setAccountOpen} />
+      {user && (accountOpen || accountEverOpened) && (
+        <Suspense fallback={null}>
+          <AccountDialog
+            user={user}
+            open={accountOpen}
+            onOpenChange={setAccountOpen}
+          />
+        </Suspense>
       )}
     </header>
   )
