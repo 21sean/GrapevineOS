@@ -1,6 +1,6 @@
+import { tagAffinity } from "../../../shared/affinity"
 import {
   carouselEvents,
-  interestTerms,
   matchesSearch,
   scoreEvent,
   sortEvents,
@@ -9,7 +9,7 @@ import {
 import { nextOccurrence } from "./recurrence"
 import { isLive, lightPresetForTime, localDay, type LightPreset } from "./time"
 import type { GrapevineState } from "./store"
-import type { CityEvent, Reaction } from "./types"
+import type { CityEvent } from "./types"
 
 /**
  * Store-level derived data, memoized once for all subscribers.
@@ -60,31 +60,17 @@ const sameAffinity = (a: ReadonlyMap<string, number>, b: ReadonlyMap<string, num
   return true
 }
 
-/** How hard one reaction teaches each of the event's tags. */
-const REACTION_TAG_WEIGHT: Record<Reaction, number> = {
-  going: 1,
-  went: 1.5, // "went — great" is the strongest taste evidence there is
-  not_for_me: -1.5,
-}
-
 /**
- * The learned half of the feedback loop: reactions → per-tag weights over the
- * events' own vocabulary (not the fixed 26-topic list). Two "went — great"
- * jazz nights make every jazz event score higher from then on.
+ * The learned half of the feedback loop (shared/affinity.ts — the server's
+ * weekly digest learns from the exact same math): reactions → per-tag weights
+ * over the events' own vocabulary (not the fixed 26-topic list). Two "went —
+ * great" jazz nights make every jazz event score higher from then on.
  */
 export const selectTagAffinity = memoSelector(
   (s) => [s.events, s.reactions],
   (s) => {
     const byId = new Map(s.events.map((e) => [e.id, e]))
-    const affinity = new Map<string, number>()
-    for (const [id, reaction] of Object.entries(s.reactions)) {
-      const e = byId.get(id)
-      if (!e) continue
-      for (const t of interestTerms(e)) {
-        affinity.set(t, (affinity.get(t) ?? 0) + REACTION_TAG_WEIGHT[reaction])
-      }
-    }
-    return affinity as ReadonlyMap<string, number>
+    return tagAffinity(byId, Object.entries(s.reactions)) as ReadonlyMap<string, number>
   },
   sameAffinity,
 )
