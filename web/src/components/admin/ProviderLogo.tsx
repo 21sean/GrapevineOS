@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { api } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 const cache = new Map<string, string>()
@@ -16,8 +17,8 @@ export function ProviderLogo({ id, className }: { id: string; className?: string
       return
     }
     let alive = true
-    fetch(`/api/logo/${id}`)
-      .then((r) => r.text())
+    api
+      .providerLogo(id)
       .then((text) => {
         cache.set(id, text)
         if (alive) setSvg(text)

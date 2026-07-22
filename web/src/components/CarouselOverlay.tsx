@@ -50,7 +50,9 @@ export function CarouselOverlay() {
   const eta = useEta(carouselOn ? event : null)
   // Derived primitives instead of the raw clock: a tick re-renders the card
   // only when the live flag or the printed time range actually changes.
-  const live = useGrapevine((s) => (event ? isLive(event, s.now) : false))
+  const live = useGrapevine((s) =>
+    event ? isLive(event, s.now, s.settings?.tz ?? "UTC") : false,
+  )
   const range = useGrapevine((s) =>
     event ? timeRange(event, s.settings?.tz ?? "UTC", s.now) : "",
   )

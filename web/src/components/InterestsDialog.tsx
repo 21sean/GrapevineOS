@@ -28,7 +28,10 @@ export function InterestsDialog() {
       setLoves(interests.loves)
       setAvoids(interests.avoids)
     }
-  }, [open, interests])
+    // Seed only when the dialog opens — re-running on `interests` would let an
+    // external change (agent proposal, another tab) clobber unsaved edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   function save() {
     setInterests({ loves, avoids })

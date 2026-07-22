@@ -8,7 +8,14 @@ import {
 } from "@/components/ui/popover"
 import { Spinner } from "@/components/ui/spinner"
 import { useGrapevine } from "@/lib/store"
-import { addDays, fmtDay, localDay, weekendRange } from "@/lib/time"
+import {
+  addDays,
+  fmtDay,
+  localDay,
+  parseDay,
+  toDay,
+  weekendRange,
+} from "@/lib/time"
 import { cn } from "@/lib/utils"
 
 // react-day-picker only loads when someone opens the picker — same chunk
@@ -22,13 +29,6 @@ export function rangeLabel(from: string | null, to: string | null): string {
   if (from && to) return from === to ? fmtDay(from) : `${fmtDay(from)} – ${fmtDay(to)}`
   if (from) return `from ${fmtDay(from)}`
   return `through ${fmtDay(to!)}`
-}
-
-// noon dodges the UTC↔local backslide for date-only strings
-const parseDay = (day: string): Date => new Date(`${day}T12:00:00`)
-const toDay = (d: Date): string => {
-  const p = (x: number) => String(x).padStart(2, "0")
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
 interface QuickRange {
