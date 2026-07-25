@@ -143,6 +143,8 @@ export interface User {
     interests?: Interests
     pinnedIds?: string[]
     hiddenIds?: string[]
+    mutedVenues?: string[]
+    mutedSources?: string[]
   }
 }
 
@@ -294,7 +296,12 @@ export interface Filters {
   /** YYYY-MM-DD city-local window over each event's next occurrence; null = open. */
   dateFrom: string | null
   dateTo: string | null
+  /** Max traffic-aware drive time from the user (minutes); null = anywhere. */
+  nearMinutes: number | null
 }
+
+export const NEAR_MINUTES_MIN = 5
+export const NEAR_MINUTES_MAX = 60
 
 export const DEFAULT_FILTERS: Filters = {
   categories: [],
@@ -306,6 +313,7 @@ export const DEFAULT_FILTERS: Filters = {
   minRating: 0,
   dateFrom: null,
   dateTo: null,
+  nearMinutes: null,
 }
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -325,6 +333,10 @@ export function normalizeFilters(raw: unknown): Filters {
         : DEFAULT_FILTERS.farmers
   const day = (v: unknown): string | null =>
     typeof v === "string" && DAY_RE.test(v) ? v : null
+  const nearMinutes =
+    typeof r.nearMinutes === "number" && Number.isFinite(r.nearMinutes)
+      ? Math.min(NEAR_MINUTES_MAX, Math.max(NEAR_MINUTES_MIN, Math.round(r.nearMinutes)))
+      : null
   return {
     ...DEFAULT_FILTERS,
     ...(Array.isArray(r.categories) && { categories: r.categories as Category[] }),
@@ -336,6 +348,7 @@ export function normalizeFilters(raw: unknown): Filters {
     dateFrom: day(r.dateFrom),
     dateTo: day(r.dateTo),
     farmers,
+    nearMinutes,
   }
 }
 

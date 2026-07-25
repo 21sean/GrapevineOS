@@ -1,10 +1,13 @@
 import { tagAffinity } from "../../../shared/affinity"
+import { haversineKm, pointInPolygons } from "./geo"
 import {
   carouselEvents,
+  isMuted,
   matchesSearch,
   scoreEvent,
   sortEvents,
   visibleEvents,
+  type Muted,
 } from "./score"
 import { nextOccurrence } from "./recurrence"
 import { isLive, lightPresetForTime, localDay, type LightPreset } from "./time"
@@ -54,6 +57,41 @@ const selectHidden = memoSelector(
   (s) => new Set(s.hiddenIds),
 )
 
+/** Muted venues/sources as lowercase sets, ready for isMuted. */
+const selectMuted = memoSelector(
+  (s) => [s.mutedVenues, s.mutedSources],
+  (s): Muted => ({
+    venues: new Set(s.mutedVenues.map((v) => v.trim().toLowerCase())),
+    sources: new Set(s.mutedSources.map((v) => v.trim().toLowerCase())),
+  }),
+)
+
+/**
+ * "Near me" membership test for the resolved zone, or undefined while the
+ * filter is off / the isochrone is still loading (undefined filters nothing).
+ * The zone key must match the current filter+origin, so a stale polygon from
+ * a previous radius never masquerades as the new one.
+ */
+const selectNearTest = memoSelector(
+  (s) => [s.filters.nearMinutes, s.nearZone, s.userPos, s.settings?.center],
+  (s): ((e: CityEvent) => boolean) | undefined => {
+    if (s.filters.nearMinutes === null || !s.nearZone) return undefined
+    const origin = s.userPos ?? s.settings?.center
+    if (!origin) return undefined
+    if (s.nearZone.key !== nearZoneKey(s.filters.nearMinutes, origin)) return undefined
+    const { polygons, circle } = s.nearZone
+    if (polygons?.length) return (e) => pointInPolygons([e.lng, e.lat], polygons)
+    if (circle) return (e) => haversineKm([e.lng, e.lat], circle.center) <= circle.km
+    return undefined
+  },
+)
+
+/** Cache identity for one (radius, origin) pair — shared with useNearZone. */
+export function nearZoneKey(minutes: number, origin: [number, number]): string {
+  const r = (n: number) => Math.round(n * 1000) / 1000
+  return `${minutes}|${r(origin[0])},${r(origin[1])}`
+}
+
 const sameAffinity = (a: ReadonlyMap<string, number>, b: ReadonlyMap<string, number>) => {
   if (a.size !== b.size) return false
   for (const [k, v] of b) if (a.get(k) !== v) return false
@@ -77,12 +115,31 @@ export const selectTagAffinity = memoSelector(
 
 /** Filtered + relevance-ranked events: the map's markers, the list's base. */
 export const selectVisible = memoSelector(
-  (s) => [s.events, s.filters, s.interests, s.now, s.settings?.tz, s.hiddenIds, s.reactions],
+  (s) => [
+    s.events,
+    s.filters,
+    s.interests,
+    s.now,
+    s.settings?.tz,
+    s.hiddenIds,
+    s.reactions,
+    s.mutedVenues,
+    s.mutedSources,
+    s.nearZone,
+    s.userPos,
+  ],
   (s) =>
-    visibleEvents(s.events, s.filters, s.interests, s.now, s.settings?.tz, selectHidden(s), {
-      reactions: s.reactions,
-      tagAffinity: selectTagAffinity(s),
-    }),
+    visibleEvents(
+      s.events,
+      s.filters,
+      s.interests,
+      s.now,
+      s.settings?.tz,
+      selectHidden(s),
+      { reactions: s.reactions, tagAffinity: selectTagAffinity(s) },
+      selectMuted(s),
+      selectNearTest(s),
+    ),
   sameList,
 )
 
@@ -149,15 +206,25 @@ export interface WeekDay {
  * "what's on screen"). Promoted junk and "not for me" events never make it.
  */
 export const selectWeekPicks = memoSelector(
-  (s) => [s.events, s.interests, s.reactions, s.hiddenIds, s.now, s.settings?.tz],
+  (s) => [
+    s.events,
+    s.interests,
+    s.reactions,
+    s.hiddenIds,
+    s.mutedVenues,
+    s.mutedSources,
+    s.now,
+    s.settings?.tz,
+  ],
   (s) => {
     const tz = s.settings?.tz
     const hidden = selectHidden(s)
+    const muted = selectMuted(s)
     const taste = { reactions: s.reactions, tagAffinity: selectTagAffinity(s) }
     const horizon = s.now.getTime() + 7 * 86_400_000
     const byDay = new Map<string, [number, CityEvent][]>()
     for (const e of s.events) {
-      if (hidden.has(e.id) || e.promoted) continue
+      if (hidden.has(e.id) || e.promoted || isMuted(e, muted)) continue
       if (s.reactions[e.id] === "not_for_me") continue
       const occ = nextOccurrence(e, s.now, tz)
       if (Date.parse(occ.end) < s.now.getTime()) continue

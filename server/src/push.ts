@@ -19,8 +19,9 @@
  */
 import { Router } from "express";
 import webpush from "web-push";
+import { affinityTerms } from "../../shared/affinity.js";
 import { sessionUser } from "./auth.js";
-import { weekPicks } from "./digest.js";
+import { isMutedFor, mutedSets, stringList, weekPicks } from "./digest.js";
 import { eta } from "./mapbox.js";
 import { nextOccurrence } from "./recurrence.js";
 import { store } from "./store.js";
@@ -108,13 +109,14 @@ push.post("/api/push/status", async (req, res) => {
     reminders: mine?.reminders ?? true,
     weeklyDigest: mine?.weeklyDigest ?? true,
     leaveBy: mine?.leaveBy ?? true,
+    rareFinds: mine?.rareFinds ?? false, // the one opt-in alert
   });
 });
 
 push.post("/api/push/subscribe", async (req, res) => {
   const user = await sessionUser(req);
   if (!user) return res.status(401).json({ error: "not signed in" });
-  const { subscription, reminders, weeklyDigest, leaveBy } = req.body ?? {};
+  const { subscription, reminders, weeklyDigest, leaveBy, rareFinds } = req.body ?? {};
   const endpoint = subscription?.endpoint;
   const p256dh = subscription?.keys?.p256dh;
   const auth = subscription?.keys?.auth;
@@ -130,6 +132,7 @@ push.post("/api/push/subscribe", async (req, res) => {
       ...(typeof reminders === "boolean" && { reminders }),
       ...(typeof weeklyDigest === "boolean" && { weeklyDigest }),
       ...(typeof leaveBy === "boolean" && { leaveBy }),
+      ...(typeof rareFinds === "boolean" && { rareFinds }),
     });
     res.json({ ok: true });
   } catch (err) {
@@ -140,13 +143,14 @@ push.post("/api/push/subscribe", async (req, res) => {
 push.put("/api/push/prefs", async (req, res) => {
   const user = await sessionUser(req);
   if (!user) return res.status(401).json({ error: "not signed in" });
-  const { endpoint, reminders, weeklyDigest, leaveBy } = req.body ?? {};
+  const { endpoint, reminders, weeklyDigest, leaveBy, rareFinds } = req.body ?? {};
   if (typeof endpoint !== "string") return res.status(400).json({ error: "endpoint required" });
   try {
     await store.updatePushSubPrefs(user.id, endpoint, {
       ...(typeof reminders === "boolean" && { reminders }),
       ...(typeof weeklyDigest === "boolean" && { weeklyDigest }),
       ...(typeof leaveBy === "boolean" && { leaveBy }),
+      ...(typeof rareFinds === "boolean" && { rareFinds }),
     });
     res.json({ ok: true });
   } catch (err) {
@@ -231,6 +235,78 @@ function fmtTime(iso: string, tz: string): string {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(iso));
+}
+
+function fmtDayTime(iso: string, tz: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}
+
+/**
+ * "Rare find" alerts — fired by the ingest pipeline the moment new events
+ * commit, not by the minute tick. Strictly opt-in per browser, and only for
+ * events that match the user's loves ("More like this" interests); avoided
+ * terms, muted venues/sources, and promoted placements never notify. The
+ * push_sends ledger keys per (user, event), so a re-ingest can't re-notify.
+ */
+export async function notifyRareFinds(added: CityEvent[]): Promise<void> {
+  const now = new Date();
+  const rare = added.filter((e) => e.rarity === "rare" && !e.promoted);
+  if (!rare.length) return;
+
+  const byUser = new Map<string, PushSub[]>();
+  for (const s of await store.allPushSubs()) {
+    if (s.rareFinds) byUser.set(s.userId, [...(byUser.get(s.userId) ?? []), s]);
+  }
+  if (!byUser.size) return;
+
+  const { tz } = await store.settings();
+  const upcoming = rare.filter((e) => Date.parse(nextOccurrence(e, now, tz).end) > now.getTime());
+  if (!upcoming.length) return;
+
+  for (const [userId, armed] of byUser) {
+    const user = await store.userById(userId).catch(() => undefined);
+    if (!user) continue;
+    const interests = (user.prefs?.interests ?? {}) as { loves?: unknown; avoids?: unknown };
+    const loves = new Set(stringList(interests.loves).map((t) => t.toLowerCase()));
+    if (!loves.size) continue; // nothing to match against yet
+    const avoids = new Set(stringList(interests.avoids).map((t) => t.toLowerCase()));
+    const muted = mutedSets(user);
+
+    const matches: CityEvent[] = [];
+    for (const e of upcoming) {
+      const terms = affinityTerms(e);
+      if (!terms.some((t) => loves.has(t))) continue;
+      if (terms.some((t) => avoids.has(t))) continue;
+      if (isMutedFor(e, muted)) continue;
+      if (!(await store.tryMarkSent(`rarefind|${userId}|${e.id}`))) continue;
+      matches.push(e);
+    }
+    if (!matches.length) continue;
+
+    const first = matches[0];
+    const payload: PushPayload =
+      matches.length === 1
+        ? {
+            title: `Rare find: ${first.title}`,
+            body: `${fmtDayTime(nextOccurrence(first, now, tz).start, tz)} · ${first.venue}${first.free ? " · Free" : ""}`,
+            url: `${clickBase()}/?event=${encodeURIComponent(first.id)}`,
+            tag: `rarefind-${first.id}`,
+          }
+        : {
+            title: `${matches.length} rare finds for you`,
+            body: matches.slice(0, 4).map((e) => e.title).join(" · "),
+            url: `${clickBase()}/?event=${encodeURIComponent(first.id)}`,
+            tag: "rarefind",
+          };
+    await Promise.all(armed.map((s) => send(s, payload)));
+  }
 }
 
 /**

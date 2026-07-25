@@ -3,10 +3,14 @@ import {
   BellIcon,
   HeartIcon,
   LogOutIcon,
+  MapPinIcon,
+  NewspaperIcon,
   PinIcon,
   PinOffIcon,
   RotateCcwIcon,
   SlidersHorizontalIcon,
+  VolumeXIcon,
+  XIcon,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -64,6 +68,10 @@ export function AccountDialog({
   const pinnedIds = useGrapevine((s) => s.pinnedIds)
   const togglePin = useGrapevine((s) => s.togglePin)
   const setCalendarOpen = useGrapevine((s) => s.setCalendarOpen)
+  const mutedVenues = useGrapevine((s) => s.mutedVenues)
+  const mutedSources = useGrapevine((s) => s.mutedSources)
+  const unmuteVenue = useGrapevine((s) => s.unmuteVenue)
+  const unmuteSource = useGrapevine((s) => s.unmuteSource)
 
   const [history, setHistory] = useState<IngestRecord[] | null>(null)
   const [historyError, setHistoryError] = useState(false)
@@ -297,11 +305,28 @@ export function AccountDialog({
                     onCheckedChange={(v) => void togglePush("weeklyDigest", v)}
                   />
                 </label>
+                <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border px-3 py-2">
+                  <span className="min-w-0">
+                    <span className="block text-[13px] font-medium">
+                      Rare finds
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      The moment a rare one-off matching your "more like this"
+                      picks lands
+                    </span>
+                  </span>
+                  <Switch
+                    checked={!!pushState?.rareFinds}
+                    disabled={!pushState || pushBusy}
+                    onCheckedChange={(v) => void togglePush("rareFinds", v)}
+                  />
+                </label>
                 <p className="text-xs text-muted-foreground">
                   Notifications are per-browser. Reminders follow your saved
                   events; leave-by alerts time the drive (with traffic) to
                   anything you saved or marked "going", from your last known
-                  spot; the digest is ranked by your interests and reactions.
+                  spot; the digest and rare finds are ranked by your interests
+                  and reactions.
                 </p>
               </div>
             )}
@@ -351,6 +376,38 @@ export function AccountDialog({
               </p>
             )}
           </section>
+
+          {/* muted venues & sources */}
+          {(mutedVenues.length > 0 || mutedSources.length > 0) && (
+            <section>
+              <SectionHeader
+                icon={<VolumeXIcon className="size-3.5" />}
+                title="Muted"
+              />
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {mutedVenues.map((v) => (
+                  <MutedBadge
+                    key={`v-${v}`}
+                    label={v}
+                    icon={<MapPinIcon className="size-3" />}
+                    onRemove={() => unmuteVenue(v)}
+                  />
+                ))}
+                {mutedSources.map((v) => (
+                  <MutedBadge
+                    key={`s-${v}`}
+                    label={v}
+                    icon={<NewspaperIcon className="size-3" />}
+                    onRemove={() => unmuteSource(v)}
+                  />
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Events from muted venues and sources stay off your map, list,
+                digest, and alerts.
+              </p>
+            </section>
+          )}
 
           {/* filters */}
           <section>
@@ -432,6 +489,31 @@ export function AccountDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function MutedBadge({
+  label,
+  icon,
+  onRemove,
+}: {
+  label: string
+  icon: React.ReactNode
+  onRemove: () => void
+}) {
+  return (
+    <Badge variant="outline" className="gap-1 pr-1 text-muted-foreground">
+      {icon}
+      <span className="max-w-40 truncate">{label}</span>
+      <button
+        type="button"
+        aria-label={`Unmute ${label}`}
+        onClick={onRemove}
+        className="flex size-4 items-center justify-center rounded-full transition-colors hover:bg-accent hover:text-foreground"
+      >
+        <XIcon className="size-3" />
+      </button>
+    </Badge>
   )
 }
 

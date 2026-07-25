@@ -13,6 +13,8 @@ import {
   SparklesIcon,
   ThumbsDownIcon,
   ThumbsUpIcon,
+  TriangleAlertIcon,
+  VolumeXIcon,
   XIcon,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -37,6 +39,7 @@ import {
 } from "@/components/ui/tooltip"
 import { StarRating } from "@/components/StarRating"
 import { useClock } from "@/hooks/useClock"
+import { useConflicts } from "@/hooks/useConflicts"
 import { useEta } from "@/hooks/useEta"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { api } from "@/lib/api"
@@ -125,12 +128,21 @@ export function EventDetail() {
   const unhideEvent = useGrapevine((s) => s.unhideEvent)
   const detailWidth = useGrapevine((s) => s.detailWidth)
   const setDetailWidth = useGrapevine((s) => s.setDetailWidth)
+  const select = useGrapevine((s) => s.select)
+  const muteVenue = useGrapevine((s) => s.muteVenue)
+  const unmuteVenue = useGrapevine((s) => s.unmuteVenue)
+  const muteSource = useGrapevine((s) => s.muteSource)
+  const unmuteSource = useGrapevine((s) => s.unmuteSource)
 
   const [rating, setRating] = useState(false)
   const [calBusy, setCalBusy] = useState(false)
   const isMobile = useIsMobile()
 
   const eta = useEta(detailOpen ? event : null)
+  const tz = settings?.tz ?? "UTC"
+  // Calendar clashes: other saved events and (when connected) Google busy
+  // blocks that overlap this occurrence.
+  const conflicts = useConflicts(event, detailOpen, now, tz)
 
   // Mirror the open event into ?event=<id> so the address bar is itself a
   // shareable deep link — App.tsx already restores it on load (the push
@@ -149,7 +161,6 @@ export function EventDetail() {
   if (!event) return null
 
   const meta = CATEGORY_META[event.category]
-  const tz = settings?.tz ?? "UTC"
   const live = isLive(event, now, tz)
   const occ = nextOccurrence(event, now, tz)
   const repeats = recurrenceSummary(event.recurrence)
@@ -221,6 +232,28 @@ export function EventDetail() {
     toast(`Hidden: ${event.title}`, {
       description: "It won't show on the map or in the list.",
       action: { label: "Undo", onClick: () => unhideEvent(event.id) },
+    })
+  }
+
+  function muteVenueThis() {
+    if (!event) return
+    const venue = event.venue
+    muteVenue(venue)
+    select(null) // the event just left the map — don't strand its panel
+    toast(`Muted venue: ${venue}`, {
+      description: "Nothing from this venue on your map, list, or digest.",
+      action: { label: "Undo", onClick: () => unmuteVenue(venue) },
+    })
+  }
+
+  function muteSourceThis() {
+    if (!event) return
+    const source = event.source
+    muteSource(source)
+    select(null)
+    toast(`Muted source: ${source}`, {
+      description: "Nothing from this source on your map, list, or digest.",
+      action: { label: "Undo", onClick: () => unmuteSource(source) },
     })
   }
 
@@ -334,6 +367,36 @@ export function EventDetail() {
           <div className="-mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
             <RepeatIcon className="size-3.5" />
             <span>{repeats} · next occurrence shown</span>
+          </div>
+        )}
+
+        {/* schedule clash with saved events / the connected Google Calendar */}
+        {conflicts && (
+          <div className="flex flex-col gap-1.5 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2">
+            <span className="flex items-center gap-2 text-sm text-amber-200">
+              <TriangleAlertIcon className="size-4 shrink-0" />
+              Overlaps your calendar
+            </span>
+            <ul className="flex flex-col gap-1 pl-6">
+              {conflicts.saved.map((c) => (
+                <li key={c.event.id} className="text-xs text-amber-200/90">
+                  <button
+                    type="button"
+                    onClick={() => select(c.event.id)}
+                    className="text-left underline-offset-2 hover:underline focus-visible:underline focus-visible:outline-none"
+                  >
+                    {c.event.title}
+                  </button>{" "}
+                  · {fmtTime(c.start, tz)} – {fmtTime(c.end, tz)}
+                </li>
+              ))}
+              {conflicts.google.map((g) => (
+                <li key={g.id} className="text-xs text-amber-200/70">
+                  {g.title || "Busy"} · {fmtTime(g.start, tz)} –{" "}
+                  {fmtTime(g.end, tz)} · Google Calendar
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
@@ -452,9 +515,37 @@ export function EventDetail() {
           </Alert>
         )}
 
-        <span className="font-mono text-xs text-muted-foreground">
-          via {event.source} · {event.sourceKind}
-        </span>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="font-mono text-xs text-muted-foreground">
+            via {event.source} · {event.sourceKind}
+          </span>
+          {/* recurring-offender controls: silence the place or the source
+              wholesale instead of hiding one occurrence at a time */}
+          <div className="flex gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" onClick={muteVenueThis}>
+                  <VolumeXIcon data-icon="inline-start" />
+                  Mute venue
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                Hide every event at {event.venue}
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" onClick={muteSourceThis}>
+                  <VolumeXIcon data-icon="inline-start" />
+                  Mute source
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                Hide every event from {event.source}
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        </div>
       </div>
     </>
   )

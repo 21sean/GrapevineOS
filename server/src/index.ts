@@ -21,7 +21,7 @@ import { store } from "./store.js";
 import { listInstalled, ollamaBase } from "./ollama.js";
 import { catalog, logo } from "./catalog.js";
 import { systemInfo } from "./system.js";
-import { eta } from "./mapbox.js";
+import { eta, isochrone } from "./mapbox.js";
 import { extractEvents, rateEvent } from "./ingest.js";
 import { kickInbox, listInbox, reprocessInbox, startInboxPoll } from "./inbox.js";
 import { commitIngest } from "./pipeline.js";
@@ -196,6 +196,30 @@ app.get("/api/eta", async (req, res) => {
     res.json((await eta(from, to)) ?? { minutes: null, km: null });
   } catch (err) {
     res.status(502).json({ error: String(err) });
+  }
+});
+
+/**
+ * "Near me" drive-time contour. The web app filters events to the polygons —
+ * the point-in-polygon test happens client-side so one cached contour serves
+ * the whole list.
+ */
+app.get("/api/isochrone", async (req, res) => {
+  const parse = (s: unknown): [number, number] | null => {
+    const parts = String(s ?? "").split(",").map(Number);
+    return parts.length === 2 && parts.every(Number.isFinite)
+      ? [parts[0], parts[1]]
+      : null;
+  };
+  const center = parse(req.query.center) ?? (await store.settings()).center;
+  const minutes = Number(req.query.minutes);
+  if (!Number.isFinite(minutes) || minutes < 1 || minutes > 60) {
+    return res.status(400).json({ error: "minutes must be 1-60" });
+  }
+  try {
+    res.json((await isochrone(center, minutes)) ?? { polygons: [] });
+  } catch (err) {
+    res.status(502).json({ error: String(err).slice(0, 200) });
   }
 });
 

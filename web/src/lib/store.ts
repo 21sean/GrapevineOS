@@ -13,6 +13,19 @@ import type {
   User,
 } from "./types"
 import { DEFAULT_FILTERS, normalizeFilters } from "./types"
+import type { PolygonRings } from "./geo"
+
+/**
+ * The resolved "Near me" zone for the current filters.nearMinutes + origin.
+ * `key` ties it to the request that produced it, so a stale zone is never
+ * applied to fresher filters. Either real isochrone polygons or the
+ * straight-line fallback when the isochrone API is unreachable.
+ */
+export interface NearZone {
+  key: string
+  polygons?: PolygonRings[]
+  circle?: { center: [number, number]; km: number }
+}
 
 export interface GrapevineState {
   // data
@@ -56,6 +69,9 @@ export interface GrapevineState {
   searchQuery: string
   sortBy: SortKey
 
+  // the fetched "Near me" isochrone (session-only; see useNearZone)
+  nearZone: NearZone | null
+
   // preferences (persisted)
   filters: Filters
   interests: Interests
@@ -63,6 +79,9 @@ export interface GrapevineState {
   pinnedIds: string[]
   // events the user hid from the list and map (restorable)
   hiddenIds: string[]
+  // venues/sources the user muted — every event from them drops off the map
+  mutedVenues: string[]
+  mutedSources: string[]
   // per-event feedback ("going" / "went — great" / "not for me"); server-backed
   // when signed in, this browser otherwise
   reactions: Record<string, Reaction>
@@ -99,6 +118,12 @@ export interface GrapevineState {
   hideEvent: (id: string) => void
   unhideEvent: (id: string) => void
   clearHidden: () => void
+  setNearZone: (z: NearZone | null) => void
+  muteVenue: (venue: string) => void
+  unmuteVenue: (venue: string) => void
+  muteSource: (source: string) => void
+  unmuteSource: (source: string) => void
+  clearMuted: () => void
   signOut: () => Promise<void>
   upsertEvent: (e: CityEvent) => void
   refreshEvents: () => Promise<void>
@@ -118,8 +143,12 @@ function schedulePrefsSync(get: () => GrapevineState) {
   if (!get().user) return
   clearTimeout(prefsTimer)
   prefsTimer = setTimeout(() => {
-    const { user, filters, interests, pinnedIds, hiddenIds } = get()
-    if (user) api.savePrefs({ filters, interests, pinnedIds, hiddenIds }).catch(() => {})
+    const { user, filters, interests, pinnedIds, hiddenIds, mutedVenues, mutedSources } =
+      get()
+    if (user)
+      api
+        .savePrefs({ filters, interests, pinnedIds, hiddenIds, mutedVenues, mutedSources })
+        .catch(() => {})
   }, 800)
 }
 
@@ -156,11 +185,14 @@ export const useGrapevine = create<GrapevineState>()(
       agentHighlight: null,
       searchQuery: "",
       sortBy: "relevance",
+      nearZone: null,
 
       filters: DEFAULT_FILTERS,
       interests: { loves: [], avoids: [] },
       pinnedIds: [],
       hiddenIds: [],
+      mutedVenues: [],
+      mutedSources: [],
       reactions: {},
 
       async load() {
@@ -194,6 +226,8 @@ export const useGrapevine = create<GrapevineState>()(
           ...(prefs?.interests && { interests: prefs.interests }),
           ...(prefs?.pinnedIds && { pinnedIds: prefs.pinnedIds }),
           ...(prefs?.hiddenIds && { hiddenIds: prefs.hiddenIds }),
+          ...(prefs?.mutedVenues && { mutedVenues: prefs.mutedVenues }),
+          ...(prefs?.mutedSources && { mutedSources: prefs.mutedSources }),
           ...(reactions && { reactions }),
         })
         // First sign-in from this browser: seed the account with local prefs.
@@ -312,6 +346,45 @@ export const useGrapevine = create<GrapevineState>()(
         schedulePrefsSync(get)
       },
 
+      setNearZone: (nearZone) => set({ nearZone }),
+
+      muteVenue(venue) {
+        const cur = get().mutedVenues
+        if (cur.some((v) => v.toLowerCase() === venue.toLowerCase())) return
+        set({ mutedVenues: [venue, ...cur] })
+        schedulePrefsSync(get)
+      },
+
+      unmuteVenue(venue) {
+        set({
+          mutedVenues: get().mutedVenues.filter(
+            (v) => v.toLowerCase() !== venue.toLowerCase(),
+          ),
+        })
+        schedulePrefsSync(get)
+      },
+
+      muteSource(source) {
+        const cur = get().mutedSources
+        if (cur.some((v) => v.toLowerCase() === source.toLowerCase())) return
+        set({ mutedSources: [source, ...cur] })
+        schedulePrefsSync(get)
+      },
+
+      unmuteSource(source) {
+        set({
+          mutedSources: get().mutedSources.filter(
+            (v) => v.toLowerCase() !== source.toLowerCase(),
+          ),
+        })
+        schedulePrefsSync(get)
+      },
+
+      clearMuted() {
+        set({ mutedVenues: [], mutedSources: [] })
+        schedulePrefsSync(get)
+      },
+
       async signOut() {
         clearTimeout(prefsTimer)
         // Supabase Auth owns the session; local scope keeps other devices
@@ -342,12 +415,14 @@ export const useGrapevine = create<GrapevineState>()(
     }),
     {
       name: "grapevine-prefs",
-      version: 2,
+      version: 3,
       partialize: (s) => ({
         filters: s.filters,
         interests: s.interests,
         pinnedIds: s.pinnedIds,
         hiddenIds: s.hiddenIds,
+        mutedVenues: s.mutedVenues,
+        mutedSources: s.mutedSources,
         reactions: s.reactions,
         railWidth: s.railWidth,
         detailWidth: s.detailWidth,
@@ -358,12 +433,13 @@ export const useGrapevine = create<GrapevineState>()(
       // v0 persisted a `trafficOn` toggle; traffic is now always on, so drop
       // the stored value and let the `true` default win.
       // v2 replaced filters.farmersOnly with the tri-state filters.farmers.
+      // v3 added filters.nearMinutes (normalize fills the missing key).
       migrate: (persisted, version) => {
         const p = persisted as Record<string, unknown> | undefined
         if (version < 1 && p && typeof p === "object") {
           delete p.trafficOn
         }
-        if (version < 2 && p && typeof p === "object" && p.filters) {
+        if (version < 3 && p && typeof p === "object" && p.filters) {
           p.filters = normalizeFilters(p.filters)
         }
         return persisted as GrapevineState

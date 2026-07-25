@@ -431,6 +431,7 @@ export type Database = {
           id: string
           leave_by: boolean
           p256dh: string
+          rare_finds: boolean
           reminders: boolean
           user_id: string
           weekly_digest: boolean
@@ -442,6 +443,7 @@ export type Database = {
           id?: string
           leave_by?: boolean
           p256dh: string
+          rare_finds?: boolean
           reminders?: boolean
           user_id: string
           weekly_digest?: boolean
@@ -453,6 +455,7 @@ export type Database = {
           id?: string
           leave_by?: boolean
           p256dh?: string
+          rare_finds?: boolean
           reminders?: boolean
           user_id?: string
           weekly_digest?: boolean

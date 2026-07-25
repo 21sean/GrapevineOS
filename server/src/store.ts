@@ -164,6 +164,7 @@ function rowToPushSub(r: Tables<"push_subscriptions">): PushSub {
     reminders: r.reminders,
     weeklyDigest: r.weekly_digest,
     leaveBy: r.leave_by,
+    rareFinds: r.rare_finds,
   };
 }
 
@@ -852,8 +853,8 @@ export const store = {
   },
 
   async upsertPushSub(
-    sub: Omit<PushSub, "id" | "reminders" | "weeklyDigest" | "leaveBy"> &
-      Partial<Pick<PushSub, "reminders" | "weeklyDigest" | "leaveBy">>,
+    sub: Omit<PushSub, "id" | "reminders" | "weeklyDigest" | "leaveBy" | "rareFinds"> &
+      Partial<Pick<PushSub, "reminders" | "weeklyDigest" | "leaveBy" | "rareFinds">>,
   ): Promise<void> {
     await db
       .from("push_subscriptions")
@@ -866,6 +867,7 @@ export const store = {
           ...(sub.reminders !== undefined && { reminders: sub.reminders }),
           ...(sub.weeklyDigest !== undefined && { weekly_digest: sub.weeklyDigest }),
           ...(sub.leaveBy !== undefined && { leave_by: sub.leaveBy }),
+          ...(sub.rareFinds !== undefined && { rare_finds: sub.rareFinds }),
         },
         { onConflict: "endpoint" },
       )
@@ -875,7 +877,7 @@ export const store = {
   async updatePushSubPrefs(
     userId: string,
     endpoint: string,
-    prefs: Partial<Pick<PushSub, "reminders" | "weeklyDigest" | "leaveBy">>,
+    prefs: Partial<Pick<PushSub, "reminders" | "weeklyDigest" | "leaveBy" | "rareFinds">>,
   ): Promise<void> {
     await db
       .from("push_subscriptions")
@@ -883,6 +885,7 @@ export const store = {
         ...(prefs.reminders !== undefined && { reminders: prefs.reminders }),
         ...(prefs.weeklyDigest !== undefined && { weekly_digest: prefs.weeklyDigest }),
         ...(prefs.leaveBy !== undefined && { leave_by: prefs.leaveBy }),
+        ...(prefs.rareFinds !== undefined && { rare_finds: prefs.rareFinds }),
       })
       .eq("user_id", userId)
       .eq("endpoint", endpoint)

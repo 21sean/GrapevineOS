@@ -14,9 +14,10 @@ export interface PushState {
   reminders: boolean
   weeklyDigest: boolean
   leaveBy: boolean
+  rareFinds: boolean
 }
 
-export type PushKind = "reminders" | "weeklyDigest" | "leaveBy"
+export type PushKind = "reminders" | "weeklyDigest" | "leaveBy" | "rareFinds"
 
 /**
  * Web Push state machine for THIS browser (subscriptions are per-device).
@@ -38,6 +39,7 @@ export function usePush(active: boolean): {
           reminders: false,
           weeklyDigest: false,
           leaveBy: false,
+          rareFinds: false,
         }
   )
   const [pushBusy, setPushBusy] = useState(false)
@@ -57,6 +59,7 @@ export function usePush(active: boolean): {
         reminders: !!status?.subscribed && status.reminders,
         weeklyDigest: !!status?.subscribed && status.weeklyDigest,
         leaveBy: !!status?.subscribed && status.leaveBy,
+        rareFinds: !!status?.subscribed && status.rareFinds,
       })
     })()
     return () => {
@@ -75,10 +78,16 @@ export function usePush(active: boolean): {
           reminders: next.reminders,
           weeklyDigest: next.weeklyDigest,
           leaveBy: next.leaveBy,
+          rareFinds: next.rareFinds,
         })
         next.subscribed = true
         toast.success("Notifications on for this browser")
-      } else if (!next.reminders && !next.weeklyDigest && !next.leaveBy) {
+      } else if (
+        !next.reminders &&
+        !next.weeklyDigest &&
+        !next.leaveBy &&
+        !next.rareFinds
+      ) {
         await disablePush()
         next.subscribed = false
       } else {
@@ -88,6 +97,7 @@ export function usePush(active: boolean): {
             reminders: next.reminders,
             weeklyDigest: next.weeklyDigest,
             leaveBy: next.leaveBy,
+            rareFinds: next.rareFinds,
           })
       }
       setPushState(next)
