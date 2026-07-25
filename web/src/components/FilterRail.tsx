@@ -12,6 +12,7 @@ import {
   SlidersHorizontalIcon,
   SproutIcon,
   TicketIcon,
+  Volume2Icon,
   XIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -42,6 +43,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { DateQuickChips } from "@/components/DateFilters"
+import { NearMeChip } from "@/components/NearMeChip"
 import { EventCard } from "@/components/EventCard"
 import { useFilterToggles, type FilterToggle } from "@/hooks/useFilterToggles"
 import { useOrderedEvents } from "@/hooks/useOrderedEvents"
@@ -88,6 +90,8 @@ export function FilterRail() {
   const setRailWidth = useGrapevine((s) => s.setRailWidth)
   const hiddenCount = useGrapevine((s) => s.hiddenIds.length)
   const clearHidden = useGrapevine((s) => s.clearHidden)
+  const mutedCount = useGrapevine((s) => s.mutedVenues.length + s.mutedSources.length)
+  const clearMuted = useGrapevine((s) => s.clearMuted)
 
   // Filters (buzz + categories) tuck into a disclosure that starts collapsed,
   // so the list gets the room by default.
@@ -151,6 +155,7 @@ export function FilterRail() {
             <CalendarRangeIcon className="mt-[5px] size-3.5 shrink-0 text-muted-foreground" />
             <div className="flex flex-1 flex-wrap items-center gap-1.5">
               <DateQuickChips chipClass={RAIL_CHIP} activeClass={RAIL_CHIP_ACTIVE} />
+              <NearMeChip chipClass={RAIL_CHIP} activeClass={RAIL_CHIP_ACTIVE} />
             </div>
           </div>
         </div>
@@ -216,6 +221,18 @@ export function FilterRail() {
             >
               <EyeIcon className="size-3.5" />
               Restore {hiddenCount} hidden event{hiddenCount === 1 ? "" : "s"}
+            </button>
+          )}
+          {mutedCount > 0 && (
+            <button
+              type="button"
+              onClick={clearMuted}
+              className="mt-1 flex items-center justify-center gap-1.5 rounded-md py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <Volume2Icon className="size-3.5" />
+              {mutedCount === 1
+                ? "Unmute 1 venue or source"
+                : `Unmute ${mutedCount} venues & sources`}
             </button>
           )}
         </div>

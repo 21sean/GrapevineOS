@@ -14,6 +14,7 @@ import { EventMap } from "@/components/map/EventMap"
 import { MobileDock } from "@/components/MobileDock"
 import { TopBar } from "@/components/TopBar"
 import { useIsMobile } from "@/hooks/useIsMobile"
+import { useNearZone } from "@/hooks/useNearZone"
 import { api } from "@/lib/api"
 import { selectTour } from "@/lib/derived"
 import { useGrapevine } from "@/lib/store"
@@ -54,6 +55,8 @@ export function App() {
 
   const [loadError, setLoadError] = useState<string | null>(null)
   const isMobile = useIsMobile()
+  // Resolve the "Near me" filter to a drive-time isochrone as it changes.
+  useNearZone()
   // Latch so the sheet stays mounted after closing — otherwise the close
   // animation would be cut off when adminOpen flips false. Render-phase
   // state adjustment, per the React docs (same pattern as AccountDialog).

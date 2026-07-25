@@ -22,6 +22,30 @@ interface Taste {
 
 const terms = affinityTerms;
 
+/** Prefs arrive as untyped JSON — keep only the strings. */
+export function stringList(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+}
+
+/** Muted venues/sources from account prefs, lowercased for matching. */
+export function mutedSets(user: User): { venues: Set<string>; sources: Set<string> } {
+  const lc = (s: string) => s.trim().toLowerCase();
+  return {
+    venues: new Set(stringList(user.prefs?.mutedVenues).map(lc)),
+    sources: new Set(stringList(user.prefs?.mutedSources).map(lc)),
+  };
+}
+
+export function isMutedFor(
+  e: Pick<CityEvent, "venue" | "source">,
+  muted: { venues: Set<string>; sources: Set<string> },
+): boolean {
+  return (
+    muted.venues.has(e.venue.trim().toLowerCase()) ||
+    muted.sources.has(e.source.trim().toLowerCase())
+  );
+}
+
 function scoreFor(e: CityEvent, taste: Taste): number {
   const ts = terms(e);
   if (ts.some((t) => taste.avoids.includes(t))) return -Infinity;
@@ -69,9 +93,11 @@ export async function weekPicks(
     tagAffinity: tagAffinity(byId, reactions.map((r) => [r.eventId, r.reaction] as const)),
   };
 
+  const muted = mutedSets(user);
   const horizon = new Date(c.now.getTime() + 7 * 86_400_000);
   const scored = c.upcoming
     .filter(({ occ }) => new Date(occ.start) <= horizon)
+    .filter(({ e }) => !isMutedFor(e, muted))
     .map((u) => ({ ...u, score: scoreFor(u.e, taste) }))
     .filter((u) => u.score > -Infinity && !u.e.promoted)
     .sort((a, b) => b.score - a.score)

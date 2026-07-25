@@ -6,6 +6,7 @@
  * thing in every ingest log).
  */
 import { enrichEventImages } from "./images.js";
+import { notifyRareFinds } from "./push.js";
 import { store } from "./store.js";
 import type { CityEvent, IngestRecord } from "./types.js";
 
@@ -29,5 +30,8 @@ export async function commitIngest(opts: {
   });
   // Artwork pass runs after the response — decoration, not a gate.
   if (added.length) void enrichEventImages(added).catch(() => {});
+  // Rare-find pushes too: opt-in subscribers hear about a matching rare
+  // one-off the moment it lands, without holding the ingest response.
+  if (added.length) void notifyRareFinds(added).catch(() => {});
   return { added, ingest };
 }

@@ -72,6 +72,51 @@ export async function eta(
   return value;
 }
 
+// ---------- isochrone ("Near me" drive-time contour) ----------
+
+const ISO_TTL_MS = 10 * 60 * 1000;
+const isoCache = new Map<string, { at: number; value: IsochroneResult | null }>();
+
+export interface IsochroneResult {
+  /** GeoJSON polygons ([outer ring, holes…] each) reachable within the time. */
+  polygons: [number, number][][][];
+}
+
+/**
+ * Traffic-aware drive-time contour around a point: everything inside the
+ * returned polygons is reachable within `minutes`. Same 10-minute TTL as the
+ * ETA cache — the contour breathes with traffic. Null when Mapbox has no
+ * contour for the spot (mid-ocean origins and the like).
+ */
+export async function isochrone(
+  center: [number, number],
+  minutes: number,
+): Promise<IsochroneResult | null> {
+  const mins = Math.min(60, Math.max(1, Math.round(minutes)));
+  const key = `${round3(center[0])},${round3(center[1])}|${mins}`;
+  const hit = isoCache.get(key);
+  if (hit && Date.now() - hit.at < ISO_TTL_MS) return hit.value;
+
+  const url =
+    `https://api.mapbox.com/isochrone/v1/mapbox/driving-traffic/${center[0]},${center[1]}` +
+    `?contours_minutes=${mins}&polygons=true&access_token=${token()}`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+  if (!res.ok) {
+    if (hit) return hit.value; // stale-if-error
+    throw new Error(`isochrone failed: HTTP ${res.status}`);
+  }
+  const body = (await res.json()) as any;
+  const polygons: [number, number][][][] = [];
+  for (const feat of body.features ?? []) {
+    const g = feat.geometry;
+    if (g?.type === "Polygon") polygons.push(g.coordinates);
+    else if (g?.type === "MultiPolygon") polygons.push(...g.coordinates);
+  }
+  const value: IsochroneResult | null = polygons.length ? { polygons } : null;
+  isoCache.set(key, { at: Date.now(), value });
+  return value;
+}
+
 // ---------- geocoding ----------
 
 export interface GeocodeHit {

@@ -55,6 +55,8 @@ export const api = {
     interests?: Interests
     pinnedIds?: string[]
     hiddenIds?: string[]
+    mutedVenues?: string[]
+    mutedSources?: string[]
   }) =>
     fetch("/api/me/prefs", {
       method: "PUT",
@@ -78,6 +80,15 @@ export const api = {
     if (from) params.set("from", from.join(","))
     return fetch(`/api/eta?${params}`).then((r) =>
       json<{ minutes: number | null; km: number | null }>(r),
+    )
+  },
+
+  /** Drive-time contour around a point — the "Near me" filter's zone. */
+  isochrone: (minutes: number, center?: [number, number]) => {
+    const params = new URLSearchParams({ minutes: String(minutes) })
+    if (center) params.set("center", center.join(","))
+    return fetch(`/api/isochrone?${params}`).then((r) =>
+      json<{ polygons: [number, number][][][] }>(r),
     )
   },
 
@@ -114,12 +125,18 @@ export const api = {
         reminders: boolean
         weeklyDigest: boolean
         leaveBy: boolean
+        rareFinds: boolean
       }>(r),
     ),
 
   pushSubscribe: (
     subscription: PushSubscriptionJSON,
-    prefs?: { reminders?: boolean; weeklyDigest?: boolean; leaveBy?: boolean },
+    prefs?: {
+      reminders?: boolean
+      weeklyDigest?: boolean
+      leaveBy?: boolean
+      rareFinds?: boolean
+    },
   ) =>
     fetch("/api/push/subscribe", {
       method: "POST",
@@ -129,7 +146,12 @@ export const api = {
 
   pushPrefs: (
     endpoint: string,
-    prefs: { reminders?: boolean; weeklyDigest?: boolean; leaveBy?: boolean },
+    prefs: {
+      reminders?: boolean
+      weeklyDigest?: boolean
+      leaveBy?: boolean
+      rareFinds?: boolean
+    },
   ) =>
     fetch("/api/push/prefs", {
       method: "PUT",

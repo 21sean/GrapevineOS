@@ -89,7 +89,21 @@ export function activeFilterCount(f: Filters): number {
     (f.rareOnly ? 1 : 0) +
     (f.farmers !== "any" ? 1 : 0) +
     (!f.hidePromoted ? 1 : 0) +
-    (f.dateFrom || f.dateTo ? 1 : 0)
+    (f.dateFrom || f.dateTo ? 1 : 0) +
+    (f.nearMinutes !== null ? 1 : 0)
+  )
+}
+
+/** Muted venues/sources, lowercased for matching (see selectMuted). */
+export interface Muted {
+  venues: ReadonlySet<string>
+  sources: ReadonlySet<string>
+}
+
+export function isMuted(e: CityEvent, muted: Muted): boolean {
+  return (
+    muted.venues.has(e.venue.trim().toLowerCase()) ||
+    muted.sources.has(e.source.trim().toLowerCase())
   )
 }
 
@@ -190,12 +204,19 @@ export function visibleEvents(
   tz?: string,
   hidden?: ReadonlySet<string>,
   taste?: Taste,
+  muted?: Muted,
+  // "Near me" membership for the resolved isochrone; undefined = zone not
+  // ready yet (or filter off), which deliberately filters nothing — better
+  // a beat of "everything" than a flash of empty while the zone loads.
+  near?: (e: CityEvent) => boolean,
 ): CityEvent[] {
   // Score each event once, then sort by the cached number — scoring inside
   // the comparator would re-run isLive/nextOccurrence O(n log n) times.
   const scored: [number, CityEvent][] = []
   for (const e of events) {
     if (hidden?.has(e.id)) continue
+    if (muted && isMuted(e, muted)) continue
+    if (near && !near(e)) continue
     if (!matchesFilters(e, f, interests, now, tz)) continue
     scored.push([scoreEvent(e, interests, now, tz, taste), e])
   }

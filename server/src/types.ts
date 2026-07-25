@@ -24,6 +24,8 @@ export interface PushSub {
   weeklyDigest: boolean;
   /** Traffic-aware "time to leave" alerts for going/saved events. */
   leaveBy: boolean;
+  /** Opt-in: a push when ingest lands a rare event matching the user's loves. */
+  rareFinds: boolean;
 }
 
 /** Per-account copies of the browser preferences, synced when signed in. */
@@ -32,6 +34,8 @@ export interface UserPrefs {
   interests?: unknown;
   pinnedIds?: unknown;
   hiddenIds?: unknown;
+  mutedVenues?: unknown;
+  mutedSources?: unknown;
 }
 
 /**

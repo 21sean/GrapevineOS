@@ -7,9 +7,11 @@ import {
   SlidersHorizontalIcon,
   SproutIcon,
   TicketIcon,
+  Volume2Icon,
 } from "lucide-react"
 import { Separator } from "@/components/ui/separator"
 import { DateQuickChips } from "@/components/DateFilters"
+import { NearMeChip } from "@/components/NearMeChip"
 import { EventCard } from "@/components/EventCard"
 import {
   BuzzAndCategoryFilters,
@@ -73,6 +75,8 @@ export function MobileDock() {
   const detailOpen = useGrapevine((s) => s.detailOpen)
   const hiddenCount = useGrapevine((s) => s.hiddenIds.length)
   const clearHidden = useGrapevine((s) => s.clearHidden)
+  const mutedCount = useGrapevine((s) => s.mutedVenues.length + s.mutedSources.length)
+  const clearMuted = useGrapevine((s) => s.clearMuted)
 
   const { visible, ordered } = useOrderedEvents()
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -241,6 +245,8 @@ export function MobileDock() {
           {/* Today / Tomorrow / Weekend / range picker — the phone finally
               gets the date window the agent could always set */}
           <DateQuickChips chipClass={DOCK_CHIP} activeClass={DOCK_CHIP_ACTIVE} />
+          {/* drive-time radius from wherever the user is standing */}
+          <NearMeChip chipClass={DOCK_CHIP} activeClass={DOCK_CHIP_ACTIVE} />
           {/* three states, one thumb: show all → only markets → no markets */}
           <Chip
             active={farmers.value !== "any"}
@@ -316,6 +322,18 @@ export function MobileDock() {
             >
               <EyeIcon className="size-3.5" />
               Restore {hiddenCount} hidden event{hiddenCount === 1 ? "" : "s"}
+            </button>
+          )}
+          {mutedCount > 0 && (
+            <button
+              type="button"
+              onClick={clearMuted}
+              className="mt-1 flex items-center justify-center gap-1.5 rounded-md py-2 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <Volume2Icon className="size-3.5" />
+              {mutedCount === 1
+                ? "Unmute 1 venue or source"
+                : `Unmute ${mutedCount} venues & sources`}
             </button>
           )}
         </div>
