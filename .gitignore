@@ -15,3 +15,5 @@ dist/
 # Local Claude Code skill mirror (source of truth: .agents/skills/ + skills-lock.json)
 .claude/skills/
 server/.cache/
+# Local runtime state (sessions, users, geocache, calendar) — never committed.
+server/data/
