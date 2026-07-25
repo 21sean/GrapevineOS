@@ -11,6 +11,7 @@ import { EventDetail } from "@/components/EventDetail"
 import { FilterRail } from "@/components/FilterRail"
 import { InterestsDialog } from "@/components/InterestsDialog"
 import { EventMap } from "@/components/map/EventMap"
+import { MapLayers } from "@/components/MapLayers"
 import { MobileDock } from "@/components/MobileDock"
 import { TopBar } from "@/components/TopBar"
 import { useIsMobile } from "@/hooks/useIsMobile"
@@ -168,6 +169,7 @@ export function App() {
           <>
             <TopBar />
             {isMobile ? <MobileDock /> : <FilterRail />}
+            <MapLayers />
             <CarouselOverlay />
             <EventDetail />
             <InterestsDialog />

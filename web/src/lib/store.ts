@@ -13,6 +13,7 @@ import type {
   User,
 } from "./types"
 import { DEFAULT_FILTERS, normalizeFilters } from "./types"
+import { DEFAULT_MAP_LAYERS, type MapLayerKey } from "./mapLayers"
 import type { PolygonRings } from "./geo"
 
 /**
@@ -45,6 +46,9 @@ export interface GrapevineState {
   carouselOn: boolean
   carouselIdx: number
   trafficOn: boolean
+  // per-basemap-layer visibility (device-local); true = shown. Keyed by the
+  // Standard-style config toggles in lib/mapLayers.
+  mapLayers: Record<MapLayerKey, boolean>
   userPos: [number, number] | null
   // width of the left event-list rail, in px (device-local, resizable)
   railWidth: number
@@ -96,6 +100,8 @@ export interface GrapevineState {
   setCarousel: (on: boolean) => void
   advanceCarousel: (idx: number) => void
   setTraffic: (on: boolean) => void
+  setMapLayer: (key: MapLayerKey, visible: boolean) => void
+  resetMapLayers: () => void
   setUserPos: (pos: [number, number] | null) => void
   setRailWidth: (px: number) => void
   setDetailWidth: (px: number) => void
@@ -172,6 +178,7 @@ export const useGrapevine = create<GrapevineState>()(
       carouselOn: false,
       carouselIdx: 0,
       trafficOn: true,
+      mapLayers: { ...DEFAULT_MAP_LAYERS },
       userPos: null,
       railWidth: 340,
       detailWidth: 448,
@@ -255,6 +262,13 @@ export const useGrapevine = create<GrapevineState>()(
       advanceCarousel: (carouselIdx) => set({ carouselIdx }),
 
       setTraffic: (trafficOn) => set({ trafficOn }),
+
+      setMapLayer: (key, visible) =>
+        set({ mapLayers: { ...get().mapLayers, [key]: visible } }),
+
+      resetMapLayers: () =>
+        set({ mapLayers: { ...DEFAULT_MAP_LAYERS }, trafficOn: true }),
+
       setUserPos: (userPos) => set({ userPos }),
       setRailWidth: (railWidth) => set({ railWidth }),
       setDetailWidth: (detailWidth) => set({ detailWidth }),
@@ -415,7 +429,7 @@ export const useGrapevine = create<GrapevineState>()(
     }),
     {
       name: "grapevine-prefs",
-      version: 3,
+      version: 5,
       partialize: (s) => ({
         filters: s.filters,
         interests: s.interests,
@@ -429,18 +443,27 @@ export const useGrapevine = create<GrapevineState>()(
         carouselWidth: s.carouselWidth,
         carouselMin: s.carouselMin,
         sortBy: s.sortBy,
+        mapLayers: s.mapLayers,
       }),
       // v0 persisted a `trafficOn` toggle; traffic is now always on, so drop
       // the stored value and let the `true` default win.
       // v2 replaced filters.farmersOnly with the tri-state filters.farmers.
       // v3 added filters.nearMinutes (normalize fills the missing key).
+      // v4 added filters.hideCategories (normalize fills the missing key).
+      // v5 added mapLayers (fill any missing basemap toggle with its default).
       migrate: (persisted, version) => {
         const p = persisted as Record<string, unknown> | undefined
         if (version < 1 && p && typeof p === "object") {
           delete p.trafficOn
         }
-        if (version < 3 && p && typeof p === "object" && p.filters) {
+        if (version < 4 && p && typeof p === "object" && p.filters) {
           p.filters = normalizeFilters(p.filters)
+        }
+        if (version < 5 && p && typeof p === "object") {
+          p.mapLayers = {
+            ...DEFAULT_MAP_LAYERS,
+            ...(p.mapLayers as Partial<Record<MapLayerKey, boolean>> | undefined),
+          }
         }
         return persisted as GrapevineState
       },

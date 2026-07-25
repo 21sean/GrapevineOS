@@ -12,6 +12,7 @@ import {
   selectVisible,
 } from "@/lib/derived"
 import { CATEGORY_META, type Category, type CityEvent } from "@/lib/types"
+import { BASEMAP_LAYERS } from "@/lib/mapLayers"
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN as string
 
@@ -126,6 +127,7 @@ export function EventMap() {
   const carouselOn = useGrapevine((s) => s.carouselOn)
   const carouselIdx = useGrapevine((s) => s.carouselIdx)
   const trafficOn = useGrapevine((s) => s.trafficOn)
+  const mapLayers = useGrapevine((s) => s.mapLayers)
   const userPos = useGrapevine((s) => s.userPos)
   const select = useGrapevine((s) => s.select)
   const agentHighlight = useGrapevine((s) => s.agentHighlight)
@@ -222,8 +224,15 @@ export function EventMap() {
     map.on("style.load", () => {
       styleReadyRef.current = true
       map.setConfigProperty("basemap", "lightPreset", lightPresetRef.current)
+      // Basemap layer toggles are persisted; a fresh style resets them to the
+      // Standard defaults, so re-apply the stored visibility once it can take
+      // config. (The [mapLayers] effect below is a no-op until this runs.)
+      const st = useGrapevine.getState()
+      for (const l of BASEMAP_LAYERS) {
+        map.setConfigProperty("basemap", l.config, st.mapLayers[l.key] !== false)
+      }
       // trafficOn is persisted; restore it once the style can take layers
-      if (useGrapevine.getState().trafficOn) addTrafficLayer(map)
+      if (st.trafficOn) addTrafficLayer(map)
     })
 
     mapRef.current = map
@@ -430,6 +439,18 @@ export function EventMap() {
       map.setLayoutProperty(TRAFFIC_LAYER, "visibility", "none")
     }
   }, [trafficOn])
+
+  // --- basemap layer visibility (Standard-style config toggles) ---
+  // Runs on every mapLayers change; guarded until the style can take config,
+  // with style.load handling the first apply. mapLayers keeps its reference
+  // until setMapLayer swaps it, so unrelated re-renders don't re-apply.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !styleReadyRef.current) return
+    for (const l of BASEMAP_LAYERS) {
+      map.setConfigProperty("basemap", l.config, mapLayers[l.key] !== false)
+    }
+  }, [mapLayers])
 
   // --- user position dot ---
   useEffect(() => {
