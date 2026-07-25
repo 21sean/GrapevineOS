@@ -286,7 +286,8 @@ export const SORT_OPTIONS: { value: SortKey; label: string }[] = [
 export type FarmersFilter = "any" | "only" | "hide"
 
 export interface Filters {
-  categories: Category[] // empty = all
+  categories: Category[] // "only these"; empty = all
+  hideCategories: Category[] // categories to exclude (ignored for any in `categories`)
   liveOnly: boolean
   rareOnly: boolean
   freeOnly: boolean
@@ -305,6 +306,7 @@ export const NEAR_MINUTES_MAX = 60
 
 export const DEFAULT_FILTERS: Filters = {
   categories: [],
+  hideCategories: [],
   liveOnly: false,
   rareOnly: false,
   freeOnly: false,
@@ -340,6 +342,9 @@ export function normalizeFilters(raw: unknown): Filters {
   return {
     ...DEFAULT_FILTERS,
     ...(Array.isArray(r.categories) && { categories: r.categories as Category[] }),
+    ...(Array.isArray(r.hideCategories) && {
+      hideCategories: r.hideCategories as Category[],
+    }),
     ...(typeof r.liveOnly === "boolean" && { liveOnly: r.liveOnly }),
     ...(typeof r.rareOnly === "boolean" && { rareOnly: r.rareOnly }),
     ...(typeof r.freeOnly === "boolean" && { freeOnly: r.freeOnly }),

@@ -83,6 +83,7 @@ export function scoreEvent(
 export function activeFilterCount(f: Filters): number {
   return (
     f.categories.length +
+    f.hideCategories.length +
     (f.minRating > 0 ? 1 : 0) +
     (f.freeOnly ? 1 : 0) +
     (f.liveOnly ? 1 : 0) +
@@ -123,6 +124,7 @@ export function matchesFilters(
   if (f.farmers === "hide" && isFarmersMarket(e)) return false
   if (f.minRating > 0 && e.rating < f.minRating) return false
   if (f.categories.length && !f.categories.includes(e.category)) return false
+  if (f.hideCategories.length && f.hideCategories.includes(e.category)) return false
   if (f.dateFrom || f.dateTo) {
     // window over the next occurrence, city-local — same rule the agent's
     // search_events uses server-side

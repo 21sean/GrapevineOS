@@ -5,7 +5,6 @@ import {
   MegaphoneOffIcon,
   RadioIcon,
   SlidersHorizontalIcon,
-  SproutIcon,
   TicketIcon,
   Volume2Icon,
 } from "lucide-react"
@@ -71,7 +70,7 @@ export function MobileDock() {
   const dockState = useGrapevine((s) => s.dockState)
   const setDockState = useGrapevine((s) => s.setDockState)
   const filters = useGrapevine((s) => s.filters)
-  const { toggles, farmers } = useFilterToggles()
+  const { toggles } = useFilterToggles()
   const detailOpen = useGrapevine((s) => s.detailOpen)
   const hiddenCount = useGrapevine((s) => s.hiddenIds.length)
   const clearHidden = useGrapevine((s) => s.clearHidden)
@@ -229,52 +228,27 @@ export function MobileDock() {
           </span>
         </div>
 
-        {/* Quick filters ride in the peek strip, one thumb-tap away. */}
+        {/* Quick filters ride in the peek strip, one thumb-tap away.
+            Free-only and farmers markets live in the Filters panel. */}
         <div className="flex touch-pan-x gap-2 overflow-x-auto px-4 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {toggles.slice(0, 3).map((t) => (
-            <Chip
-              key={t.key}
-              active={t.active}
-              activeClass={CHIP_ACTIVE[t.key]}
-              onClick={t.toggle}
-            >
-              {CHIP_ICONS[t.key]}
-              {t.shortLabel}
-            </Chip>
-          ))}
+          {toggles
+            .filter((t) => t.key !== "free")
+            .map((t) => (
+              <Chip
+                key={t.key}
+                active={t.active}
+                activeClass={CHIP_ACTIVE[t.key]}
+                onClick={t.toggle}
+              >
+                {CHIP_ICONS[t.key]}
+                {t.shortLabel}
+              </Chip>
+            ))}
           {/* Today / Tomorrow / Weekend / range picker — the phone finally
               gets the date window the agent could always set */}
           <DateQuickChips chipClass={DOCK_CHIP} activeClass={DOCK_CHIP_ACTIVE} />
           {/* drive-time radius from wherever the user is standing */}
           <NearMeChip chipClass={DOCK_CHIP} activeClass={DOCK_CHIP_ACTIVE} />
-          {/* three states, one thumb: show all → only markets → no markets */}
-          <Chip
-            active={farmers.value !== "any"}
-            activeClass={
-              farmers.value === "only"
-                ? "border-[#56c7ac]/50 bg-[#56c7ac]/15 text-[#56c7ac]"
-                : "border-foreground/30 bg-accent text-foreground"
-            }
-            onClick={farmers.cycle}
-          >
-            <SproutIcon className="size-3.5 text-[#56c7ac]" />
-            {farmers.value === "only"
-              ? "Farmers only"
-              : farmers.value === "hide"
-                ? "No farmers markets"
-                : "Farmers markets"}
-          </Chip>
-          {toggles.slice(3).map((t) => (
-            <Chip
-              key={t.key}
-              active={t.active}
-              activeClass={CHIP_ACTIVE[t.key]}
-              onClick={t.toggle}
-            >
-              {CHIP_ICONS[t.key]}
-              {t.shortLabel}
-            </Chip>
-          ))}
           <Chip
             active={filtersOpen}
             activeClass="border-foreground/30 bg-accent text-foreground"

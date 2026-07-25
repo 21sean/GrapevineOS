@@ -454,6 +454,15 @@ export function AccountDialog({
                       {CATEGORY_META[c].label}
                     </Badge>
                   ))}
+                  {filters.hideCategories.map((c) => (
+                    <Badge key={`hide-${c}`} variant="secondary" className="gap-1.5">
+                      <span
+                        className="size-2 rounded-full opacity-40"
+                        style={{ background: CATEGORY_META[c].color }}
+                      />
+                      No {CATEGORY_META[c].label.toLowerCase()}
+                    </Badge>
+                  ))}
                 </>
               )}
             </div>

@@ -33,8 +33,6 @@ import {
 } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Slider } from "@/components/ui/slider"
-import { Switch } from "@/components/ui/switch"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
   Empty,
   EmptyContent,
@@ -85,7 +83,6 @@ const RAIL_MAX = 560
 
 export function FilterRail() {
   const filters = useGrapevine((s) => s.filters)
-  const { toggles, farmers } = useFilterToggles()
   const railWidth = useGrapevine((s) => s.railWidth)
   const setRailWidth = useGrapevine((s) => s.setRailWidth)
   const hiddenCount = useGrapevine((s) => s.hiddenIds.length)
@@ -126,37 +123,13 @@ export function FilterRail() {
       className="glass absolute top-20 bottom-4 left-4 z-10 flex flex-col overflow-hidden rounded-xl"
     >
       <div className="flex flex-col gap-3 p-4 pb-3">
-        <div className="flex flex-col gap-1.5">
-          {/* farmers slots between the free and hide-promoted rows */}
-          {toggles.slice(0, 3).map((t) => (
-            <ToggleRow
-              key={t.key}
-              icon={TOGGLE_ICONS[t.key]}
-              label={t.label}
-              hint={t.hint}
-              checked={t.active}
-              onChange={t.toggle}
-            />
-          ))}
-          <FarmersRow value={farmers.value} onChange={farmers.setValue} />
-          {toggles.slice(3).map((t) => (
-            <ToggleRow
-              key={t.key}
-              icon={TOGGLE_ICONS[t.key]}
-              label={t.label}
-              hint={t.hint}
-              checked={t.active}
-              onChange={t.toggle}
-            />
-          ))}
-          {/* one-tap date windows; a custom range (agent- or picker-set)
-              shows on the picker chip with its own clear button */}
-          <div className="flex items-start gap-2 pt-0.5">
-            <CalendarRangeIcon className="mt-[5px] size-3.5 shrink-0 text-muted-foreground" />
-            <div className="flex flex-1 flex-wrap items-center gap-1.5">
-              <DateQuickChips chipClass={RAIL_CHIP} activeClass={RAIL_CHIP_ACTIVE} />
-              <NearMeChip chipClass={RAIL_CHIP} activeClass={RAIL_CHIP_ACTIVE} />
-            </div>
+        {/* one-tap date windows; a custom range (agent- or picker-set)
+            shows on the picker chip with its own clear button */}
+        <div className="flex items-start gap-2">
+          <CalendarRangeIcon className="mt-[5px] size-3.5 shrink-0 text-muted-foreground" />
+          <div className="flex flex-1 flex-wrap items-center gap-1.5">
+            <DateQuickChips chipClass={RAIL_CHIP} activeClass={RAIL_CHIP_ACTIVE} />
+            <NearMeChip chipClass={RAIL_CHIP} activeClass={RAIL_CHIP_ACTIVE} />
           </div>
         </div>
 
@@ -321,12 +294,23 @@ export function ListSearchSort() {
 }
 
 /**
- * Buzz threshold + category chips — the disclosure body, shared between the
- * desktop rail and the phone dock.
+ * The disclosure body, shared between the desktop rail and the phone dock:
+ * buzz threshold, free-only, the farmers-market tri-state, and category chips.
  */
 export function BuzzAndCategoryFilters() {
   const filters = useGrapevine((s) => s.filters)
   const setFilters = useGrapevine((s) => s.setFilters)
+  const { toggles, farmers } = useFilterToggles()
+
+  // Each category is its own Show/Only/Hide row: "only" adds it to the
+  // restrict-to set, "hide" adds it to the exclude set, "any" clears both.
+  const setCategoryMode = (c: Category, mode: FarmersFilter) => {
+    const categories = filters.categories.filter((x) => x !== c)
+    const hideCategories = filters.hideCategories.filter((x) => x !== c)
+    if (mode === "only") categories.push(c)
+    else if (mode === "hide") hideCategories.push(c)
+    setFilters({ categories, hideCategories })
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -346,29 +330,48 @@ export function BuzzAndCategoryFilters() {
         </span>
       </div>
 
-      <ToggleGroup
-        type="multiple"
-        variant="outline"
-        size="sm"
-        className="flex-wrap justify-start"
-        value={filters.categories}
-        onValueChange={(v) => setFilters({ categories: v as Category[] })}
-      >
-        {CATEGORIES.map((c) => (
-          <ToggleGroupItem
+      {/* every boolean filter reads as the same segmented control as the
+          farmers-market row below — on/off instead of a switch */}
+      {toggles.map((t) => (
+        <SegmentedRow
+          key={t.key}
+          icon={TOGGLE_ICONS[t.key]}
+          label={t.label}
+          hint={t.hint}
+          options={BOOL_OPTIONS}
+          value={t.active ? "on" : "off"}
+          onChange={(v) => {
+            if ((v === "on") !== t.active) t.toggle()
+          }}
+        />
+      ))}
+      <FarmersRow value={farmers.value} onChange={farmers.setValue} />
+
+      {/* one Show/Only/Hide row per category, same control as farmers markets */}
+      {CATEGORIES.map((c) => {
+        const color = CATEGORY_META[c].color
+        const mode: FarmersFilter = filters.categories.includes(c)
+          ? "only"
+          : filters.hideCategories.includes(c)
+            ? "hide"
+            : "any"
+        return (
+          <SegmentedRow
             key={c}
-            value={c}
-            aria-label={CATEGORY_META[c].label}
-            className="gap-1.5 rounded-full px-3"
-          >
-            <span
-              className="size-2 rounded-full"
-              style={{ background: CATEGORY_META[c].color }}
-            />
-            {CATEGORY_META[c].label}
-          </ToggleGroupItem>
-        ))}
-      </ToggleGroup>
+            icon={
+              <span
+                className="size-2.5 rounded-full"
+                style={{ background: color }}
+              />
+            }
+            label={CATEGORY_META[c].label}
+            options={FARMERS_OPTIONS}
+            value={mode}
+            onChange={(v) => setCategoryMode(c, v as FarmersFilter)}
+            activeStyle={{ only: { backgroundColor: `${color}26`, color } }}
+          />
+        )
+      })}
     </div>
   )
 }
@@ -385,34 +388,19 @@ function FarmersRow({
   onChange: (v: FarmersFilter) => void
 }) {
   return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="flex items-center gap-2 text-sm">
+    <SegmentedRow
+      icon={
         <SproutIcon
           className="size-3.5"
           style={{ color: CATEGORY_META.market.color }}
         />
-        Farmers markets
-      </span>
-      <div className="flex rounded-md border border-border p-0.5">
-        {FARMERS_OPTIONS.map((o) => (
-          <button
-            key={o.value}
-            type="button"
-            aria-pressed={value === o.value}
-            onClick={() => onChange(o.value)}
-            className={cn(
-              "rounded-[5px] px-2 py-0.5 text-xs text-muted-foreground transition-colors",
-              value === o.value &&
-                (o.value === "only"
-                  ? "bg-[#56c7ac]/15 text-[#56c7ac]"
-                  : "bg-accent text-foreground"),
-            )}
-          >
-            {o.label}
-          </button>
-        ))}
-      </div>
-    </div>
+      }
+      label="Farmers markets"
+      options={FARMERS_OPTIONS}
+      value={value}
+      onChange={(v) => onChange(v as FarmersFilter)}
+      activeClass={{ only: "bg-[#56c7ac]/15 text-[#56c7ac]" }}
+    />
   )
 }
 
@@ -457,29 +445,64 @@ export function EventListEmpty() {
   )
 }
 
-function ToggleRow({
+// Boolean filters wear the same two-segment control as the tri-state rows.
+const BOOL_OPTIONS = [
+  { value: "off", label: "Off" },
+  { value: "on", label: "On" },
+]
+
+/**
+ * A label + a segmented pill group, the shared look for every filter in the
+ * disclosure: booleans get Off/On, farmers markets get Show/Only/Hide. The
+ * selected segment lights up; `activeClass` themes specific values (e.g. the
+ * farmers "only" teal).
+ */
+function SegmentedRow({
   icon,
   label,
   hint,
-  checked,
+  options,
+  value,
   onChange,
+  activeClass,
+  activeStyle,
 }: {
   icon: React.ReactNode
   label: string
   hint?: string
-  checked: boolean
-  onChange: (v: boolean) => void
+  options: { value: string; label: string }[]
+  value: string
+  onChange: (v: string) => void
+  activeClass?: Record<string, string>
+  activeStyle?: Record<string, React.CSSProperties>
 }) {
   return (
-    <label className="flex cursor-pointer items-center justify-between gap-2">
+    <div className="flex items-center justify-between gap-2">
       <span className="flex items-center gap-2 text-sm">
         {icon}
         {label}
-        {hint && (
-          <span className="text-xs text-muted-foreground">{hint}</span>
-        )}
+        {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
       </span>
-      <Switch checked={checked} onCheckedChange={onChange} />
-    </label>
+      <div className="flex shrink-0 rounded-md border border-border p-0.5">
+        {options.map((o) => {
+          const on = value === o.value
+          return (
+            <button
+              key={o.value}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onChange(o.value)}
+              style={on ? activeStyle?.[o.value] : undefined}
+              className={cn(
+                "rounded-[5px] px-2 py-0.5 text-xs text-muted-foreground transition-colors",
+                on && (activeClass?.[o.value] ?? "bg-accent text-foreground"),
+              )}
+            >
+              {o.label}
+            </button>
+          )
+        })}
+      </div>
+    </div>
   )
 }
