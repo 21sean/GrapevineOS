@@ -8,7 +8,10 @@ export interface Eta {
   km: number | null
 }
 
-const cache = new Map<string, Eta>()
+// ETAs are traffic-aware, so cached values go stale: entries older than the
+// TTL count as misses (the server keeps its own 10-minute cache behind this).
+const ETA_TTL_MS = 5 * 60_000
+const cache = new Map<string, { at: number; value: Eta }>()
 
 /** Traffic-aware drive time to an event, from the user (or city center). */
 export function useEta(event: CityEvent | null | undefined): Eta | null {
@@ -23,8 +26,8 @@ export function useEta(event: CityEvent | null | undefined): Eta | null {
       return
     }
     const hit = cache.get(key)
-    if (hit) {
-      setEta(hit)
+    if (hit && Date.now() - hit.at < ETA_TTL_MS) {
+      setEta(hit.value)
       return
     }
     let alive = true
@@ -32,7 +35,7 @@ export function useEta(event: CityEvent | null | undefined): Eta | null {
     api
       .eta([event.lng, event.lat], userPos ?? undefined)
       .then((r) => {
-        cache.set(key, r)
+        cache.set(key, { at: Date.now(), value: r })
         if (alive) setEta(r)
       })
       .catch(() => {

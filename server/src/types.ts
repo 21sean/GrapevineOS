@@ -1,54 +1,12 @@
-export type Category =
-  | "music"
-  | "food"
-  | "sports"
-  | "arts"
-  | "market"
-  | "festival"
-  | "community";
+/**
+ * Server types. The domain shapes the web client also consumes live in
+ * shared/types.ts (one definition, re-exported here); this file adds the
+ * server-only shapes — auth, push, calendar grants — that never cross the
+ * wire to the browser as-is.
+ */
+import type { Reaction } from "../../shared/types.js";
 
-export type Rarity = "common" | "notable" | "rare";
-
-export interface CityEvent {
-  id: string;
-  title: string;
-  description: string;
-  category: Category;
-  tags: string[];
-  venue: string;
-  address?: string;
-  lng: number;
-  lat: number;
-  start: string; // ISO 8601 with offset — anchor (first/next) occurrence
-  end: string;
-  /**
-   * RFC 5545 RRULE (no "RRULE:" prefix), e.g. "FREQ=WEEKLY;BYDAY=SA", when the
-   * event repeats. Absent/undefined means a one-off. `start`/`end` are the
-   * anchor occurrence + duration that the rule expands forward.
-   */
-  recurrence?: string;
-  price: string; // "Free", "$15", "$40+"
-  free: boolean;
-  ticketUrl?: string;
-  ticketProvider?: string;
-  source: string;
-  sourceKind: "newsletter" | "manual" | "seed" | "search";
-  /** Page the event was verified against — set by web discovery only. */
-  sourceUrl?: string;
-  rating: number; // 1–5 local-buzz score
-  ratingRationale?: string;
-  promoted: boolean; // paid/sponsored spam detection
-  rarity: Rarity;
-  /** og:image scraped from the ticket/source page at ingest (see images.ts). */
-  imageUrl?: string;
-  /** Dominant color of that image, "#rrggbb" — the paint-before-load fallback. */
-  imageColor?: string;
-}
-
-/** Per-user feedback on one event — the signal that teaches the ranking. */
-export type Reaction = "going" | "went" | "not_for_me";
-
-export const REACTIONS: Reaction[] = ["going", "went", "not_for_me"];
+export * from "../../shared/types.js";
 
 export interface ReactionEntry {
   eventId: string;
@@ -66,69 +24,6 @@ export interface PushSub {
   weeklyDigest: boolean;
   /** Traffic-aware "time to leave" alerts for going/saved events. */
   leaveBy: boolean;
-}
-
-/** An LLM engine: the local Ollama model or a subscription-authed CLI. */
-export type LlmProviderId = "ollama" | "claude" | "codex" | "gemini" | "copilot";
-
-export const LLM_PROVIDERS: LlmProviderId[] = [
-  "ollama",
-  "claude",
-  "codex",
-  "gemini",
-  "copilot",
-];
-
-export interface Settings {
-  city: string;
-  center: [number, number];
-  tz: string;
-  model: string;
-  ollamaUrl: string;
-  /** Who answers chat: the local Ollama agent or a subscription-authed CLI. */
-  chatProvider: LlmProviderId;
-  /** Who runs newsletter extraction and buzz ratings (default: ollama). */
-  extractProvider: LlmProviderId;
-}
-
-export interface Source {
-  id: string;
-  name: string;
-  address: string; // the per-source inbox at your domain
-  kind: string;
-  note: string;
-  active: boolean;
-}
-
-/**
- * One newsletter/email run through the extraction pipeline. Kept as a log so
- * the app can show where its events came from and when.
- */
-export interface IngestRecord {
-  id: string;
-  receivedAt: string; // ISO 8601
-  source: string; // inbox tag ("sdtoday"), "manual", or "web-search"
-  kind: "email" | "manual" | "search";
-  subject?: string; // inbound emails: subject; search runs: the query
-  extracted: number;
-  added: number;
-  /** Snapshot of what landed, so history survives event edits/deletes. */
-  events: { id: string; title: string; start: string }[];
-}
-
-/**
- * One saved web search the discovery scheduler re-runs. Each run searches the
- * open web, reads the top result pages, extracts event candidates, and adds
- * only the ones verification confirmed against the source page.
- */
-export interface DiscoverySearch {
-  id: string;
-  query: string;
-  cadenceHours: number; // hours between runs (1–336)
-  active: boolean;
-  createdAt: string; // ISO 8601
-  lastRunAt?: string; // ISO 8601 — unset until the first run
-  lastStatus?: string; // short human summary of the last run
 }
 
 /** Per-account copies of the browser preferences, synced when signed in. */
@@ -174,28 +69,3 @@ export interface User {
    * leave-by ETAs. Absent until the user grants geolocation while signed in. */
   lastPos?: { lng: number; lat: number; at: string };
 }
-
-/** One row in the Ask Grapevine history panel. */
-export interface ChatThreadMeta {
-  id: string; // the LangGraph thread id the client minted
-  title: string; // first user message, truncated
-  provider: string; // who answered: ollama model path or a CLI provider
-  updatedAt: string; // ISO 8601 — last exchange
-}
-
-/** One persisted chat message (only user/assistant text, never tool frames). */
-export interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
-  createdAt: string; // ISO 8601
-}
-
-export const CATEGORIES: Category[] = [
-  "music",
-  "food",
-  "sports",
-  "arts",
-  "market",
-  "festival",
-  "community",
-];

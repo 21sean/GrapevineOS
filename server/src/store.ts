@@ -7,9 +7,11 @@
  * the snake_case columns in db-types.ts.
  */
 import crypto from "node:crypto";
+import { dayInTz } from "../../shared/time.js";
 import { db } from "./db.js";
 import { normalizeRRule } from "./recurrence.js";
 import type { Json, Tables, TablesInsert } from "./db-types.js";
+import { isLlmProviderId } from "./types.js";
 import type {
   CalendarEntry,
   ChatMessage,
@@ -28,21 +30,24 @@ import type {
 } from "./types.js";
 
 /** Stable dedupe key, enforced by a unique index on events.dedupe_key so
- * ingest dedupe is a DB guarantee. One-offs key on normalized title + start
- * date. Recurring events key on title + the recurrence rule (a stable "series
- * key"), so re-ingesting next week's newsletter updates the one series row
- * instead of spawning a duplicate per occurrence. */
-export function eventKey(e: Pick<CityEvent, "title" | "start" | "recurrence">): string {
+ * ingest dedupe is a DB guarantee. One-offs key on normalized title + the
+ * city-local start day (so the same instant keys identically no matter which
+ * UTC offset a source emitted it with, and two same-title events on different
+ * local days stay distinct). Recurring events key on title + the recurrence
+ * rule (a stable "series key"), so re-ingesting next week's newsletter
+ * updates the one series row instead of spawning a duplicate per occurrence. */
+export function eventKey(
+  e: Pick<CityEvent, "title" | "start" | "recurrence">,
+  tz: string,
+): string {
   const title = e.title.toLowerCase().replace(/[^a-z0-9]/g, "");
   const rule = normalizeRRule(e.recurrence);
-  return rule ? `${title}|${rule}` : `${title}|${e.start.slice(0, 10)}`;
+  return rule ? `${title}|${rule}` : `${title}|${dayInTz(e.start, tz)}`;
 }
 
 /** DB stores providers as free text; unknown values fall back to ollama. */
 function coerceProvider(v: string): Settings["chatProvider"] {
-  return v === "claude" || v === "codex" || v === "gemini" || v === "copilot"
-    ? v
-    : "ollama";
+  return isLlmProviderId(v) ? v : "ollama";
 }
 
 // ---------- row mappers ----------
@@ -77,7 +82,7 @@ function rowToEvent(r: Tables<"events">): CityEvent {
   };
 }
 
-function eventToRow(e: CityEvent): TablesInsert<"events"> {
+function eventToRow(e: CityEvent, tz: string): TablesInsert<"events"> {
   // The DB enforces ends_at >= starts_at; clamp instead of losing the event
   // when the LLM emits a sloppy end time.
   const end = new Date(e.end) >= new Date(e.start) ? e.end : e.start;
@@ -109,7 +114,7 @@ function eventToRow(e: CityEvent): TablesInsert<"events"> {
     rarity: e.rarity,
     image_url: e.imageUrl ?? null,
     image_color: e.imageColor ?? null,
-    dedupe_key: eventKey(e),
+    dedupe_key: eventKey(e, tz),
   };
 }
 
@@ -210,11 +215,15 @@ export const store = {
   },
 
   /**
-   * Adds events, skipping duplicates (same normalized title + start date).
-   * Unknown source slugs are auto-registered so the events FK always holds.
-   * Returns the ones actually added.
+   * Adds events. A batch row whose dedupe_key already exists refreshes the
+   * stored copy in place (content fields only — the row keeps its id, rarity,
+   * and enriched image so reactions, calendar saves, and admin edits survive
+   * a re-ingest). Unknown source slugs are auto-registered so the events FK
+   * always holds. Returns only the newly inserted events, so ingest logs and
+   * image enrichment keep meaning "new on the map."
    */
   async addEvents(incoming: CityEvent[]): Promise<CityEvent[]> {
+    const { tz } = await this.settings();
     // Drop unparseable dates up front — one bad row would fail the batch.
     const valid = incoming.filter(
       (e) => Number.isFinite(Date.parse(e.start)) && Number.isFinite(Date.parse(e.end)),
@@ -222,7 +231,7 @@ export const store = {
     // First occurrence wins within a batch, like the old in-memory dedupe.
     const seen = new Set<string>();
     const batch = valid.filter((e) => {
-      const k = eventKey(e);
+      const k = eventKey(e, tz);
       if (seen.has(k)) return false;
       seen.add(k);
       return true;
@@ -244,15 +253,60 @@ export const store = {
       )
       .throwOnError();
 
+    const rows = batch.map((e) => eventToRow(e, tz));
     const { data } = await db
       .from("events")
-      .upsert(batch.map(eventToRow), { onConflict: "dedupe_key", ignoreDuplicates: true })
+      .upsert(rows, { onConflict: "dedupe_key", ignoreDuplicates: true })
       .select()
       .throwOnError();
+    const insertedKeys = new Set(data.map((r) => r.dedupe_key));
+
+    // Conflicting keys were left untouched by the insert — refresh their
+    // content so a corrected time/venue/price from a re-send actually lands.
+    for (const row of rows) {
+      if (insertedKeys.has(row.dedupe_key)) continue;
+      await db
+        .from("events")
+        .update({
+          title: row.title,
+          description: row.description,
+          category: row.category,
+          tags: row.tags,
+          venue: row.venue,
+          address: row.address,
+          lng: row.lng,
+          lat: row.lat,
+          starts_at: row.starts_at,
+          ends_at: row.ends_at,
+          recurrence: row.recurrence,
+          price: row.price,
+          is_free: row.is_free,
+          ticket_url: row.ticket_url,
+          ticket_provider: row.ticket_provider,
+          rating: row.rating,
+          rating_rationale: row.rating_rationale,
+          promoted: row.promoted,
+        })
+        .eq("dedupe_key", row.dedupe_key)
+        .throwOnError();
+    }
     return data.map(rowToEvent);
   },
 
   async updateEvent(id: string, patch: Partial<CityEvent>): Promise<CityEvent | undefined> {
+    // Same ends_at >= starts_at guarantee the insert path (eventToRow) gives:
+    // clamp against the effective pair instead of tripping the DB constraint.
+    if (patch.start !== undefined || patch.end !== undefined) {
+      const current = await this.eventById(id);
+      if (!current) return undefined;
+      const start = patch.start ?? current.start;
+      const end = patch.end ?? current.end;
+      patch = {
+        ...patch,
+        start,
+        end: new Date(end) >= new Date(start) ? end : start,
+      };
+    }
     const { data } = await db
       .from("events")
       .update({
@@ -425,12 +479,11 @@ export const store = {
 
   async updateDiscoverySearch(
     id: string,
-    patch: Partial<Pick<DiscoverySearch, "query" | "cadenceHours" | "active">>,
+    patch: Partial<Pick<DiscoverySearch, "cadenceHours" | "active">>,
   ): Promise<DiscoverySearch | undefined> {
     const { data } = await db
       .from("discovery_searches")
       .update({
-        ...(patch.query !== undefined && { query: patch.query.trim() }),
         ...(patch.cadenceHours !== undefined && { cadence_hours: patch.cadenceHours }),
         ...(patch.active !== undefined && { active: patch.active }),
       })

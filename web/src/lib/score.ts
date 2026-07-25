@@ -75,12 +75,20 @@ export function scoreEvent(
   return s
 }
 
-/** Badge count for collapsed filter disclosures, so active filters aren't invisible. */
+/**
+ * Badge count for collapsed filter disclosures, so active filters aren't
+ * invisible. Counts every non-default filter (see DEFAULT_FILTERS) —
+ * hidePromoted defaults to true, so false is the active state there.
+ */
 export function activeFilterCount(f: Filters): number {
   return (
     f.categories.length +
     (f.minRating > 0 ? 1 : 0) +
     (f.freeOnly ? 1 : 0) +
+    (f.liveOnly ? 1 : 0) +
+    (f.rareOnly ? 1 : 0) +
+    (f.farmers !== "any" ? 1 : 0) +
+    (!f.hidePromoted ? 1 : 0) +
     (f.dateFrom || f.dateTo ? 1 : 0)
   )
 }

@@ -8,7 +8,6 @@ import {
   SproutIcon,
   TicketIcon,
 } from "lucide-react"
-import type { FarmersFilter } from "@/lib/types"
 import { Separator } from "@/components/ui/separator"
 import { DateQuickChips } from "@/components/DateFilters"
 import { EventCard } from "@/components/EventCard"
@@ -17,6 +16,7 @@ import {
   EventListEmpty,
   ListSearchSort,
 } from "@/components/FilterRail"
+import { useFilterToggles, type FilterToggle } from "@/hooks/useFilterToggles"
 import { useOrderedEvents } from "@/hooks/useOrderedEvents"
 import { activeFilterCount } from "@/lib/score"
 import { useGrapevine } from "@/lib/store"
@@ -40,6 +40,20 @@ const DOCK_CHIP =
   "flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border bg-card/50 px-3 text-[13px] whitespace-nowrap transition-colors"
 const DOCK_CHIP_ACTIVE = "border-wine/50 bg-wine/15 text-wine"
 
+// The dock's look for the shared toggle descriptors (see useFilterToggles).
+const CHIP_ICONS: Record<FilterToggle["key"], React.ReactNode> = {
+  live: <RadioIcon className="size-3.5 text-live" />,
+  rare: <GemIcon className="size-3.5 text-wine" />,
+  free: <TicketIcon className="size-3.5 text-live" />,
+  hidePromoted: <MegaphoneOffIcon className="size-3.5 text-muted-foreground" />,
+}
+const CHIP_ACTIVE: Record<FilterToggle["key"], string> = {
+  live: "border-live/50 bg-live/15 text-live",
+  rare: "border-wine/50 bg-wine/15 text-wine",
+  free: "border-live/50 bg-live/15 text-live",
+  hidePromoted: "border-foreground/30 bg-accent text-foreground",
+}
+
 function transformFor(snap: Snap) {
   if (snap === "full") return "translateY(0px)"
   if (snap === "half") return "translateY(52%)"
@@ -55,7 +69,7 @@ export function MobileDock() {
   const dockState = useGrapevine((s) => s.dockState)
   const setDockState = useGrapevine((s) => s.setDockState)
   const filters = useGrapevine((s) => s.filters)
-  const setFilters = useGrapevine((s) => s.setFilters)
+  const { toggles, farmers } = useFilterToggles()
   const detailOpen = useGrapevine((s) => s.detailOpen)
   const hiddenCount = useGrapevine((s) => s.hiddenIds.length)
   const clearHidden = useGrapevine((s) => s.clearHidden)
@@ -213,65 +227,48 @@ export function MobileDock() {
 
         {/* Quick filters ride in the peek strip, one thumb-tap away. */}
         <div className="flex touch-pan-x gap-2 overflow-x-auto px-4 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <Chip
-            active={filters.liveOnly}
-            activeClass="border-live/50 bg-live/15 text-live"
-            onClick={() => setFilters({ liveOnly: !filters.liveOnly })}
-          >
-            <RadioIcon className="size-3.5 text-live" />
-            Live now
-          </Chip>
-          <Chip
-            active={filters.rareOnly}
-            activeClass="border-wine/50 bg-wine/15 text-wine"
-            onClick={() => setFilters({ rareOnly: !filters.rareOnly })}
-          >
-            <GemIcon className="size-3.5 text-wine" />
-            Rare finds
-          </Chip>
-          <Chip
-            active={filters.freeOnly}
-            activeClass="border-live/50 bg-live/15 text-live"
-            onClick={() => setFilters({ freeOnly: !filters.freeOnly })}
-          >
-            <TicketIcon className="size-3.5 text-live" />
-            Free
-          </Chip>
+          {toggles.slice(0, 3).map((t) => (
+            <Chip
+              key={t.key}
+              active={t.active}
+              activeClass={CHIP_ACTIVE[t.key]}
+              onClick={t.toggle}
+            >
+              {CHIP_ICONS[t.key]}
+              {t.shortLabel}
+            </Chip>
+          ))}
           {/* Today / Tomorrow / Weekend / range picker — the phone finally
               gets the date window the agent could always set */}
           <DateQuickChips chipClass={DOCK_CHIP} activeClass={DOCK_CHIP_ACTIVE} />
           {/* three states, one thumb: show all → only markets → no markets */}
           <Chip
-            active={filters.farmers !== "any"}
+            active={farmers.value !== "any"}
             activeClass={
-              filters.farmers === "only"
+              farmers.value === "only"
                 ? "border-[#56c7ac]/50 bg-[#56c7ac]/15 text-[#56c7ac]"
                 : "border-foreground/30 bg-accent text-foreground"
             }
-            onClick={() => {
-              const next: Record<FarmersFilter, FarmersFilter> = {
-                any: "only",
-                only: "hide",
-                hide: "any",
-              }
-              setFilters({ farmers: next[filters.farmers] })
-            }}
+            onClick={farmers.cycle}
           >
             <SproutIcon className="size-3.5 text-[#56c7ac]" />
-            {filters.farmers === "only"
+            {farmers.value === "only"
               ? "Farmers only"
-              : filters.farmers === "hide"
+              : farmers.value === "hide"
                 ? "No farmers markets"
                 : "Farmers markets"}
           </Chip>
-          <Chip
-            active={filters.hidePromoted}
-            activeClass="border-foreground/30 bg-accent text-foreground"
-            onClick={() => setFilters({ hidePromoted: !filters.hidePromoted })}
-          >
-            <MegaphoneOffIcon className="size-3.5 text-muted-foreground" />
-            Hide promoted
-          </Chip>
+          {toggles.slice(3).map((t) => (
+            <Chip
+              key={t.key}
+              active={t.active}
+              activeClass={CHIP_ACTIVE[t.key]}
+              onClick={t.toggle}
+            >
+              {CHIP_ICONS[t.key]}
+              {t.shortLabel}
+            </Chip>
+          ))}
           <Chip
             active={filtersOpen}
             activeClass="border-foreground/30 bg-accent text-foreground"

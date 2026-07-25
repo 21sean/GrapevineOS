@@ -19,10 +19,11 @@
  * whole catalog); every run is logged to ingests with kind "search". Saved
  * searches in discovery_searches re-run on a cadence via the scheduler below.
  */
+import { scanText } from "./agent/guardrails.js";
 import { readPage, webSearch } from "./agent/websearch.js";
-import { enrichEventImages } from "./images.js";
 import { extractEvents, slugId } from "./ingest.js";
 import { generateJSON } from "./llm.js";
+import { commitIngest } from "./pipeline.js";
 import { eventKey, store } from "./store.js";
 import type { CityEvent, DiscoverySearch } from "./types.js";
 
@@ -35,6 +36,40 @@ const MAX_DAYS_OUT = 400; // beyond this a "found" date is suspect
 function minConfidence(): number {
   const n = Number(process.env.DISCOVERY_MIN_CONFIDENCE ?? 0.7);
   return Number.isFinite(n) ? Math.min(Math.max(n, 0), 1) : 0.7;
+}
+
+// ---------------------------------------------------------------------------
+// Request-shape helpers shared by every surface that fronts runDiscovery
+// (internal API, external agent API, MCP) — one definition of the flag names,
+// defaults, and limits, so the three routes can't drift apart.
+// ---------------------------------------------------------------------------
+
+export const CADENCE_MIN_HOURS = 1;
+export const CADENCE_MAX_HOURS = 336;
+export const CADENCE_DEFAULT_HOURS = 24;
+
+/** Clamp cadence to the DB's 1–336 h range; default daily. */
+export function clampCadence(v: unknown): number {
+  const n = Number(v);
+  return Number.isFinite(n)
+    ? Math.min(Math.max(CADENCE_MIN_HOURS, Math.round(n)), CADENCE_MAX_HOURS)
+    : CADENCE_DEFAULT_HOURS;
+}
+
+/** Trimmed 3–200 char query, or null when invalid. */
+export function validQuery(v: unknown): string | null {
+  const q = String(v ?? "").trim();
+  return q.length >= 3 && q.length <= 200 ? q : null;
+}
+
+/**
+ * Read the dry-run flag in either spelling (dry_run / dryRun). Omitted means
+ * DRY RUN on every surface — committing machine-verified events to the map
+ * is always an explicit `dry_run: false`.
+ */
+export function wantsCommit(body: unknown): boolean {
+  const b = (body ?? {}) as Record<string, unknown>;
+  return (b.dry_run ?? b.dryRun) === false;
 }
 
 export interface DiscoveryCandidate {
@@ -257,6 +292,17 @@ export async function runDiscovery(opts: {
       result.pagesSkipped.push({ url: hit.url, error: "too little readable text" });
       continue;
     }
+    // Same content rail the in-app read_page tool applies: fetched web text
+    // is untrusted input to the extraction LLM, so a page the injection
+    // classifier flags never reaches a prompt.
+    const verdict = await scanText(`${page.title}\n${page.text}`);
+    if (verdict.malicious) {
+      result.pagesSkipped.push({
+        url: hit.url,
+        error: "page withheld by guardrails (possible prompt injection)",
+      });
+      continue;
+    }
     pages.push({ url: page.url, title: page.title, text: page.text });
     result.pagesRead.push({ url: page.url, title: page.title });
   }
@@ -282,33 +328,43 @@ export async function runDiscovery(opts: {
     }
   }
 
-  // Corroboration: the same event (catalog dedupe key) found via 2+ pages.
-  const keyCounts = new Map<string, number>();
-  for (const { events } of perPage) {
-    for (const e of events) {
-      const k = eventKey(e);
-      keyCounts.set(k, (keyCounts.get(k) ?? 0) + 1);
-    }
-  }
+  const keyOf = (e: CityEvent) => eventKey(e, settings.tz);
 
-  const bar = minConfidence();
+  // Deterministic gates first — no LLM tokens spent on obvious fabrications,
+  // and hard-rejected candidates must not corroborate anything.
+  const gated: { page: (typeof pages)[number]; events: CityEvent[] }[] = [];
   for (const { page, events } of perPage) {
-    // Deterministic gates first — no LLM tokens spent on obvious fabrications.
     const survivors: CityEvent[] = [];
     for (const e of events) {
-      const corroborations = keyCounts.get(eventKey(e)) ?? 1;
       const reason = hardReject(e, page.text, now);
       if (reason) {
         result.rejected.push({
           event: e, verdict: "rejected", confidence: 0, reason,
-          sourceUrl: page.url, corroborations,
+          sourceUrl: page.url, corroborations: 1,
         });
       } else {
         survivors.push(e);
       }
     }
-    if (!survivors.length) continue;
+    if (survivors.length) gated.push({ page, events: survivors });
+  }
 
+  // Corroboration: the same event (catalog dedupe key) found on 2+ DISTINCT
+  // pages. A page vouches for an event at most once, no matter how many times
+  // the extractor repeats it, so a single source can never clear the lower bar.
+  const keyPages = new Map<string, Set<string>>();
+  for (const { page, events } of gated) {
+    for (const e of events) {
+      const k = keyOf(e);
+      let urls = keyPages.get(k);
+      if (!urls) keyPages.set(k, (urls = new Set()));
+      urls.add(page.url);
+    }
+  }
+  const corroborationsOf = (e: CityEvent) => keyPages.get(keyOf(e))?.size ?? 1;
+
+  const bar = minConfidence();
+  for (const { page, events: survivors } of gated) {
     let verdicts: Map<number, Verdict>;
     try {
       verdicts = await verifyAgainstPage(page.text, survivors, settings.tz);
@@ -318,14 +374,14 @@ export async function runDiscovery(opts: {
         result.rejected.push({
           event: e, verdict: "rejected", confidence: 0,
           reason: `verifier failed: ${String(err).slice(0, 120)}`,
-          sourceUrl: page.url, corroborations: keyCounts.get(eventKey(e)) ?? 1,
+          sourceUrl: page.url, corroborations: corroborationsOf(e),
         });
       }
       continue;
     }
 
     survivors.forEach((e, index) => {
-      const corroborations = keyCounts.get(eventKey(e)) ?? 1;
+      const corroborations = corroborationsOf(e);
       const v = verdicts.get(index);
       const required = corroborations >= 2 ? Math.min(bar, 0.5) : bar;
       if (!v || v.verdict === "unsupported") {
@@ -358,24 +414,21 @@ export async function runDiscovery(opts: {
   // A run can meet the same event on two pages — keep the higher-confidence copy.
   const byKey = new Map<string, DiscoveryCandidate>();
   for (const c of result.verified) {
-    const k = eventKey(c.event);
+    const k = keyOf(c.event);
     const prev = byKey.get(k);
     if (!prev || c.confidence > prev.confidence) byKey.set(k, c);
   }
   result.verified = [...byKey.values()];
 
   if (commit && result.verified.length) {
-    const added = await store.addEvents(result.verified.map((c) => c.event));
-    result.added = added.length;
-    await store.logIngest({
+    const { added } = await commitIngest({
+      events: result.verified.map((c) => c.event),
       source: "web-search",
       kind: "search",
       subject: query,
       extracted: result.extracted,
-      added: added.length,
-      events: added.map((e) => ({ id: e.id, title: e.title, start: e.start })),
     });
-    if (added.length) void enrichEventImages(added).catch(() => {});
+    result.added = added.length;
   }
   return result;
 }

@@ -323,13 +323,13 @@ calendar.get("/api/calendar/feed/:token", async (req, res) => {
   const token = req.params.token.replace(/\.ics$/, "");
   const user = await store.userByFeedToken(token);
   if (!user) return res.status(404).send("not found");
-  const events = await store.events();
+  const [events, { tz }] = await Promise.all([store.events(), store.settings()]);
   const mine = (await store.userCalendar(user.id))
     .map((entry) => events.find((e) => e.id === entry.eventId))
     .filter((e): e is NonNullable<typeof e> => !!e);
   res.setHeader("Content-Type", "text/calendar; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache");
-  res.send(icsCalendar(mine, "Grapevine"));
+  res.send(icsCalendar(mine, "Grapevine", tz));
 });
 
 /** Single-event .ics — the universal "Add to Apple Calendar" fallback. */
@@ -337,7 +337,8 @@ calendar.get("/api/events/:id/ics", async (req, res) => {
   const event = await store.eventById(req.params.id);
   if (!event) return res.status(404).json({ error: "unknown event" });
   const slug = event.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40) || "event";
+  const { tz } = await store.settings();
   res.setHeader("Content-Type", "text/calendar; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="${slug}.ics"`);
-  res.send(icsCalendar([event], "Grapevine"));
+  res.send(icsCalendar([event], "Grapevine", tz));
 });

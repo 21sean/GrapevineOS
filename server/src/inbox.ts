@@ -19,17 +19,15 @@
  */
 import { db } from "./db.js";
 import type { Tables } from "./db-types.js";
-import { enrichEventImages } from "./images.js";
 import { extractEvents } from "./ingest.js";
-import { store } from "./store.js";
+import { commitIngest } from "./pipeline.js";
 
 /** Rows drained per query; a full batch re-runs so one kick clears a backlog. */
 const BATCH = 20;
 
-/** Interval polling is opt-in now (event-driven by default). Returns null to
- * mean "no timer" unless INBOX_POLL_SECONDS is set to a positive value. */
+/** Interval polling is opt-in (event-driven by default): one flag,
+ * INBOX_POLL_SECONDS — unset/0 means no timer, a positive value polls. */
 function pollIntervalMs(): number | null {
-  if (/^(0|false|no)$/i.test(process.env.INBOX_POLL ?? "")) return null;
   const raw = process.env.INBOX_POLL_SECONDS;
   if (!raw) return null;
   const seconds = Number(raw);
@@ -46,21 +44,17 @@ async function processEmail(row: RawEmail): Promise<{ extracted: number; added: 
     text: `Subject: ${row.subject}\n\n${row.body_text}`,
     source,
   });
-  const added = await store.addEvents(events);
-  const ingest = await store.logIngest({
+  const { added, ingest } = await commitIngest({
+    events,
     source,
     kind: "email",
     subject: row.subject || undefined,
-    extracted: events.length,
-    added: added.length,
-    events: added.map((e) => ({ id: e.id, title: e.title, start: e.start })),
   });
   await db
     .from("raw_emails")
     .update({ processed_at: new Date().toISOString(), ingest_id: ingest.id, error: null })
     .eq("id", row.id)
     .throwOnError();
-  if (added.length) void enrichEventImages(added).catch(() => {});
   return { extracted: events.length, added: added.length };
 }
 

@@ -1,3 +1,4 @@
+import { dayInTz } from "../../../shared/time"
 import { nextOccurrence } from "./recurrence"
 import type { CityEvent } from "./types"
 
@@ -58,20 +59,30 @@ export function fmtTime(iso: string, tz: string): string {
 
 /** "2026-07-11" in the city's timezone — string-comparable. */
 export function localDay(iso: string, tz?: string): string {
+  if (tz) return dayInTz(iso, tz)
   return new Intl.DateTimeFormat("en-CA", {
-    ...(tz && { timeZone: tz }),
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
   }).format(new Date(iso))
 }
 
-/** Day-string arithmetic: "2026-07-11" + 1 → "2026-07-12" (noon dodges TZ backslide). */
-export function addDays(day: string, n: number): string {
-  const d = new Date(`${day}T12:00:00`)
-  d.setDate(d.getDate() + n)
+/** "2026-07-11" → local Date (noon dodges the UTC↔local backslide for date-only strings). */
+export function parseDay(day: string): Date {
+  return new Date(`${day}T12:00:00`)
+}
+
+/** Date → zero-padded local "2026-07-11". */
+export function toDay(d: Date): string {
   const p = (x: number) => String(x).padStart(2, "0")
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+/** Day-string arithmetic: "2026-07-11" + 1 → "2026-07-12". */
+export function addDays(day: string, n: number): string {
+  const d = parseDay(day)
+  d.setDate(d.getDate() + n)
+  return toDay(d)
 }
 
 /**
@@ -92,17 +103,38 @@ export function fmtDay(day: string): string {
   )
 }
 
-function sameDay(a: Date, b: Date, tz: string): boolean {
-  const key = (d: Date) =>
-    new Intl.DateTimeFormat("en-CA", { timeZone: tz, dateStyle: "short" }).format(d)
-  return key(a) === key(b)
+/**
+ * Coarse relative age for logs and history lists. "long" reads as prose
+ * ("just now", "12m ago", "yesterday", "3d ago"), "short" as a bare stamp
+ * ("now", "12m", "3h", "3d"); past a week both fall back to "Jun 12".
+ */
+export function relativeTime(
+  iso: string,
+  now: Date,
+  style: "long" | "short" = "long",
+): string {
+  const long = style === "long"
+  const mins = Math.round((now.getTime() - new Date(iso).getTime()) / 60000)
+  if (mins < 1) return long ? "just now" : "now"
+  if (mins < 60) return long ? `${mins}m ago` : `${mins}m`
+  const hours = Math.round(mins / 60)
+  if (hours < 24) return long ? `${hours}h ago` : `${hours}h`
+  const days = Math.round(hours / 24)
+  if (long && days === 1) return "yesterday"
+  if (days < 7) return long ? `${days}d ago` : `${days}d`
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(new Date(iso))
 }
 
 export function dayLabel(iso: string, tz: string, now: Date): string {
-  const d = new Date(iso)
-  if (sameDay(d, now, tz)) return "Today"
-  const tomorrow = new Date(now.getTime() + 86400000)
-  if (sameDay(d, tomorrow, tz)) return "Tomorrow"
+  // Compare local day STRINGS and step "tomorrow" with day arithmetic — a
+  // literal +24h misses (or double-counts) the 23/25-hour days around DST.
+  const eventDay = dayInTz(iso, tz)
+  const today = dayInTz(now, tz)
+  if (eventDay === today) return "Today"
+  if (eventDay === addDays(today, 1)) return "Tomorrow"
   return fmt(iso, tz, { weekday: "short", month: "short", day: "numeric" })
 }
 

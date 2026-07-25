@@ -21,8 +21,10 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { INTERNAL_MCP_KEY } from "./auth.js";
+import { parseLooseJSON } from "./llm-json.js";
+import type { CliProviderId } from "./types.js";
 
-export type CliProviderId = "claude" | "codex" | "gemini" | "copilot";
+export type { CliProviderId };
 
 export interface CliProviderInfo {
   id: CliProviderId;
@@ -391,24 +393,7 @@ function cliError(bin: string, r: RunResult): Error {
 // JSON tasks — the extraction/rating pipeline through a CLI instead of Ollama
 // ---------------------------------------------------------------------------
 
-/** Salvage a JSON object from chatty CLI output (fences, preamble, epilogue). */
-export function parseLooseJSON(text: string): any {
-  const cleaned = text
-    .replace(/<think>[\s\S]*?<\/think>/g, "")
-    .replace(/```(?:json)?/g, "")
-    .trim();
-  try {
-    return JSON.parse(cleaned);
-  } catch {
-    // fall through to the outermost {...} span
-  }
-  const first = cleaned.indexOf("{");
-  const last = cleaned.lastIndexOf("}");
-  if (first !== -1 && last > first) {
-    return JSON.parse(cleaned.slice(first, last + 1));
-  }
-  throw new Error(`model returned unparseable JSON: ${cleaned.slice(0, 200)}`);
-}
+export { parseLooseJSON };
 
 /**
  * One system+user exchange through a CLI provider, parsed as JSON. Tools stay

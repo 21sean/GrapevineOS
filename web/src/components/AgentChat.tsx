@@ -7,14 +7,12 @@ import {
 } from "react"
 import {
   ArrowUpIcon,
-  CalendarPlusIcon,
   CheckIcon,
   HistoryIcon,
   MicIcon,
   SparklesIcon,
   SquareIcon,
   SquarePenIcon,
-  Trash2Icon,
   XIcon,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -28,22 +26,15 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Spinner } from "@/components/ui/spinner"
-import {
-  useAgentChat,
-  type ChatItem,
-  type Proposal,
-} from "@/hooks/useAgentChat"
+import { CalendarCard, InterestsCard } from "@/components/chat/ProposalCards"
+import { EVENT_LINK_RE, RichText } from "@/components/chat/RichText"
+import { ThreadHistory } from "@/components/chat/ThreadHistory"
+import { useAgentChat, type ChatItem } from "@/hooks/useAgentChat"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useSpeechInput } from "@/hooks/useSpeechInput"
-import { api } from "@/lib/api"
 import { useGrapevine } from "@/lib/store"
 import { timeRange } from "@/lib/time"
-import {
-  CATEGORY_META,
-  INTEREST_TOPICS,
-  type ChatThreadMeta,
-  type CityEvent,
-} from "@/lib/types"
+import { CATEGORY_META } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 const SUGGESTIONS = [
@@ -52,9 +43,6 @@ const SUGGESTIONS = [
   "Free stuff this weekend",
   "Live music near me",
 ]
-
-/** Matches the [Title](event:id) grammar the system prompt asks for. */
-const EVENT_LINK_RE = /\[([^\]]+)\]\(event:([^)\s]+)\)/g
 
 /**
  * "Ask Grapevine" — the agent surface. One always-mounted component (the
@@ -375,111 +363,6 @@ function EmptyState({ onPick }: { onPick: (q: string) => void }) {
   )
 }
 
-/** "2h ago" / "yesterday" — coarse, it's a history list. */
-function threadAge(iso: string, now: Date): string {
-  const mins = Math.round((now.getTime() - new Date(iso).getTime()) / 60000)
-  if (mins < 1) return "now"
-  if (mins < 60) return `${mins}m`
-  const hours = Math.round(mins / 60)
-  if (hours < 24) return `${hours}h`
-  const days = Math.round(hours / 24)
-  if (days < 7) return `${days}d`
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-  }).format(new Date(iso))
-}
-
-/**
- * Past conversations, newest first. Server-side these are scoped to the
- * session user — nobody else's threads are listable or readable.
- */
-function ThreadHistory({ onPick }: { onPick: (id: string) => void }) {
-  const now = useGrapevine((s) => s.now)
-  const [threads, setThreads] = useState<ChatThreadMeta[] | null>(null)
-  const [error, setError] = useState(false)
-
-  useEffect(() => {
-    api
-      .chatThreads()
-      .then((r) => setThreads(r.threads))
-      .catch(() => setError(true))
-  }, [])
-
-  async function remove(id: string) {
-    const prev = threads
-    setThreads((t) => t?.filter((x) => x.id !== id) ?? null)
-    try {
-      await api.chatThreadDelete(id)
-    } catch (err) {
-      setThreads(prev ?? null)
-      toast.error("Couldn't delete", { description: String(err).slice(0, 140) })
-    }
-  }
-
-  if (error) {
-    return (
-      <p className="px-6 py-10 text-center text-xs text-muted-foreground">
-        Couldn't load your chat history. Is the API running?
-      </p>
-    )
-  }
-  if (!threads) {
-    return (
-      <div className="flex items-center justify-center gap-2 px-6 py-10 text-xs text-muted-foreground">
-        <Spinner className="size-3.5" /> Loading history…
-      </div>
-    )
-  }
-  if (threads.length === 0) {
-    return (
-      <div className="flex flex-col items-center gap-2 px-6 py-10 text-center">
-        <HistoryIcon className="size-5 text-muted-foreground" />
-        <p className="text-sm font-medium">No conversations yet</p>
-        <p className="text-xs text-muted-foreground">
-          Chats are saved to your account once you're signed in — pick one up
-          again from here anytime.
-        </p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex flex-col gap-0.5 px-2 py-2">
-      <span className="px-2 py-1 font-mono text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
-        History
-      </span>
-      {threads.map((t) => (
-        <div
-          key={t.id}
-          className="group flex items-center gap-1 rounded-lg pr-1 transition-colors hover:bg-accent/60"
-        >
-          <button
-            type="button"
-            onClick={() => onPick(t.id)}
-            className="flex min-w-0 flex-1 items-baseline gap-2 px-2 py-2 text-left outline-none focus-visible:underline"
-          >
-            <span className="min-w-0 flex-1 truncate text-[13px]">
-              {t.title || "Untitled chat"}
-            </span>
-            <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-              {threadAge(t.updatedAt, now)}
-            </span>
-          </button>
-          <button
-            type="button"
-            aria-label="Delete conversation"
-            onClick={() => void remove(t.id)}
-            className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100"
-          >
-            <Trash2Icon className="size-3.5" />
-          </button>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 function Message({
   item,
   itemIdx,
@@ -601,69 +484,13 @@ function Message({
   )
 }
 
-// ---------- rich text: paragraphs, "- " bullets, **bold**, event chips ------
+// One refresh attempt per unknown event id covers "event landed after page
+// load" for every chip — new agent turns and loadThread on old transcripts
+// alike; an id still unknown after its refresh is a hallucinated one and
+// renders as plain text.
+const refreshAttempted = new Set<string>()
 
-function RichText({ text }: { text: string }) {
-  // local models sometimes double-bracket citations: [[name](url)] → [name](url)
-  const cleaned = text.replace(/\[(\[[^\]]+\]\(https?:\/\/[^)\s]+\))\]/g, "$1")
-  const blocks = cleaned.split(/\n+/).filter((l) => l.trim())
-  return (
-    <div className="space-y-1.5 text-sm leading-relaxed">
-      {blocks.map((line, i) => {
-        const bullet = /^\s*[-•*]\s+/.test(line)
-        const content = renderInline(bullet ? line.replace(/^\s*[-•*]\s+/, "") : line)
-        return bullet ? (
-          <div key={i} className="flex gap-2 pl-1">
-            <span className="text-muted-foreground">•</span>
-            <span className="min-w-0">{content}</span>
-          </div>
-        ) : (
-          <p key={i}>{content}</p>
-        )
-      })}
-    </div>
-  )
-}
-
-function renderInline(line: string): ReactNode[] {
-  const out: ReactNode[] = []
-  // event chips | web citations | bold
-  const re = new RegExp(
-    `${EVENT_LINK_RE.source}|\\[([^\\]]+)\\]\\((https?:\\/\\/[^)\\s]+)\\)|\\*\\*([^*]+)\\*\\*`,
-    "g",
-  )
-  let idx = 0
-  let key = 0
-  for (const m of line.matchAll(re)) {
-    if (m.index! > idx) out.push(line.slice(idx, m.index))
-    if (m[2]) out.push(<EventChip key={key++} id={m[2]} label={m[1]} />)
-    else if (m[4])
-      out.push(
-        <a
-          key={key++}
-          href={m[4]}
-          target="_blank"
-          rel="noreferrer"
-          className="text-wine underline underline-offset-2 hover:opacity-80"
-        >
-          {m[3]}
-        </a>,
-      )
-    // Bold wins the alternation when the model writes **[Title](event:id)** —
-    // recurse so links inside bold still render as chips, not raw markdown.
-    // Bold content can't contain "*", so this terminates after one level.
-    else out.push(<strong key={key++}>{renderInline(m[5])}</strong>)
-    idx = m.index! + m[0].length
-  }
-  if (idx < line.length) out.push(line.slice(idx))
-  return out
-}
-
-// One refresh per session covers "event landed after page load"; anything
-// still unknown after that is a hallucinated id and renders as plain text.
-let refreshedOnce = false
-
-function EventChip({ id, label }: { id: string; label: string }) {
+export function EventChip({ id, label }: { id: string; label: string }) {
   const event = useGrapevine((s) => s.events.find((e) => e.id === id))
   const select = useGrapevine((s) => s.select)
   const tz = useGrapevine((s) => s.settings?.tz) ?? "UTC"
@@ -672,11 +499,11 @@ function EventChip({ id, label }: { id: string; label: string }) {
   const range = useGrapevine((s) => (event ? timeRange(event, tz, s.now) : ""))
 
   useEffect(() => {
-    if (!event && !refreshedOnce) {
-      refreshedOnce = true
+    if (!event && !refreshAttempted.has(id)) {
+      refreshAttempted.add(id)
       useGrapevine.getState().refreshEvents().catch(() => {})
     }
-  }, [event])
+  }, [event, id])
 
   if (!event) return <span className="font-medium">{label}</span>
   return (
@@ -694,195 +521,5 @@ function EventChip({ id, label }: { id: string; label: string }) {
         {range}
       </span>
     </button>
-  )
-}
-
-// ---------- proposal cards --------------------------------------------------
-
-function CalendarCard({
-  proposal,
-  onState,
-}: {
-  proposal: Extract<Proposal, { kind: "calendar" }>
-  onState: (s: Proposal["state"]) => void
-}) {
-  const user = useGrapevine((s) => s.user)
-  const events = useGrapevine((s) => s.events)
-  const setCalendar = useGrapevine((s) => s.setCalendar)
-  const [busy, setBusy] = useState(false)
-
-  const list = proposal.eventIds
-    .map((id) => events.find((e) => e.id === id))
-    .filter((e): e is CityEvent => !!e)
-  if (!list.length) return null
-
-  async function undo() {
-    try {
-      let last
-      for (const e of list) last = await api.calendarRemove(e.id)
-      if (last) setCalendar(last)
-      onState("pending")
-    } catch (err) {
-      toast.error("Couldn't undo", { description: String(err).slice(0, 140) })
-    }
-  }
-
-  async function saveAll() {
-    if (!user) {
-      useGrapevine.getState().setSignInOpen(true)
-      return
-    }
-    setBusy(true)
-    try {
-      let last
-      for (const e of list) last = await api.calendarAdd(e.id)
-      if (last) setCalendar(last)
-      onState("saved")
-      toast.success(
-        `Saved ${list.length} event${list.length === 1 ? "" : "s"} to your calendar`,
-        {
-          description: last?.warning
-            ? "Google Calendar didn't sync — they're still in your Grapevine feed"
-            : undefined,
-          action: { label: "Undo", onClick: undo },
-        },
-      )
-    } catch (err) {
-      toast.error("Calendar save failed", { description: String(err).slice(0, 140) })
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <div className="glass flex flex-col gap-2.5 rounded-xl p-3">
-      <span className="font-mono text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
-        {proposal.note ?? "Save to calendar"}
-      </span>
-      <div className="flex flex-wrap gap-1.5">
-        {list.map((e) => (
-          <EventChip key={e.id} id={e.id} label={e.title} />
-        ))}
-      </div>
-      {proposal.state === "saved" ? (
-        <div className="flex items-center gap-2 text-sm">
-          <CheckIcon className="size-4 text-live" />
-          On your calendar
-          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={undo}>
-            Undo
-          </Button>
-        </div>
-      ) : proposal.state === "dismissed" ? (
-        <span className="text-xs text-muted-foreground">Dismissed</span>
-      ) : (
-        <div className="flex gap-2">
-          <Button size="sm" onClick={saveAll} disabled={busy}>
-            {busy ? (
-              <Spinner data-icon="inline-start" />
-            ) : (
-              <CalendarPlusIcon data-icon="inline-start" />
-            )}
-            {user
-              ? `Save all (${list.length})`
-              : "Sign in to save"}
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => onState("dismissed")}>
-            Dismiss
-          </Button>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function InterestsCard({
-  proposal,
-  onState,
-}: {
-  proposal: Extract<Proposal, { kind: "interests" }>
-  onState: (s: Proposal["state"]) => void
-}) {
-  const interests = useGrapevine((s) => s.interests)
-  const setInterests = useGrapevine((s) => s.setInterests)
-
-  // Re-validate client-side so a stale server vocab can't inject junk topics.
-  const vet = (topics: string[]) =>
-    topics.filter((t) => (INTEREST_TOPICS as readonly string[]).includes(t))
-  const addLoves = vet(proposal.addLoves)
-  const addAvoids = vet(proposal.addAvoids)
-  const removeLoves = vet(proposal.removeLoves)
-  const removeAvoids = vet(proposal.removeAvoids)
-  const changes = [
-    ...addLoves.map((t) => `+ ${t} → loves`),
-    ...addAvoids.map((t) => `+ ${t} → avoids`),
-    ...removeLoves.map((t) => `− ${t} from loves`),
-    ...removeAvoids.map((t) => `− ${t} from avoids`),
-  ]
-  if (!changes.length) return null
-
-  function apply() {
-    const prior = interests
-    // A topic can't be loved and avoided at once — the newer signal wins.
-    const loves = [
-      ...new Set([
-        ...interests.loves.filter((t) => !removeLoves.includes(t) && !addAvoids.includes(t)),
-        ...addLoves,
-      ]),
-    ]
-    const avoids = [
-      ...new Set([
-        ...interests.avoids.filter((t) => !removeAvoids.includes(t) && !addLoves.includes(t)),
-        ...addAvoids,
-      ]),
-    ]
-    setInterests({ loves, avoids })
-    onState("applied")
-    toast.success("Interests updated", {
-      action: {
-        label: "Undo",
-        onClick: () => {
-          useGrapevine.getState().setInterests(prior)
-          onState("pending")
-        },
-      },
-    })
-  }
-
-  return (
-    <div className="glass flex flex-col gap-2.5 rounded-xl p-3">
-      <span className="font-mono text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
-        Tune interests
-      </span>
-      <div className="flex flex-wrap gap-1.5">
-        {changes.map((c) => (
-          <span
-            key={c}
-            className="rounded-full border border-border bg-secondary/60 px-2 py-0.5 text-xs"
-          >
-            {c}
-          </span>
-        ))}
-      </div>
-      {proposal.reason && (
-        <span className="text-xs text-muted-foreground italic">{proposal.reason}</span>
-      )}
-      {proposal.state === "applied" ? (
-        <div className="flex items-center gap-2 text-sm">
-          <CheckIcon className="size-4 text-live" />
-          Applied
-        </div>
-      ) : proposal.state === "dismissed" ? (
-        <span className="text-xs text-muted-foreground">Dismissed</span>
-      ) : (
-        <div className="flex gap-2">
-          <Button size="sm" onClick={apply}>
-            Apply
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => onState("dismissed")}>
-            Dismiss
-          </Button>
-        </div>
-      )}
-    </div>
   )
 }

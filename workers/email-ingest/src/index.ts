@@ -38,6 +38,25 @@ interface EmailPayload {
   receivedAt: string;
 }
 
+/**
+ * Stable per-message key: the RFC 5322 Message-ID when the email carries one,
+ * else a content hash. Deriving it from the message (never from the clock)
+ * is what makes redeliveries actually idempotent — a retried delivery
+ * produces the same email_key and the insert below no-ops on conflict.
+ */
+async function emailKey(source: string, p: EmailPayload, messageId?: string): Promise<string> {
+  const id = messageId?.trim().replace(/[<>]/g, "");
+  if (id) return `${source}_${id.slice(0, 180)}`;
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`${p.to}|${p.from}|${p.subject}|${p.text}`),
+  );
+  const hex = [...new Uint8Array(digest)]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return `${source}_${hex.slice(0, 32)}`;
+}
+
 /** Insert into raw_emails via PostgREST. The unique email_key makes worker
  * retries/redeliveries idempotent (duplicates are silently ignored). */
 async function insertRawEmail(env: Env, key: string, p: EmailPayload): Promise<void> {
@@ -92,7 +111,8 @@ export default {
           : ""),
       receivedAt: new Date().toISOString(),
     };
-    const key = `${payload.receivedAt}_${to.split("@")[0]}`;
+    const source = to.split("@")[0] || "inbound";
+    const key = await emailKey(source, payload, parsed.messageId ?? undefined);
 
     try {
       await insertRawEmail(env, key, payload);
@@ -105,7 +125,8 @@ export default {
       });
     }
 
-    // Optional push mode (tunnel/deploy): only when INGEST_URL is configured.
+    // Optional ping (tunnel/deploy): the row is already in Postgres, so this
+    // just wakes the server to process it now — no body needed.
     if (pushEnabled(env.INGEST_URL)) {
       try {
         const res = await fetch(env.INGEST_URL, {
@@ -114,7 +135,7 @@ export default {
             "Content-Type": "application/json",
             "X-Ingest-Key": env.INGEST_KEY ?? "",
           },
-          body: JSON.stringify(payload),
+          body: "{}",
         });
         if (!res.ok) {
           console.log(`ingest endpoint ${res.status}: raw copy stored as ${key}`);

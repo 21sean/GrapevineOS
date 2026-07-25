@@ -182,6 +182,10 @@ export const api = {
       json<{ providers: CliProviderStatus[] }>(r),
     ),
 
+  /** models.dev provider logo as raw SVG text (inlined to inherit currentColor). */
+  providerLogo: (id: string) =>
+    fetch(`/api/logo/${encodeURIComponent(id)}`).then((r) => r.text()),
+
   /** Where MCP clients (Claude Code/Desktop) connect to drive this app. */
   mcpInfo: () => fetch("/api/mcp/info").then((r) => json<McpInfo>(r)),
 
@@ -402,7 +406,8 @@ export const api = {
     fetch("/api/discovery/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, dryRun }),
+      // dry_run is the server's canonical spelling (omitted = dry run)
+      body: JSON.stringify({ query, dry_run: dryRun }),
     }).then((r) => json<DiscoveryRunResult>(r)),
 
   discoverySearches: () =>

@@ -5,8 +5,15 @@ import { agent } from "./agent/index.js";
 import { warmupGuardrails } from "./agent/guardrails.js";
 import { auth, sessionUser } from "./auth.js";
 import { calendar } from "./calendar.js";
-import { runDiscovery, runSavedSearch, startDiscoveryScheduler } from "./discovery.js";
-import { backfillImages, enrichEventImages } from "./images.js";
+import {
+  clampCadence,
+  runDiscovery,
+  runSavedSearch,
+  startDiscoveryScheduler,
+  validQuery,
+  wantsCommit,
+} from "./discovery.js";
+import { backfillImages } from "./images.js";
 import { mcp, mcpAuthMode } from "./mcp.js";
 import { detectProviders } from "./providers.js";
 import { push, startPushScheduler } from "./push.js";
@@ -14,9 +21,10 @@ import { store } from "./store.js";
 import { listInstalled, ollamaBase } from "./ollama.js";
 import { catalog, logo } from "./catalog.js";
 import { systemInfo } from "./system.js";
-import { eta, geocode } from "./mapbox.js";
+import { eta } from "./mapbox.js";
 import { extractEvents, rateEvent } from "./ingest.js";
 import { kickInbox, listInbox, reprocessInbox, startInboxPoll } from "./inbox.js";
+import { commitIngest } from "./pipeline.js";
 import { LLM_PROVIDERS, REACTIONS, type CityEvent, type Reaction } from "./types.js";
 
 const app = express();
@@ -103,7 +111,13 @@ app.put("/api/events/:id/reaction", async (req, res) => {
 
 // ---------- settings & sources ----------
 
-app.get("/api/settings", async (_req, res) => res.json(await store.settings()));
+app.get("/api/settings", async (_req, res) => {
+  try {
+    res.json(await store.settings());
+  } catch (err) {
+    res.status(502).json({ error: String(err) });
+  }
+});
 
 app.put("/api/settings", async (req, res) => {
   const { city, center, tz, model, ollamaUrl, chatProvider, extractProvider } =
@@ -114,20 +128,30 @@ app.put("/api/settings", async (req, res) => {
   if (extractProvider !== undefined && !LLM_PROVIDERS.includes(extractProvider)) {
     return res.status(400).json({ error: "unknown extractProvider" });
   }
-  res.json(
-    await store.saveSettings({
-      ...(city !== undefined && { city }),
-      ...(center !== undefined && { center }),
-      ...(tz !== undefined && { tz }),
-      ...(model !== undefined && { model }),
-      ...(ollamaUrl !== undefined && { ollamaUrl }),
-      ...(chatProvider !== undefined && { chatProvider }),
-      ...(extractProvider !== undefined && { extractProvider }),
-    }),
-  );
+  try {
+    res.json(
+      await store.saveSettings({
+        ...(city !== undefined && { city }),
+        ...(center !== undefined && { center }),
+        ...(tz !== undefined && { tz }),
+        ...(model !== undefined && { model }),
+        ...(ollamaUrl !== undefined && { ollamaUrl }),
+        ...(chatProvider !== undefined && { chatProvider }),
+        ...(extractProvider !== undefined && { extractProvider }),
+      }),
+    );
+  } catch (err) {
+    res.status(502).json({ error: String(err) });
+  }
 });
 
-app.get("/api/sources", async (_req, res) => res.json(await store.sources()));
+app.get("/api/sources", async (_req, res) => {
+  try {
+    res.json(await store.sources());
+  } catch (err) {
+    res.status(502).json({ error: String(err) });
+  }
+});
 
 // ---------- chat providers (subscription CLIs) + MCP status ----------
 
@@ -170,16 +194,6 @@ app.get("/api/eta", async (req, res) => {
   if (!to) return res.status(400).json({ error: "to=lng,lat required" });
   try {
     res.json((await eta(from, to)) ?? { minutes: null, km: null });
-  } catch (err) {
-    res.status(502).json({ error: String(err) });
-  }
-});
-
-app.get("/api/geocode", async (req, res) => {
-  const q = String(req.query.q ?? "");
-  if (!q) return res.status(400).json({ error: "q required" });
-  try {
-    res.json(await geocode(q, (await store.settings()).center));
   } catch (err) {
     res.status(502).json({ error: String(err) });
   }
@@ -246,14 +260,6 @@ app.get("/api/logo/:id", async (req, res) => {
 
 // ---------- ingestion ----------
 
-const eventSnapshot = (events: CityEvent[]) =>
-  events.map((e) => ({ id: e.id, title: e.title, start: e.start }));
-
-/** Artwork pass runs after the ingest response — decoration, not a gate. */
-const enrichLater = (events: CityEvent[]) => {
-  if (events.length) void enrichEventImages(events).catch(() => {});
-};
-
 /** Scrape og:images for catalog events that never got artwork. */
 app.post("/api/ingest/backfill-images", async (_req, res) => {
   try {
@@ -274,20 +280,15 @@ app.get("/api/ingest/history", async (_req, res) => {
 
 /** Extract events from pasted/forwarded email text. dryRun previews only. */
 app.post("/api/ingest/email", async (req, res) => {
-  const { text, source = "manual", dryRun = false } = req.body ?? {};
+  const { text, source = "manual" } = req.body ?? {};
+  const dry = req.body?.dryRun === true || req.body?.dry_run === true;
   if (!text) return res.status(400).json({ error: "text required" });
   try {
-    const events = await extractEvents({ text, source });
-    if (dryRun) return res.json({ events, added: 0 });
-    const added = await store.addEvents(events);
-    await store.logIngest({
-      source,
-      kind: "manual",
-      extracted: events.length,
-      added: added.length,
-      events: eventSnapshot(added),
-    });
-    enrichLater(added);
+    // Pasted text is a manual entry — the stored events and the ingest log
+    // agree on provenance (both "manual").
+    const events = await extractEvents({ text, source, sourceKind: "manual" });
+    if (dry) return res.json({ events, added: 0 });
+    const { added } = await commitIngest({ events, source, kind: "manual" });
     res.json({ events, added: added.length });
   } catch (err) {
     res.status(502).json({ error: String(err) });
@@ -301,15 +302,11 @@ app.post("/api/ingest/commit", async (req, res) => {
     return res.status(400).json({ error: "events[] required" });
   }
   try {
-    const added = await store.addEvents(events);
-    await store.logIngest({
+    const { added } = await commitIngest({
+      events,
       source: events[0]?.source ?? "manual",
       kind: events[0]?.sourceKind === "search" ? "search" : "manual",
-      extracted: events.length,
-      added: added.length,
-      events: eventSnapshot(added),
     });
-    enrichLater(added);
     res.json({ added: added.length });
   } catch (err) {
     res.status(502).json({ error: String(err) });
@@ -334,18 +331,16 @@ app.post("/api/ingest/inbound", (req, res) => {
 
 // ---------- web discovery (AI web search → verified events, on a schedule) ----------
 
-/** Clamp cadence to the DB's 1–336 h range; default daily. */
-const clampCadence = (v: unknown): number => {
-  const n = Number(v);
-  return Number.isFinite(n) ? Math.min(Math.max(1, Math.round(n)), 336) : 24;
-};
-
-/** Run one web discovery search now. dryRun verifies but writes nothing. */
+/**
+ * Run one web discovery search now. Dry run by default, same as the external
+ * API and MCP surfaces — committing requires an explicit dry_run:false
+ * (dryRun:false also accepted), so an omitted flag can never write.
+ */
 app.post("/api/discovery/run", async (req, res) => {
-  const query = String(req.body?.query ?? "").trim();
-  if (query.length < 3) return res.status(400).json({ error: "query required (3+ chars)" });
+  const query = validQuery(req.body?.query);
+  if (!query) return res.status(400).json({ error: "query must be 3-200 chars" });
   try {
-    res.json(await runDiscovery({ query, commit: !req.body?.dryRun }));
+    res.json(await runDiscovery({ query, commit: wantsCommit(req.body) }));
   } catch (err) {
     res.status(502).json({ error: String(err).slice(0, 300) });
   }
@@ -361,10 +356,8 @@ app.get("/api/discovery/searches", async (_req, res) => {
 
 /** Save (or update, keyed on the query) a scheduled search. */
 app.post("/api/discovery/searches", async (req, res) => {
-  const query = String(req.body?.query ?? "").trim();
-  if (query.length < 3 || query.length > 200) {
-    return res.status(400).json({ error: "query must be 3-200 chars" });
-  }
+  const query = validQuery(req.body?.query);
+  if (!query) return res.status(400).json({ error: "query must be 3-200 chars" });
   try {
     res.json(await store.addDiscoverySearch(query, clampCadence(req.body?.cadenceHours)));
   } catch (err) {

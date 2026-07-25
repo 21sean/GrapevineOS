@@ -8,6 +8,7 @@
  * The web app computes its own digest client-side from the same signals; this
  * server copy exists so the Sunday push can be written without a client.
  */
+import { affinityTerms, tagAffinity } from "../../shared/affinity.js";
 import { buildCtx, dayInTz, fmtRange, type AgentCtx } from "./agent/context.js";
 import { store } from "./store.js";
 import type { CityEvent, Reaction, User } from "./types.js";
@@ -19,33 +20,14 @@ interface Taste {
   tagAffinity: Map<string, number>;
 }
 
-function terms(e: CityEvent): string[] {
-  return [...e.tags.map((t) => t.toLowerCase()), e.category];
-}
-
-/** Reactions → per-tag weights. Mirrors selectTagAffinity in web derived.ts. */
-export function tagAffinity(
-  events: Map<string, CityEvent>,
-  reactions: { eventId: string; reaction: Reaction }[],
-): Map<string, number> {
-  const WEIGHT: Record<Reaction, number> = { going: 1, went: 1.5, not_for_me: -1.5 };
-  const affinity = new Map<string, number>();
-  for (const r of reactions) {
-    const e = events.get(r.eventId);
-    if (!e) continue;
-    for (const t of terms(e)) {
-      affinity.set(t, (affinity.get(t) ?? 0) + WEIGHT[r.reaction]);
-    }
-  }
-  return affinity;
-}
+const terms = affinityTerms;
 
 function scoreFor(e: CityEvent, taste: Taste): number {
   const ts = terms(e);
   if (ts.some((t) => taste.avoids.includes(t))) return -Infinity;
   if (taste.reactions.get(e.id) === "not_for_me") return -Infinity;
+  // No promoted penalty here — weekPicks filters promoted events out entirely.
   let s = e.rating * 2;
-  if (e.promoted) s -= 4;
   if (e.rarity === "rare") s += 1.5;
   if (e.rarity === "notable") s += 0.5;
   const loved = ts.filter((t) => taste.loves.includes(t)).length;
@@ -84,7 +66,7 @@ export async function weekPicks(
     loves: interests.loves ?? [],
     avoids: interests.avoids ?? [],
     reactions: new Map(reactions.map((r) => [r.eventId, r.reaction])),
-    tagAffinity: tagAffinity(byId, reactions),
+    tagAffinity: tagAffinity(byId, reactions.map((r) => [r.eventId, r.reaction] as const)),
   };
 
   const horizon = new Date(c.now.getTime() + 7 * 86_400_000);

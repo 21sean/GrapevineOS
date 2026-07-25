@@ -5,6 +5,15 @@ import { normalizeRRule } from "./recurrence.js";
 import { store } from "./store.js";
 import { CATEGORIES, type Category, type CityEvent, type Rarity } from "./types.js";
 
+/** One rubric for the buzz fields, shared by extraction and re-rating so the
+ * two prompts can't drift apart. */
+const RATIONALE_MAX = 140;
+const BUZZ_RUBRIC = `1.0-5.0, one decimal: how excited actual locals would be. Free community
+one-offs (parades, block parties, 5Ks) score high; generic paid promotions score low.`;
+const BUZZ_WHY_RUBRIC = `<=${RATIONALE_MAX} chars, blunt, like a jaded local`;
+const PROMOTED_RUBRIC = `true if this reads as a paid placement / sponsored plug / overpriced
+club promo rather than something a newsletter editor picked`;
+
 const EXTRACTION_SYSTEM = (
   city: string,
   tz: string,
@@ -36,12 +45,9 @@ Return ONLY a JSON object shaped exactly like:
   "free": boolean,
   "ticketUrl": string|null,
   "ticketProvider": string|null,       // "Eventbrite","AXS","Ticketmaster","DICE", venue box office, etc
-  "buzz": number,                      // 1.0-5.0, one decimal: how excited actual locals would be. Free community
-                                       // one-offs (parades, block parties, 5Ks) score high; generic paid
-                                       // promotions score low.
-  "buzzWhy": string,                   // <=140 chars, blunt, like a jaded local
-  "promoted": boolean,                 // true if this reads as a paid placement / sponsored plug / overpriced
-                                       // club promo rather than something a newsletter editor picked
+  "buzz": number,                      // ${BUZZ_RUBRIC.replace(/\n/g, "\n                                       // ")}
+  "buzzWhy": string,                   // ${BUZZ_WHY_RUBRIC}
+  "promoted": boolean,                 // ${PROMOTED_RUBRIC.replace(/\n/g, "\n                                       // ")}
   "rarity": "common"|"notable"|"rare"  // rare = one-off or annual (parade, fireworks, festival, race);
                                        // notable = special but recurring; common = weekly/anytime
 }]}
@@ -120,7 +126,11 @@ export async function extractEvents(opts: {
     let lat = Number(it.lat);
     if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
       const q = [it.venue, it.address, settings.city].filter(Boolean).join(", ");
-      const hit = await geocode(q, settings.center).catch(() => null);
+      // A transient geocode failure (rate limit, outage) propagates and fails
+      // the whole ingest, so the email row keeps processed_at null and the
+      // next kick retries it — a partial batch must not be stamped "done".
+      // Only a genuine no-match (null) skips the event.
+      const hit = await geocode(q, settings.center);
       if (!hit) continue; // no location, no marker
       lng = hit.lng;
       lat = hit.lat;
@@ -147,7 +157,7 @@ export async function extractEvents(opts: {
       sourceKind: opts.sourceKind ?? "newsletter",
       ...(opts.sourceUrl && { sourceUrl: opts.sourceUrl }),
       rating: clampRating(it.buzz),
-      ratingRationale: it.buzzWhy ? String(it.buzzWhy) : undefined,
+      ratingRationale: it.buzzWhy ? String(it.buzzWhy).slice(0, RATIONALE_MAX) : undefined,
       promoted: Boolean(it.promoted),
       rarity,
     });
@@ -166,9 +176,9 @@ You are a jaded local who has lived in this city for 15 years and reads every
 neighborhood subreddit thread. Given an event, estimate how the locals actually
 talk about it: is it beloved, decent, or an overpriced tourist/promo trap?
 
-Return ONLY JSON: {"rating": number 1.0-5.0 one decimal,
-"rationale": string <=140 chars in that blunt local voice,
-"promoted": boolean  // true if it smells like a paid placement}`;
+Return ONLY JSON: {"rating": number  // ${BUZZ_RUBRIC},
+"rationale": string  // ${BUZZ_WHY_RUBRIC},
+"promoted": boolean  // ${PROMOTED_RUBRIC}}`;
 
 export async function rateEvent(e: CityEvent): Promise<{
   rating: number;
@@ -189,7 +199,7 @@ export async function rateEvent(e: CityEvent): Promise<{
   });
   return {
     rating: clampRating(raw.rating),
-    rationale: String(raw.rationale ?? "").slice(0, 160),
+    rationale: String(raw.rationale ?? "").slice(0, RATIONALE_MAX),
     promoted: Boolean(raw.promoted),
   };
 }

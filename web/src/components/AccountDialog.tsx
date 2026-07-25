@@ -1,24 +1,13 @@
 import { useEffect, useMemo, useState } from "react"
 import {
   BellIcon,
-  CalendarIcon,
-  CheckIcon,
-  ClipboardPasteIcon,
-  CopyIcon,
-  GlobeIcon,
   HeartIcon,
-  InboxIcon,
   LogOutIcon,
-  MailIcon,
   PinIcon,
   PinOffIcon,
   RotateCcwIcon,
-  SearchIcon,
   SlidersHorizontalIcon,
-  UnplugIcon,
-  XIcon,
 } from "lucide-react"
-import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -29,35 +18,39 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
-import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
+import { CalendarSync } from "@/components/account/CalendarSync"
+import { InboxHistory } from "@/components/account/InboxHistory"
+import { SectionHeader } from "@/components/account/SectionHeader"
 import { useClock } from "@/hooks/useClock"
+import { usePush } from "@/hooks/usePush"
 import { api } from "@/lib/api"
-import { currentSubscription, disablePush, enablePush, pushSupported } from "@/lib/push"
+import { selectVisible } from "@/lib/derived"
 import { nextOccurrence } from "@/lib/recurrence"
-import { matchesFilters } from "@/lib/score"
+import { interestTerms } from "@/lib/score"
 import { useGrapevine } from "@/lib/store"
-import { connectGoogleCalendar } from "@/lib/supabase"
 import { dayLabel, hasEnded, isLive } from "@/lib/time"
 import {
   CATEGORY_META,
   DEFAULT_FILTERS,
   type CityEvent,
   type IngestRecord,
+  type User,
 } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 export function AccountDialog({
+  user,
   open,
   onOpenChange,
 }: {
+  user: User
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
-  const user = useGrapevine((s) => s.user)
   const events = useGrapevine((s) => s.events)
+  const visible = useGrapevine(selectVisible)
   const filters = useGrapevine((s) => s.filters)
   const interests = useGrapevine((s) => s.interests)
   const settings = useGrapevine((s) => s.settings)
@@ -70,43 +63,13 @@ export function AccountDialog({
   const signOut = useGrapevine((s) => s.signOut)
   const pinnedIds = useGrapevine((s) => s.pinnedIds)
   const togglePin = useGrapevine((s) => s.togglePin)
-  const calendar = useGrapevine((s) => s.calendar)
-  const setCalendar = useGrapevine((s) => s.setCalendar)
   const setCalendarOpen = useGrapevine((s) => s.setCalendarOpen)
 
   const [history, setHistory] = useState<IngestRecord[] | null>(null)
   const [historyError, setHistoryError] = useState(false)
-  const [query, setQuery] = useState("")
-  const [disconnecting, setDisconnecting] = useState(false)
-  const [copied, setCopied] = useState(false)
 
-  // Web Push state for THIS browser (subscriptions are per-device). Support
-  // is knowable synchronously; the subscription itself resolves in the effect.
-  const [pushState, setPushState] = useState<{
-    supported: boolean
-    subscribed: boolean
-    reminders: boolean
-    weeklyDigest: boolean
-    leaveBy: boolean
-  } | null>(() =>
-    pushSupported()
-      ? null
-      : {
-          supported: false,
-          subscribed: false,
-          reminders: false,
-          weeklyDigest: false,
-          leaveBy: false,
-        },
-  )
-  const [pushBusy, setPushBusy] = useState(false)
-
-  // Fresh search each time the dialog opens (render-phase reset, per React docs).
-  const [wasOpen, setWasOpen] = useState(open)
-  if (open !== wasOpen) {
-    setWasOpen(open)
-    if (open) setQuery("")
-  }
+  // Web Push state for THIS browser (subscriptions are per-device).
+  const { pushState, pushBusy, togglePush } = usePush(open)
 
   useEffect(() => {
     if (!open) return
@@ -119,84 +82,20 @@ export function AccountDialog({
       .catch(() => setHistoryError(true))
   }, [open])
 
-  useEffect(() => {
-    if (!open || !pushSupported()) return
-    let cancelled = false
-    void (async () => {
-      const sub = await currentSubscription().catch(() => null)
-      const status = sub ? await api.pushStatus(sub.endpoint).catch(() => null) : null
-      if (cancelled) return
-      setPushState({
-        supported: true,
-        subscribed: !!status?.subscribed,
-        reminders: !!status?.subscribed && status.reminders,
-        weeklyDigest: !!status?.subscribed && status.weeklyDigest,
-        leaveBy: !!status?.subscribed && status.leaveBy,
-      })
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [open])
-
-  async function togglePush(
-    kind: "reminders" | "weeklyDigest" | "leaveBy",
-    value: boolean,
-  ) {
-    if (!pushState || pushBusy) return
-    const next = { ...pushState, [kind]: value }
-    setPushBusy(true)
-    try {
-      if (value && !pushState.subscribed) {
-        // first toggle on this device: permission prompt + subscribe
-        await enablePush({
-          reminders: next.reminders,
-          weeklyDigest: next.weeklyDigest,
-          leaveBy: next.leaveBy,
-        })
-        next.subscribed = true
-        toast.success("Notifications on for this browser")
-      } else if (!next.reminders && !next.weeklyDigest && !next.leaveBy) {
-        await disablePush()
-        next.subscribed = false
-      } else {
-        const sub = await currentSubscription()
-        if (sub)
-          await api.pushPrefs(sub.endpoint, {
-            reminders: next.reminders,
-            weeklyDigest: next.weeklyDigest,
-            leaveBy: next.leaveBy,
-          })
-      }
-      setPushState(next)
-    } catch (err) {
-      toast.error("Couldn't update notifications", {
-        description: String(err instanceof Error ? err.message : err).slice(0, 140),
-      })
-    } finally {
-      setPushBusy(false)
-    }
-  }
-
   const tz = settings?.tz ?? "America/Los_Angeles"
 
   const stats = useMemo(() => {
     const upcoming = events.filter((e) => !hasEnded(e, now, tz))
-    const terms = (e: CityEvent) => [
-      ...e.tags.map((t) => t.toLowerCase()),
-      e.category,
-    ]
     return {
-      onMap: events.filter((e) => matchesFilters(e, filters, interests, now, tz))
-        .length,
+      onMap: visible.length,
       boosted: upcoming.filter((e) =>
-        terms(e).some((t) => interests.loves.includes(t)),
+        interestTerms(e).some((t) => interests.loves.includes(t)),
       ).length,
       hidden: upcoming.filter((e) =>
-        terms(e).some((t) => interests.avoids.includes(t)),
+        interestTerms(e).some((t) => interests.avoids.includes(t)),
       ).length,
     }
-  }, [events, filters, interests, now, tz])
+  }, [events, visible, interests, now, tz])
 
   // Resolve pinned ids to live events (dropping any since deleted).
   const pinnedEvents = useMemo(
@@ -210,34 +109,6 @@ export function AccountDialog({
   const filtersDefault =
     JSON.stringify(filters) === JSON.stringify(DEFAULT_FILTERS)
 
-  // Only bother with a search field once the inbox is long enough to hunt in.
-  const totalEvents = useMemo(
-    () => (history ?? []).reduce((n, r) => n + r.events.length, 0),
-    [history],
-  )
-  const searchable = totalEvents > 5
-
-  // Filter by newsletter name, subject, or any event title. A metadata hit
-  // keeps the whole record; otherwise we narrow to the matching events.
-  const shownRecords = useMemo(() => {
-    if (!history) return []
-    const q = query.trim().toLowerCase()
-    if (!q) return history
-    const out: IngestRecord[] = []
-    for (const r of history) {
-      const metaHit =
-        r.source.toLowerCase().includes(q) ||
-        !!r.subject?.toLowerCase().includes(q)
-      const evs = metaHit
-        ? r.events
-        : r.events.filter((e) => e.title.toLowerCase().includes(q))
-      if (metaHit || evs.length > 0) out.push({ ...r, events: evs })
-    }
-    return out
-  }, [history, query])
-
-  if (!user) return null
-
   const memberSince = new Intl.DateTimeFormat("en-US", {
     month: "long",
     year: "numeric",
@@ -247,34 +118,6 @@ export function AccountDialog({
   const handOff = (action: () => void) => {
     onOpenChange(false)
     action()
-  }
-
-  // Apple Calendar subscribes via the webcal scheme; same feed, same URL.
-  const webcal = calendar?.feedUrl?.replace(/^https?:/, "webcal:")
-
-  async function copyFeed() {
-    if (!webcal) return
-    try {
-      await navigator.clipboard.writeText(webcal)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      toast.error("Couldn't copy — feed link: " + webcal)
-    }
-  }
-
-  async function disconnectGoogle() {
-    setDisconnecting(true)
-    try {
-      setCalendar(await api.calendarDisconnect())
-      toast.success("Google Calendar disconnected", {
-        description: "Events already synced stay on your calendar.",
-      })
-    } catch (err) {
-      toast.error("Couldn't disconnect", { description: String(err).slice(0, 140) })
-    } finally {
-      setDisconnecting(false)
-    }
   }
 
   return (
@@ -392,97 +235,9 @@ export function AccountDialog({
           </section>
 
           {/* calendar sync */}
-          <section>
-            <SectionHeader
-              icon={<CalendarIcon className="size-3.5" />}
-              title="Calendar sync"
-              action={
-                calendar?.google ? (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="-my-1 h-7 text-xs"
-                    onClick={() => handOff(() => setCalendarOpen(true))}
-                  >
-                    Open calendar
-                  </Button>
-                ) : calendar && calendar.synced.length > 0 ? (
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {calendar.synced.length}
-                  </span>
-                ) : undefined
-              }
-            />
-            <div className="mt-2 flex flex-col gap-2">
-              <div className="flex items-center justify-between rounded-lg border px-3 py-2">
-                <span className="flex items-center gap-2 text-[13px] font-medium">
-                  Google Calendar
-                  {calendar?.google && (
-                    <Badge variant="outline" className="border-live/50 text-live">
-                      connected
-                    </Badge>
-                  )}
-                </span>
-                {calendar?.google ? (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={disconnectGoogle}
-                    disabled={disconnecting}
-                  >
-                    {disconnecting ? (
-                      <Spinner data-icon="inline-start" />
-                    ) : (
-                      <UnplugIcon data-icon="inline-start" />
-                    )}
-                    Disconnect
-                  </Button>
-                ) : (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={() =>
-                      connectGoogleCalendar().catch((err) =>
-                        toast.error("Couldn't start the Google consent", {
-                          description: String(
-                            err instanceof Error ? err.message : err,
-                          ).slice(0, 140),
-                        }),
-                      )
-                    }
-                  >
-                    Connect
-                  </Button>
-                )}
-              </div>
-              <div className="flex items-center justify-between rounded-lg border px-3 py-2">
-                <span className="text-[13px] font-medium">Apple Calendar</span>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={copyFeed}
-                  disabled={!webcal}
-                >
-                  {copied ? (
-                    <CheckIcon data-icon="inline-start" />
-                  ) : (
-                    <CopyIcon data-icon="inline-start" />
-                  )}
-                  {copied ? "Copied" : "Copy feed link"}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Saved events sync straight to Google Calendar once connected.
-                Apple doesn't allow direct writes, so subscribe to your feed
-                instead (Calendar → File → New Calendar Subscription) — adds
-                and removals follow automatically. Any event also downloads as
-                a .ics file.
-              </p>
-            </div>
-          </section>
+          <CalendarSync
+            onOpenCalendar={() => handOff(() => setCalendarOpen(true))}
+          />
 
           {/* notifications (per-browser Web Push) */}
           <section>
@@ -648,93 +403,15 @@ export function AccountDialog({
           </section>
 
           {/* inbox history */}
-          <section>
-            <SectionHeader
-              icon={<InboxIcon className="size-3.5" />}
-              title="From your inbox"
-              action={
-                history && history.length > 0 ? (
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {history.length}
-                  </span>
-                ) : undefined
-              }
-            />
-            <div className="mt-2">
-              {!history && !historyError && (
-                <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
-                  <Spinner className="size-3.5" /> Loading history…
-                </div>
-              )}
-              {historyError && (
-                <p className="py-2 text-xs text-muted-foreground">
-                  Couldn't load ingest history. Is the API running?
-                </p>
-              )}
-              {history && history.length === 0 && (
-                <div className="flex flex-col items-start gap-2 py-1">
-                  <p className="text-xs text-muted-foreground">
-                    No newsletters yet. Paste one into the ingest pipeline, or
-                    deploy the email worker and they'll land here on their own.
-                  </p>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={() => handOff(() => setAdminOpen(true))}
-                  >
-                    <ClipboardPasteIcon data-icon="inline-start" />
-                    Paste a newsletter
-                  </Button>
-                </div>
-              )}
-              {history && history.length > 0 && (
-                <div className="flex max-h-72 flex-col overflow-hidden rounded-lg border">
-                  {searchable && (
-                    <div className="relative shrink-0 border-b border-border">
-                      <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                      <input
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        placeholder="Search your inbox…"
-                        className="h-9 w-full bg-transparent pr-8 pl-8 text-xs outline-none placeholder:text-muted-foreground"
-                      />
-                      {query && (
-                        <button
-                          type="button"
-                          onClick={() => setQuery("")}
-                          aria-label="Clear search"
-                          className="absolute top-1/2 right-1.5 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
-                        >
-                          <XIcon className="size-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  <ScrollArea className="min-h-0 flex-1">
-                    {shownRecords.length > 0 ? (
-                      <div className="flex flex-col divide-y divide-border">
-                        {shownRecords.map((r) => (
-                          <IngestRow
-                            key={r.id}
-                            record={r}
-                            events={events}
-                            tz={settings?.tz ?? "America/Los_Angeles"}
-                            now={now}
-                            onSelect={(id) => handOff(() => select(id))}
-                          />
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="px-3 py-8 text-center text-xs text-muted-foreground">
-                        No inbox events match “{query}”.
-                      </p>
-                    )}
-                  </ScrollArea>
-                </div>
-              )}
-            </div>
-          </section>
+          <InboxHistory
+            history={history}
+            historyError={historyError}
+            events={events}
+            tz={tz}
+            now={now}
+            onSelect={(id) => handOff(() => select(id))}
+            onOpenAdmin={() => handOff(() => setAdminOpen(true))}
+          />
         </div>
 
         <DialogFooter className="mx-0 mb-0 shrink-0 items-center gap-3 rounded-b-xl sm:justify-between">
@@ -773,131 +450,6 @@ function Stat({
         {value}
       </span>
       <span className="text-[11px] text-muted-foreground">{label}</span>
-    </div>
-  )
-}
-
-function SectionHeader({
-  icon,
-  title,
-  action,
-}: {
-  icon: React.ReactNode
-  title: string
-  action?: React.ReactNode
-}) {
-  return (
-    <div className="flex h-7 items-center justify-between">
-      <span className="flex items-center gap-2 font-heading text-sm font-medium italic">
-        <span className="text-muted-foreground">{icon}</span>
-        {title}
-      </span>
-      {action}
-    </div>
-  )
-}
-
-/** "2h ago" / "yesterday" / "Jun 12" — coarse on purpose, it's a log. */
-function timeAgo(iso: string, now: Date): string {
-  const mins = Math.round((now.getTime() - new Date(iso).getTime()) / 60000)
-  if (mins < 1) return "just now"
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.round(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.round(hours / 24)
-  if (days === 1) return "yesterday"
-  if (days < 7) return `${days}d ago`
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-  }).format(new Date(iso))
-}
-
-function IngestRow({
-  record,
-  events,
-  tz,
-  now,
-  onSelect,
-}: {
-  record: IngestRecord
-  events: CityEvent[]
-  tz: string
-  now: Date
-  onSelect: (id: string) => void
-}) {
-  const KindIcon =
-    record.kind === "email"
-      ? MailIcon
-      : record.kind === "search"
-        ? GlobeIcon
-        : ClipboardPasteIcon
-  return (
-    <div className="flex flex-col gap-1 px-3 py-2.5">
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="flex min-w-0 items-center gap-2 text-[13px]">
-          <KindIcon className="size-3.5 shrink-0 text-muted-foreground" />
-          <span className="font-medium">{record.source}</span>
-          {record.subject && (
-            <span className="truncate text-xs text-muted-foreground">
-              {record.subject}
-            </span>
-          )}
-        </span>
-        <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
-          {timeAgo(record.receivedAt, now)}
-        </span>
-      </div>
-      {record.events.length ? (
-        <div className="flex flex-col">
-          {record.events.map((snap) => {
-            const live = events.find((e) => e.id === snap.id)
-            const ended = live ? hasEnded(live, now, tz) : true
-            const isOn = live ? isLive(live, now, tz) : false
-            return (
-              <button
-                key={snap.id}
-                type="button"
-                disabled={!live || ended}
-                onClick={() => live && onSelect(live.id)}
-                className={cn(
-                  "flex items-baseline justify-between gap-2 rounded-md px-1.5 py-1 text-left outline-none",
-                  live && !ended
-                    ? "hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
-                    : "cursor-default",
-                )}
-              >
-                <span
-                  className={cn(
-                    "truncate text-xs",
-                    (!live || ended) && "text-muted-foreground line-through decoration-border",
-                  )}
-                >
-                  {snap.title}
-                </span>
-                <span className="flex shrink-0 items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
-                  {isOn ? (
-                    <>
-                      <span className="size-1.5 animate-pulse rounded-full bg-live" />
-                      <span className="text-live">live</span>
-                    </>
-                  ) : ended || !live ? (
-                    "ended"
-                  ) : (
-                    dayLabel(nextOccurrence(live, now, tz).start, tz, now)
-                  )}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      ) : (
-        <p className="pl-[22px] text-xs text-muted-foreground italic">
-          {record.extracted > 0
-            ? `${record.extracted} extracted, all already on the map`
-            : "no events found in this one"}
-        </p>
-      )}
     </div>
   )
 }
