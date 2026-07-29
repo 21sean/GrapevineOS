@@ -137,12 +137,6 @@ export function CalendarSync({
             {copied ? "Copied" : "Copy feed link"}
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Saved events sync straight to Google Calendar once connected. Apple
-          doesn't allow direct writes, so subscribe to your feed instead
-          (Calendar → File → New Calendar Subscription) — adds and removals
-          follow automatically. Any event also downloads as a .ics file.
-        </p>
       </div>
     </section>
   )

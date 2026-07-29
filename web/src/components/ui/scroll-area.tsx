@@ -16,7 +16,12 @@ function ScrollArea({
     >
       <ScrollAreaPrimitive.Viewport
         data-slot="scroll-area-viewport"
-        className="size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1"
+        // Radix wraps children in an inline-styled `display: table` div that
+        // sizes to max-content, so long text refuses to wrap and gets clipped
+        // by overflow-hidden ancestors (e.g. the admin sheet). Every ScrollArea
+        // here scrolls vertically only — force the wrapper back to block so
+        // content stays inside the viewport width.
+        className="size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 [&>div]:!block"
       >
         {children}
       </ScrollAreaPrimitive.Viewport>

@@ -133,6 +133,32 @@
     border: 1px solid var(--border);
     box-shadow: 0 8px 32px oklch(0 0 0 / 35%);
   }
+
+  /* Thin, themed scrollbar for native overflow containers — matches the
+     Radix ScrollArea thumb without its height-containment quirks, so it's
+     safe inside shrink-to-fit (max-height) dialogs where ScrollArea collapses. */
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--foreground) 22%, transparent)
+      transparent;
+  }
+  .scroll-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scroll-thin::-webkit-scrollbar-thumb {
+    background: color-mix(in oklab, var(--foreground) 22%, transparent);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  .scroll-thin::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklab, var(--foreground) 34%, transparent);
+    background-clip: padding-box;
+  }
+  .scroll-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
 }
 
 /* ---------- map markers ---------- */

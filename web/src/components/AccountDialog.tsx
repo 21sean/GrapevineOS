@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import {
   BellIcon,
+  ChevronDownIcon,
   HeartIcon,
   LogOutIcon,
   MapPinIcon,
@@ -75,6 +76,8 @@ export function AccountDialog({
 
   const [history, setHistory] = useState<IngestRecord[] | null>(null)
   const [historyError, setHistoryError] = useState(false)
+  // Notifications is a dense stack of toggles — keep it folded until asked for.
+  const [notifOpen, setNotifOpen] = useState(false)
 
   // Web Push state for THIS browser (subscriptions are per-device).
   const { pushState, pushBusy, togglePush } = usePush(open)
@@ -117,6 +120,16 @@ export function AccountDialog({
   const filtersDefault =
     JSON.stringify(filters) === JSON.stringify(DEFAULT_FILTERS)
 
+  // How many push channels are live on this browser — the collapsed summary.
+  const notifOn = pushState
+    ? [
+        pushState.reminders,
+        pushState.leaveBy,
+        pushState.weeklyDigest,
+        pushState.rareFinds,
+      ].filter(Boolean).length
+    : 0
+
   const memberSince = new Intl.DateTimeFormat("en-US", {
     month: "long",
     year: "numeric",
@@ -130,15 +143,26 @@ export function AccountDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+      <DialogContent className="glass flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden bg-background/70 p-0 sm:max-w-lg">
+        {/* accent wash: the account is lit by lantern-gold — the signature of a
+            live night — the way admin is lit by wine and an event by its category */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 h-24"
+          style={{
+            background:
+              "linear-gradient(to bottom, color-mix(in oklab, var(--live) 14%, transparent), transparent)",
+          }}
+        />
+
         {/* identity */}
-        <DialogHeader className="shrink-0 gap-3 p-4">
+        <DialogHeader className="relative shrink-0 gap-3 p-5 pb-4">
           <div className="flex items-center gap-4">
             <img
               src={user.picture}
               alt=""
               referrerPolicy="no-referrer"
-              className="size-14 rounded-full ring-2 ring-live/40 ring-offset-2 ring-offset-popover"
+              className="size-14 rounded-full ring-2 ring-live/40 ring-offset-2 ring-offset-background"
             />
             <div className="min-w-0">
               <p className="font-mono text-[10px] tracking-[0.18em] text-live/90 uppercase">
@@ -171,7 +195,7 @@ export function AccountDialog({
 
         <Separator className="shrink-0" />
 
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+        <div className="scroll-thin flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
           {/* pinned */}
           <section>
             <SectionHeader
@@ -247,18 +271,41 @@ export function AccountDialog({
             onOpenCalendar={() => handOff(() => setCalendarOpen(true))}
           />
 
-          {/* notifications (per-browser Web Push) */}
+          {/* notifications (per-browser Web Push) — folded by default */}
           <section>
-            <SectionHeader
-              icon={<BellIcon className="size-3.5" />}
-              title="Notifications"
-            />
-            {pushState && !pushState.supported ? (
-              <p className="mt-2 text-xs text-muted-foreground">
-                This browser doesn't support Web Push notifications.
-              </p>
-            ) : (
-              <div className="mt-2 flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => setNotifOpen((v) => !v)}
+              aria-expanded={notifOpen}
+              className="flex h-7 w-full items-center justify-between rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <span className="flex items-center gap-2 font-heading text-sm font-medium italic">
+                <span className="text-muted-foreground">
+                  <BellIcon className="size-3.5" />
+                </span>
+                Notifications
+              </span>
+              <span className="flex items-center gap-2">
+                {notifOn > 0 && (
+                  <span className="font-mono text-xs text-live">
+                    {notifOn} on
+                  </span>
+                )}
+                <ChevronDownIcon
+                  className={cn(
+                    "size-4 text-muted-foreground transition-transform duration-200",
+                    notifOpen && "rotate-180",
+                  )}
+                />
+              </span>
+            </button>
+            {notifOpen &&
+              (pushState && !pushState.supported ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  This browser doesn't support Web Push notifications.
+                </p>
+              ) : (
+                <div className="mt-2 flex flex-col gap-2">
                 <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border px-3 py-2">
                   <span className="min-w-0">
                     <span className="block text-[13px] font-medium">
@@ -329,7 +376,7 @@ export function AccountDialog({
                   and reactions.
                 </p>
               </div>
-            )}
+              ))}
           </section>
 
           {/* taste */}
@@ -480,7 +527,7 @@ export function AccountDialog({
           />
         </div>
 
-        <DialogFooter className="mx-0 mb-0 shrink-0 items-center gap-3 rounded-b-xl sm:justify-between">
+        <DialogFooter className="mx-0 mb-0 shrink-0 items-center gap-3 border-t bg-transparent sm:justify-between">
           <p className="text-xs text-muted-foreground">
             Interests and filters sync to this account.
           </p>

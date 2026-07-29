@@ -8,13 +8,11 @@ import {
   XIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
 import { SectionHeader } from "@/components/account/SectionHeader"
 import { nextOccurrence } from "@/lib/recurrence"
 import { dayLabel, hasEnded, isLive, relativeTime } from "@/lib/time"
 import type { CityEvent, IngestRecord } from "@/lib/types"
-import { cn } from "@/lib/utils"
 
 /**
  * "From your inbox" — the ingest history panel of the account dialog: every
@@ -41,21 +39,37 @@ export function InboxHistory({
 }) {
   const [query, setQuery] = useState("")
 
+  // Ended events are history, not plans — drop them, and drop a record
+  // entirely once nothing in it is still upcoming. Records that never
+  // produced events stay visible as pipeline feedback.
+  const fresh = useMemo(() => {
+    if (!history) return null
+    const out: IngestRecord[] = []
+    for (const r of history) {
+      const evs = r.events.filter((snap) => {
+        const live = events.find((e) => e.id === snap.id)
+        return live && !hasEnded(live, now, tz)
+      })
+      if (evs.length > 0 || r.events.length === 0) out.push({ ...r, events: evs })
+    }
+    return out
+  }, [history, events, now, tz])
+
   // Only bother with a search field once the inbox is long enough to hunt in.
   const totalEvents = useMemo(
-    () => (history ?? []).reduce((n, r) => n + r.events.length, 0),
-    [history]
+    () => (fresh ?? []).reduce((n, r) => n + r.events.length, 0),
+    [fresh]
   )
   const searchable = totalEvents > 5
 
   // Filter by newsletter name, subject, or any event title. A metadata hit
   // keeps the whole record; otherwise we narrow to the matching events.
   const shownRecords = useMemo(() => {
-    if (!history) return []
+    if (!fresh) return []
     const q = query.trim().toLowerCase()
-    if (!q) return history
+    if (!q) return fresh
     const out: IngestRecord[] = []
-    for (const r of history) {
+    for (const r of fresh) {
       const metaHit =
         r.source.toLowerCase().includes(q) ||
         !!r.subject?.toLowerCase().includes(q)
@@ -65,7 +79,7 @@ export function InboxHistory({
       if (metaHit || evs.length > 0) out.push({ ...r, events: evs })
     }
     return out
-  }, [history, query])
+  }, [fresh, query])
 
   return (
     <section>
@@ -73,9 +87,9 @@ export function InboxHistory({
         icon={<InboxIcon className="size-3.5" />}
         title="From your inbox"
         action={
-          history && history.length > 0 ? (
+          fresh && fresh.length > 0 ? (
             <span className="font-mono text-xs text-muted-foreground">
-              {history.length}
+              {fresh.length}
             </span>
           ) : undefined
         }
@@ -91,11 +105,12 @@ export function InboxHistory({
             Couldn't load ingest history. Is the API running?
           </p>
         )}
-        {history && history.length === 0 && (
+        {fresh && fresh.length === 0 && (
           <div className="flex flex-col items-start gap-2 py-1">
             <p className="text-xs text-muted-foreground">
-              No newsletters yet. Paste one into the ingest pipeline, or deploy
-              the email worker and they'll land here on their own.
+              {history && history.length > 0
+                ? "Nothing current from your inbox — everything already came and went. New newsletters land here on their own."
+                : "No newsletters yet. Paste one into the ingest pipeline, or deploy the email worker and they'll land here on their own."}
             </p>
             <Button
               variant="secondary"
@@ -108,10 +123,10 @@ export function InboxHistory({
             </Button>
           </div>
         )}
-        {history && history.length > 0 && (
-          <div className="flex max-h-72 flex-col overflow-hidden rounded-lg border">
+        {fresh && fresh.length > 0 && (
+          <div className="overflow-hidden rounded-lg border">
             {searchable && (
-              <div className="relative shrink-0 border-b border-border">
+              <div className="relative border-b border-border">
                 <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
                 <input
                   value={query}
@@ -131,7 +146,12 @@ export function InboxHistory({
                 )}
               </div>
             )}
-            <ScrollArea className="min-h-0 flex-1">
+            {/* Native scroll with the bound on the scroller itself. The account
+                dialog's body is a content-sized scroll region, not a
+                definite-height flex parent, so a flex-1 child (or a Radix
+                ScrollArea viewport) collapses to zero here — an explicit
+                max-height always clips and scrolls. */}
+            <div className="scroll-thin max-h-72 overflow-y-auto overscroll-contain">
               {shownRecords.length > 0 ? (
                 <div className="flex flex-col divide-y divide-border">
                   {shownRecords.map((r) => (
@@ -150,7 +170,7 @@ export function InboxHistory({
                   No inbox events match “{query}”.
                 </p>
               )}
-            </ScrollArea>
+            </div>
           </div>
         )}
       </div>
@@ -195,40 +215,26 @@ function IngestRow({
       </div>
       {record.events.length ? (
         <div className="flex flex-col">
+          {/* the parent already dropped ended/vanished events, so every
+              surviving snapshot maps to a live, upcoming event */}
           {record.events.map((snap) => {
             const live = events.find((e) => e.id === snap.id)
-            const ended = live ? hasEnded(live, now, tz) : true
-            const isOn = live ? isLive(live, now, tz) : false
+            if (!live) return null
+            const isOn = isLive(live, now, tz)
             return (
               <button
                 key={snap.id}
                 type="button"
-                disabled={!live || ended}
-                onClick={() => live && onSelect(live.id)}
-                className={cn(
-                  "flex items-baseline justify-between gap-2 rounded-md px-1.5 py-1 text-left outline-none",
-                  live && !ended
-                    ? "hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
-                    : "cursor-default"
-                )}
+                onClick={() => onSelect(live.id)}
+                className="flex items-baseline justify-between gap-2 rounded-md px-1.5 py-1 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <span
-                  className={cn(
-                    "truncate text-xs",
-                    (!live || ended) &&
-                      "text-muted-foreground line-through decoration-border"
-                  )}
-                >
-                  {snap.title}
-                </span>
+                <span className="truncate text-xs">{snap.title}</span>
                 <span className="flex shrink-0 items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
                   {isOn ? (
                     <>
                       <span className="size-1.5 animate-pulse rounded-full bg-live" />
                       <span className="text-live">live</span>
                     </>
-                  ) : ended || !live ? (
-                    "ended"
                   ) : (
                     dayLabel(nextOccurrence(live, now, tz).start, tz, now)
                   )}
