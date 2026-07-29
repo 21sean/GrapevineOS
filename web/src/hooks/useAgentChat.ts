@@ -134,6 +134,13 @@ export function useAgentChat() {
             // Server already committed the edit (e.g. set_rarity) — swap the
             // fresh copy in so badges and filters reflect it immediately.
             useGrapevine.getState().upsertEvent(a.event)
+          } else if (a.kind === "eventsRefresh") {
+            // The agent added web-discovered events to the catalog — refetch
+            // so they land in the list and on the map mid-conversation.
+            void useGrapevine.getState().refreshEvents()
+            toast.success(
+              `Added ${a.count} event${a.count === 1 ? "" : "s"} from the web`,
+            )
           } else if (a.kind === "setFilters") {
             // The agent reshaped the map — apply immediately, offer undo.
             const s = useGrapevine.getState()

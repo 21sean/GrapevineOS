@@ -14,6 +14,7 @@ import { tool } from "@langchain/core/tools";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { z } from "zod";
 import { saveEventForUser } from "../calendar.js";
+import { runDiscovery, validQuery } from "../discovery.js";
 import { CATEGORIES, type Category } from "../types.js";
 import {
   INTEREST_TOPICS,
@@ -148,6 +149,64 @@ export function makeTools(ctx: AgentCtx, chat: ChatContext) {
         "Fetch one web page and return its readable text (reader-mode extraction, truncated). Use on the most promising search_web result when snippets aren't enough.",
       schema: z.object({
         url: z.string().describe("A full http(s) url, usually from search_web results"),
+      }),
+    },
+  );
+
+  const discoverTool = tool(
+    async (input, config) => {
+      const query = validQuery(input.query);
+      if (!query) return JSON.stringify({ error: "query must be 3-200 chars" });
+      const commit = input.commit === true;
+      // Chat keeps latency tolerable by reading fewer pages than a scheduled
+      // run; the verification gate (source-quote check + LLM cross-read +
+      // catalog dedupe) is identical.
+      const run = await runDiscovery({ query, commit, maxPages: 3 });
+      if (commit && run.added > 0) {
+        emit(config, {
+          type: "action",
+          action: { kind: "eventsRefresh", count: run.added },
+        });
+      }
+      return JSON.stringify({
+        query: run.query,
+        pages_read: run.pagesRead.length,
+        extracted: run.extracted,
+        verified: run.verified.slice(0, 12).map((c) => ({
+          title: c.event.title,
+          start: c.event.start,
+          venue: c.event.venue,
+          source_url: c.sourceUrl,
+          confidence: c.confidence,
+        })),
+        rejected: run.rejected.length,
+        added: run.added,
+        committed: commit,
+        ...(run.error && { error: run.error }),
+        note: commit
+          ? run.added
+            ? `${run.added} new event(s) are in the catalog now — already visible in the user's list and map.`
+            : "nothing new to add — every verified event was already in the catalog"
+          : "dry run, nothing written. Re-run with commit:true to add the verified events.",
+      });
+    },
+    {
+      name: "discover_events",
+      description:
+        "Web-search for local events, verify each candidate against its source page, and (with " +
+        "commit:true) add the verified ones to the live event catalog — the user's list and map. " +
+        "Use when the digest can't answer and the user wants real events, or when the user asks to " +
+        "add events you found with search_web (re-discovering the same topic finds and verifies " +
+        "them properly). Slow — several pages are read and cross-checked. Default is a dry-run " +
+        "preview; pass commit:true only when the user asked for the events to be added.",
+      schema: z.object({
+        query: z
+          .string()
+          .describe('What to look for, e.g. "live jazz San Diego this weekend"'),
+        commit: z
+          .boolean()
+          .describe("false (default) previews; true writes verified events to the catalog")
+          .optional(),
       }),
     },
   );
@@ -387,6 +446,7 @@ export function makeTools(ctx: AgentCtx, chat: ChatContext) {
     etaTool,
     webSearchTool,
     readPageTool,
+    discoverTool,
     showOnMapTool,
     setFiltersTool,
     proposeCalendarTool,
@@ -418,6 +478,10 @@ export function toolLabel(name: string, args: Record<string, unknown>): string {
         return "Reading a page";
       }
     }
+    case "discover_events":
+      return args.commit === true
+        ? `Adding verified events: ${String(args.query ?? "").slice(0, 50)}`
+        : `Scouting the web: ${String(args.query ?? "").slice(0, 50)}`;
     case "show_on_map":
       return "Pinning the map";
     case "set_filters":
@@ -460,6 +524,11 @@ export function toolDetail(name: string, content: unknown): string | undefined {
     }
     if (name === "set_filters" && parsed.ok) {
       return "applied";
+    }
+    if (name === "discover_events" && typeof parsed.added === "number") {
+      return parsed.committed
+        ? `${parsed.added} added`
+        : `${parsed.verified?.length ?? 0} verified (preview)`;
     }
     if (parsed.error) return "failed";
   } catch {

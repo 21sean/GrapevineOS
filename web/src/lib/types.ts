@@ -369,6 +369,8 @@ export type AgentAction =
   // The agent edited an event server-side (e.g. set_rarity) — the client
   // swaps in the fresh copy so badges and filters update without a reload.
   | { kind: "eventPatched"; event: CityEvent }
+  // discover_events committed new catalog rows — refetch so they appear.
+  | { kind: "eventsRefresh"; count: number }
   // set_filters: reshape the user's live map. Applied immediately with an
   // undo toast; `reset` clears to defaults before merging the patch.
   | { kind: "setFilters"; reset?: boolean; patch: Partial<Filters>; note?: string }
