@@ -31,6 +31,15 @@ const REACTION_SELF_BOOST: Record<Reaction, number> = {
   not_for_me: -8, // sinks below everything with a pulse
 }
 
+/**
+ * How hard a matched "avoid" sinks an event. A taste signal, not a wall:
+ * bigger than any positive bump so avoided events settle at the bottom of the
+ * list, but finite so they stay on the map and can't silently swallow events
+ * the user (or the agent) just added. Deliberate hiding is the job of the
+ * hide-category / mute / farmers controls, not passive taste.
+ */
+const AVOID_PENALTY = 12
+
 /** True for the weekly neighborhood farmers markets (tagged at ingest). */
 export function isFarmersMarket(e: CityEvent): boolean {
   return e.tags.some((t) => t.toLowerCase() === FARMERS_MARKET_TAG)
@@ -39,8 +48,9 @@ export function isFarmersMarket(e: CityEvent): boolean {
 /**
  * Personal relevance score. Buzz rating is the backbone; live events and
  * rare one-offs float up; promoted junk sinks; interests tilt the rest.
- * Reactions layer on top: the event's own reaction moves it directly, and
- * learned tag affinity ("went — great" at two jazz shows) tilts lookalikes.
+ * Avoided topics sink an event hard (but don't erase it); reactions layer on
+ * top: the event's own reaction moves it directly, and learned tag affinity
+ * ("went — great" at two jazz shows) tilts lookalikes.
  */
 export function scoreEvent(
   e: CityEvent,
@@ -50,9 +60,9 @@ export function scoreEvent(
   taste?: Taste,
 ): number {
   const terms = interestTerms(e)
-  if (terms.some((t) => interests.avoids.includes(t))) return -Infinity
 
   let s = e.rating * 2
+  if (terms.some((t) => interests.avoids.includes(t))) s -= AVOID_PENALTY
   if (e.promoted) s -= 4
   if (e.rarity === "rare") s += 1.5
   if (e.rarity === "notable") s += 0.5
@@ -111,7 +121,6 @@ export function isMuted(e: CityEvent, muted: Muted): boolean {
 export function matchesFilters(
   e: CityEvent,
   f: Filters,
-  interests: Interests,
   now: Date,
   tz?: string,
 ): boolean {
@@ -132,7 +141,9 @@ export function matchesFilters(
     if (f.dateFrom && localDay(occ.end, tz) < f.dateFrom) return false
     if (f.dateTo && localDay(occ.start, tz) > f.dateTo) return false
   }
-  if (interestTerms(e).some((t) => interests.avoids.includes(t))) return false
+  // Avoids no longer hide here — they sink the event via scoreEvent instead, so
+  // an incidental avoided tag can't erase an otherwise-wanted (or just-added)
+  // event. Deliberate hiding lives in hideCategories / farmers / mute above.
   return true
 }
 
@@ -219,7 +230,7 @@ export function visibleEvents(
     if (hidden?.has(e.id)) continue
     if (muted && isMuted(e, muted)) continue
     if (near && !near(e)) continue
-    if (!matchesFilters(e, f, interests, now, tz)) continue
+    if (!matchesFilters(e, f, now, tz)) continue
     scored.push([scoreEvent(e, interests, now, tz, taste), e])
   }
   scored.sort((a, b) => b[0] - a[0])

@@ -14,7 +14,7 @@ import { tool } from "@langchain/core/tools";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { z } from "zod";
 import { saveEventForUser } from "../calendar.js";
-import { runDiscovery, validQuery } from "../discovery.js";
+import { runDiscovery, summarizeRejections, validQuery } from "../discovery.js";
 import { CATEGORIES, type Category } from "../types.js";
 import {
   INTEREST_TOPICS,
@@ -168,6 +168,20 @@ export function makeTools(ctx: AgentCtx, chat: ChatContext) {
           action: { kind: "eventsRefresh", count: run.added },
         });
       }
+      // Grouped "why" for the rejected candidates, so a thin run is actionable
+      // (explain it to the user, retry tighter) instead of a silent 0.
+      const topReasons = summarizeRejections(run.rejected);
+      const note = commit
+        ? run.added > 0
+          ? `${run.added} new event(s) are in the catalog now — already visible in the user's list and map.`
+          : run.verified.length > 0
+            ? "every verified event was already in the catalog — nothing new to add."
+            : run.extracted > 0
+              ? "found candidates but none could be verified against their source pages — see rejected_reasons, then try a tighter or different query."
+              : "no event listings found on the pages read — try a different query."
+        : run.verified.length > 0
+          ? "dry run, nothing written. Re-run with commit:true to add the verified events."
+          : "dry run — nothing passed verification; see rejected_reasons before spending another run.";
       return JSON.stringify({
         query: run.query,
         pages_read: run.pagesRead.length,
@@ -180,14 +194,11 @@ export function makeTools(ctx: AgentCtx, chat: ChatContext) {
           confidence: c.confidence,
         })),
         rejected: run.rejected.length,
+        ...(topReasons.length && { rejected_reasons: topReasons }),
         added: run.added,
         committed: commit,
         ...(run.error && { error: run.error }),
-        note: commit
-          ? run.added
-            ? `${run.added} new event(s) are in the catalog now — already visible in the user's list and map.`
-            : "nothing new to add — every verified event was already in the catalog"
-          : "dry run, nothing written. Re-run with commit:true to add the verified events.",
+        note,
       });
     },
     {

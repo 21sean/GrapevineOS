@@ -22,6 +22,11 @@ interface Taste {
 
 const terms = affinityTerms;
 
+/** Mirror of web scoreEvent's AVOID_PENALTY — avoided topics sink an event
+ * hard but don't erase it, so the weekly picks stay in sync with the client
+ * list and a single avoided tag can't wall off an otherwise-strong event. */
+const AVOID_PENALTY = 12;
+
 /** Prefs arrive as untyped JSON — keep only the strings. */
 export function stringList(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
@@ -48,10 +53,12 @@ export function isMutedFor(
 
 function scoreFor(e: CityEvent, taste: Taste): number {
   const ts = terms(e);
-  if (ts.some((t) => taste.avoids.includes(t))) return -Infinity;
+  // "not for me" is an explicit per-event veto — keep it a hard drop. Avoids
+  // are passive taste: sink them, don't erase (matches the client's scoreEvent).
   if (taste.reactions.get(e.id) === "not_for_me") return -Infinity;
   // No promoted penalty here — weekPicks filters promoted events out entirely.
   let s = e.rating * 2;
+  if (ts.some((t) => taste.avoids.includes(t))) s -= AVOID_PENALTY;
   if (e.rarity === "rare") s += 1.5;
   if (e.rarity === "notable") s += 0.5;
   const loved = ts.filter((t) => taste.loves.includes(t)).length;

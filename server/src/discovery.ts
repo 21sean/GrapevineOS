@@ -34,8 +34,8 @@ const MIN_PAGE_CHARS = 200; // below this a page has nothing to extract
 const MAX_DAYS_OUT = 400; // beyond this a "found" date is suspect
 
 function minConfidence(): number {
-  const n = Number(process.env.DISCOVERY_MIN_CONFIDENCE ?? 0.7);
-  return Number.isFinite(n) ? Math.min(Math.max(n, 0), 1) : 0.7;
+  const n = Number(process.env.DISCOVERY_MIN_CONFIDENCE ?? 0.6);
+  return Number.isFinite(n) ? Math.min(Math.max(n, 0), 1) : 0.6;
 }
 
 // ---------------------------------------------------------------------------
@@ -122,6 +122,54 @@ function titleOnPage(title: string, pageText: string): boolean {
   return found * 2 >= tokens.length;
 }
 
+/**
+ * Is the verifier's supporting quote actually on the page? The prompt demands
+ * a verbatim quote, so a real one is a substring; we allow heavy token overlap
+ * to survive light reformatting (whitespace, an inserted word). A quote that
+ * checks out is evidence we verified ourselves — much harder to fake than a
+ * self-reported confidence number, which is why it can bend the floor below.
+ */
+function evidenceOnPage(quote: string | undefined, pageText: string): boolean {
+  const q = (quote ?? "").toLowerCase().trim();
+  if (q.length < 8) return false; // too short to mean anything
+  const hay = pageText.toLowerCase();
+  if (hay.includes(q)) return true;
+  const tokens = q.match(/[a-z0-9]{3,}/g) ?? [];
+  if (tokens.length < 3) return false;
+  const found = tokens.filter((t) => hay.includes(t)).length;
+  return found >= Math.ceil(tokens.length * 0.7);
+}
+
+/**
+ * Does the candidate's own date appear in the page text? A concrete date on the
+ * page is strong corroboration the extractor didn't invent or mis-resolve it;
+ * for a recurring event the weekday (or a "weekly/every" cue) plays that role.
+ * A soft signal that bends the floor, never a hard reject — page date formats
+ * vary far too much to fail closed on a miss.
+ */
+function dateOnPage(e: CityEvent, pageText: string, tz: string): boolean {
+  const d = new Date(e.start);
+  if (!Number.isFinite(d.getTime())) return false;
+  const hay = pageText.toLowerCase();
+  const part = (opts: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat("en-US", { timeZone: tz, ...opts }).format(d).toLowerCase();
+  const monthLong = part({ month: "long" });
+  const day = part({ day: "numeric" });
+  const monthNum = part({ month: "numeric" });
+  const candidates = [
+    `${monthLong} ${day}`, // july 15
+    `${monthLong.slice(0, 3)} ${day}`, // jul 15
+    `${day} ${monthLong}`, // 15 july
+    `${monthNum}/${day}`, // 7/15
+  ];
+  if (candidates.some((c) => hay.includes(c))) return true;
+  if (e.recurrence) {
+    const weekday = part({ weekday: "long" });
+    if (hay.includes(weekday) || /\b(weekly|every|each|recurring)\b/.test(hay)) return true;
+  }
+  return false;
+}
+
 /** Deterministic gates. Returns a rejection reason or null to proceed. */
 function hardReject(e: CityEvent, pageText: string, now: Date): string | null {
   const start = Date.parse(e.start);
@@ -167,8 +215,14 @@ Verdict rules:
 - "unsupported": the page never actually announces this event, the date or
   venue is invented or ambiguous, the listing is from a past year, or the page
   merely links elsewhere without naming a concrete when-and-where.
-Promotional vagueness ("fun all summer long!") is "unsupported". When torn
-between verdicts, pick the more skeptical one and lower the confidence.`;
+Promotional vagueness ("fun all summer long!") is "unsupported".
+Set "confidence" to how directly the page backs the event: a clear title with a
+concrete date and venue on the page is high (0.8+); a real but partial match is
+mid (0.5-0.7); reserve low confidence for genuine doubt. Do NOT deflate the
+number just to seem careful — an event the page plainly announces should score
+high. Copy "evidence" VERBATIM from the source text (an exact substring) so it
+can be checked against the page; if you cannot quote it, the verdict is
+"unsupported".`;
 
 interface Verdict {
   index: number;
@@ -383,7 +437,6 @@ export async function runDiscovery(opts: {
     survivors.forEach((e, index) => {
       const corroborations = corroborationsOf(e);
       const v = verdicts.get(index);
-      const required = corroborations >= 2 ? Math.min(bar, 0.5) : bar;
       if (!v || v.verdict === "unsupported") {
         result.rejected.push({
           event: e, verdict: "rejected", confidence: v?.confidence ?? 0,
@@ -393,16 +446,32 @@ export async function runDiscovery(opts: {
         });
         return;
       }
+      // The corrected event is what we'd store, so check its (possibly fixed)
+      // date against the page.
+      const event = v.verdict === "corrected" ? applyFixes(e, v) : e;
+      // Deterministic supports we verified ourselves. Each one earns a lower
+      // confidence floor, so the run leans on checkable evidence — a real quote
+      // on the page, the date on the page, the same event on a second page —
+      // rather than a small local model's self-reported confidence alone. The
+      // title is already known to be on the page (hardReject), so a confirmed
+      // verdict with any of these is well-grounded even at modest confidence.
+      const evidenceSupport = evidenceOnPage(v.evidence, page.text);
+      const dateSupport = dateOnPage(event, page.text, settings.tz);
+      const supports =
+        (evidenceSupport ? 1 : 0) + (dateSupport ? 1 : 0) + (corroborations >= 2 ? 1 : 0);
+      const required = Math.max(0.3, bar - 0.15 * supports);
       if (v.confidence < required) {
         result.rejected.push({
           event: e, verdict: "rejected", confidence: v.confidence,
-          reason: `verifier confidence ${v.confidence.toFixed(2)} below ${required.toFixed(2)}`,
+          reason:
+            `confidence ${v.confidence.toFixed(2)} below ${required.toFixed(2)} ` +
+            `(date on page: ${dateSupport ? "yes" : "no"}, quote on page: ` +
+            `${evidenceSupport ? "yes" : "no"}, sources: ${corroborations})`,
           ...(v.evidence && { evidence: v.evidence }),
           sourceUrl: page.url, corroborations,
         });
         return;
       }
-      const event = v.verdict === "corrected" ? applyFixes(e, v) : e;
       result.verified.push({
         event, verdict: v.verdict, confidence: v.confidence,
         ...(v.evidence && { evidence: v.evidence }),
@@ -440,6 +509,44 @@ export function summarizeRun(r: DiscoveryRunResult): string {
     `${r.pagesRead.length} pages, ${r.extracted} extracted, ` +
     `${r.verified.length} verified, ${r.rejected.length} rejected, ${r.added} new`
   );
+}
+
+/** Collapse a rejection reason to a coarse, human bucket so a run can report
+ * *why* it was thin without leaking a dozen near-identical strings. */
+function rejectionBucket(reason: string | undefined): string {
+  const r = (reason ?? "").toLowerCase();
+  if (r.includes("confidence")) return "verifier not confident enough";
+  if (r.includes("does not support") || r.includes("no verdict"))
+    return "page didn't back the event";
+  if (r.includes("title not found")) return "title not on the source page";
+  if (r.includes("in the past")) return "event already passed";
+  if (r.includes("unparseable")) return "no readable date";
+  if (r.includes("no venue")) return "no venue named";
+  if (r.includes("days out")) return "date implausibly far out";
+  if (r.includes("verifier failed")) return "verifier error";
+  return reason ?? "rejected";
+}
+
+/**
+ * The top rejection reasons for a run, most common first, each with a count and
+ * one example title — enough for the agent to explain a thin run to the user
+ * and decide whether to retry with a tighter query or a different source.
+ */
+export function summarizeRejections(
+  rejected: DiscoveryCandidate[],
+  top = 3,
+): { reason: string; count: number; example: string }[] {
+  const groups = new Map<string, { count: number; example: string }>();
+  for (const c of rejected) {
+    const key = rejectionBucket(c.reason);
+    const g = groups.get(key);
+    if (g) g.count++;
+    else groups.set(key, { count: 1, example: c.event.title });
+  }
+  return [...groups.entries()]
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, top)
+    .map(([reason, { count, example }]) => ({ reason, count, example }));
 }
 
 // ---------------------------------------------------------------------------

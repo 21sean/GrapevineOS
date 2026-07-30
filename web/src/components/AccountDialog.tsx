@@ -187,7 +187,7 @@ export function AccountDialog({
             />
             <Stat
               value={stats.hidden}
-              label="hidden by avoids"
+              label="buried by avoids"
               className={stats.hidden > 0 ? "text-destructive" : undefined}
             />
           </div>

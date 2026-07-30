@@ -39,7 +39,7 @@ export function InterestsDialog() {
     toast.success("Interests saved", {
       description:
         avoids.length > 0
-          ? `Hiding ${avoids.join(", ")} from your map.`
+          ? `Burying ${avoids.join(", ")} at the bottom of your feed.`
           : "Your feed is re-ranked.",
     })
   }
@@ -53,7 +53,7 @@ export function InterestsDialog() {
           </DialogTitle>
           <DialogDescription>
             The map re-ranks around your picks. Anything under “less of this”
-            disappears entirely.
+            sinks to the bottom of the feed.
           </DialogDescription>
         </DialogHeader>
 
@@ -89,7 +89,8 @@ export function InterestsDialog() {
           <FieldSet>
             <FieldLegend>Less of this</FieldLegend>
             <FieldDescription>
-              Hidden completely. You'll never see these on the map.
+              Sinks to the bottom of the feed. To hide events outright, use the
+              map’s hide-category and mute controls.
             </FieldDescription>
             <ToggleGroup
               type="multiple"

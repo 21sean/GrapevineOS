@@ -229,8 +229,10 @@ export const selectWeekPicks = memoSelector(
       const occ = nextOccurrence(e, s.now, tz)
       if (Date.parse(occ.end) < s.now.getTime()) continue
       if (Date.parse(occ.start) > horizon) continue
+      // Avoids sink an event via a big score penalty (not -Infinity), so an
+      // avoided topic can still surface on a sparse day rather than vanishing —
+      // same "down-rank, don't hide" rule as the map and the server digest.
       const score = scoreEvent(e, s.interests, s.now, tz, taste)
-      if (score === -Infinity) continue
       const day = localDay(occ.start, tz)
       const list = byDay.get(day) ?? []
       list.push([score, e])
