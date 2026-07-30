@@ -153,3 +153,31 @@ export interface ChatMessage {
   content: string;
   createdAt: string; // ISO 8601
 }
+
+/**
+ * Reasoning-effort tiers the Claude Code CLI accepts via `--effort` (maps to
+ * Anthropic's internal thinking-budget). Only the `claude` chat provider
+ * honours this; the others ignore it.
+ */
+export const CHAT_EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
+export type ChatEffort = (typeof CHAT_EFFORT_LEVELS)[number];
+
+export function isChatEffort(v: unknown): v is ChatEffort {
+  return typeof v === "string" && (CHAT_EFFORT_LEVELS as readonly string[]).includes(v);
+}
+
+/**
+ * Per-turn token + cost telemetry from a CLI provider. Currently only Claude
+ * Code reports it (the `usage` block + `total_cost_usd` in its
+ * `--output-format json` envelope); the other CLIs and the local Ollama agent
+ * leave it undefined. Surfaced under the assistant reply when present.
+ */
+export interface ChatUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadInputTokens?: number;
+  cacheCreationInputTokens?: number;
+  costUSD?: number;
+  /** The model the CLI actually billed (its resolved id, not our request). */
+  model?: string;
+}

@@ -14,6 +14,7 @@ export * from "../../../shared/types"
 import type {
   Category,
   ChatMessage,
+  ChatUsage,
   CityEvent,
   LlmProviderId,
   Reaction,
@@ -393,5 +394,6 @@ export type AgentFrame =
   | { type: "tool"; name: string; label: string; state: "start" | "done"; detail?: string }
   | { type: "action"; action: AgentAction }
   | { type: "notice"; code: string; message: string }
+  | { type: "usage"; usage: ChatUsage }
   | { type: "done"; threadId?: string }
   | { type: "error"; message: string }

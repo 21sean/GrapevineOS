@@ -296,6 +296,9 @@ export const api = {
         savedEventIds?: string[]
         signedIn?: boolean
       }
+      /** Claude Code CLI overrides (empty/omitted = the CLI's own default). */
+      model?: string
+      effort?: string
     },
     onFrame: (frame: AgentFrame) => void,
     signal?: AbortSignal,

@@ -1,8 +1,14 @@
 import { useCallback, useRef, useState } from "react"
 import { toast } from "sonner"
 import { api } from "@/lib/api"
+import { useChatPrefs } from "@/lib/chatPrefs"
 import { useGrapevine } from "@/lib/store"
-import { DEFAULT_FILTERS, normalizeFilters, type AgentFrame } from "@/lib/types"
+import {
+  DEFAULT_FILTERS,
+  normalizeFilters,
+  type AgentFrame,
+  type ChatUsage,
+} from "@/lib/types"
 
 /**
  * Owns one session's "Ask Grapevine" transcript for display. Conversation
@@ -48,6 +54,8 @@ export type ChatItem =
       notices: Notice[]
       /** ids the agent pinned on the map this turn (chip-row fallback) */
       highlights: string[]
+      /** token/cost telemetry, when the provider reports it (Claude Code) */
+      usage?: ChatUsage
       error?: string
     }
 
@@ -168,6 +176,9 @@ export function useAgentChat() {
             notices: [...it.notices, { code: frame.code, message: frame.message }],
           }))
           break
+        case "usage":
+          patchLast(() => ({ usage: frame.usage }))
+          break
         case "error":
           patchLast(() => ({ error: frame.message, streaming: false, status: undefined }))
           break
@@ -201,6 +212,7 @@ export function useAgentChat() {
       ])
 
       const s = useGrapevine.getState()
+      const { model, effort } = useChatPrefs.getState()
       abortRef.current?.abort()
       const ac = new AbortController()
       abortRef.current = ac
@@ -215,6 +227,10 @@ export function useAgentChat() {
               savedEventIds: s.calendar?.synced ?? [],
               signedIn: !!s.user,
             },
+            // Only meaningful for the Claude Code provider; the server drops
+            // them for the others. Omit empties so the CLI keeps its default.
+            ...(model && { model }),
+            ...(effort && { effort }),
           },
           onFrame,
           ac.signal,

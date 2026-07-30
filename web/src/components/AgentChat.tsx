@@ -26,15 +26,17 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Spinner } from "@/components/ui/spinner"
+import { ModelEffortPicker } from "@/components/chat/ModelEffortPicker"
 import { CalendarCard, InterestsCard } from "@/components/chat/ProposalCards"
 import { EVENT_LINK_RE, RichText } from "@/components/chat/RichText"
 import { ThreadHistory } from "@/components/chat/ThreadHistory"
 import { useAgentChat, type ChatItem } from "@/hooks/useAgentChat"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useSpeechInput } from "@/hooks/useSpeechInput"
+import { modelLabel, useChatPrefs } from "@/lib/chatPrefs"
 import { useGrapevine } from "@/lib/store"
 import { timeRange } from "@/lib/time"
-import { CATEGORY_META } from "@/lib/types"
+import { CATEGORY_META, type ChatUsage } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 const SUGGESTIONS = [
@@ -121,7 +123,7 @@ function DesktopPalette({
       if (panelRef.current.contains(t)) return
       if (
         t.closest(
-          '[data-slot="sheet-content"], [data-slot="dialog-content"], [data-sonner-toaster]',
+          '[data-slot="sheet-content"], [data-slot="dialog-content"], [data-slot="popover-content"], [data-sonner-toaster]',
         )
       )
         return
@@ -159,7 +161,11 @@ function Conversation({
 }) {
   const { items, busy, send, stop, reset, loadThread } = chat
   const user = useGrapevine((s) => s.user)
-  const [input, setInput] = useState("")
+  const chatProvider = useGrapevine((s) => s.settings?.chatProvider)
+  // Draft lives in the persisted store, not local state, so clicking away from
+  // the chat (which unmounts this component) doesn't discard a half-typed line.
+  const input = useChatPrefs((s) => s.draft)
+  const setInput = useChatPrefs((s) => s.setDraft)
   const [showHistory, setShowHistory] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -237,10 +243,18 @@ function Conversation({
         )}
       </ScrollArea>
 
+      {chatProvider === "claude" && (
+        <div className="flex shrink-0 items-center border-t border-border/60 px-2 pt-1.5">
+          <ModelEffortPicker />
+        </div>
+      )}
+
       <form
         onSubmit={submit}
         className={cn(
-          "flex shrink-0 items-center gap-2 border-t border-border/60 py-2 pr-2",
+          "flex shrink-0 items-center gap-2 py-2 pr-2",
+          // The picker row already draws the top divider when it's shown.
+          chatProvider === "claude" ? "" : "border-t border-border/60",
           items.length > 0 || user ? "pl-2" : "pl-4",
         )}
       >
@@ -470,6 +484,8 @@ function Message({
         ),
       )}
 
+      {item.usage && !item.streaming && <UsageLine usage={item.usage} />}
+
       {item.error && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs">
           <span className="min-w-0 text-destructive-foreground/90">{item.error}</span>
@@ -480,6 +496,27 @@ function Message({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function fmtTokens(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k`
+  return String(n)
+}
+
+/** Per-turn token/cost footer under a Claude Code reply. */
+function UsageLine({ usage }: { usage: ChatUsage }) {
+  const parts: string[] = []
+  if (usage.model) parts.push(modelLabel(usage.model).replace(/^claude-/i, ""))
+  parts.push(`${fmtTokens(usage.inputTokens)} in`)
+  parts.push(`${fmtTokens(usage.outputTokens)} out`)
+  if (typeof usage.costUSD === "number" && usage.costUSD > 0) {
+    parts.push(`$${usage.costUSD.toFixed(usage.costUSD < 0.1 ? 3 : 2)}`)
+  }
+  return (
+    <div className="font-mono text-[10px] text-muted-foreground/70" title="This turn's token usage">
+      {parts.join(" · ")}
     </div>
   )
 }

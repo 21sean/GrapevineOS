@@ -22,7 +22,7 @@ import os from "node:os";
 import path from "node:path";
 import { INTERNAL_MCP_KEY } from "./auth.js";
 import { parseLooseJSON } from "./llm-json.js";
-import type { CliProviderId } from "./types.js";
+import { isChatEffort, type ChatEffort, type ChatUsage, type CliProviderId } from "./types.js";
 
 export type { CliProviderId };
 
@@ -270,6 +270,96 @@ export function cliSupportsTools(id: CliProviderId): boolean {
   return id === "claude";
 }
 
+/** CLIs whose model + reasoning-effort we can pick per-invocation (via
+ *  `--model` / `--effort`). Only Claude Code exposes both today. */
+export function cliSupportsModelChoice(id: CliProviderId): boolean {
+  return id === "claude";
+}
+
+export interface CliChatResult {
+  text: string;
+  /** Token/cost telemetry, when the provider reports it (Claude Code only). */
+  usage?: ChatUsage;
+}
+
+/** Guard the `--model` value before it reaches an argv: it is spawned under a
+ *  shell on Windows, so a stray metacharacter would otherwise break out. Model
+ *  ids are `[a-z0-9._:-]` only, so anything else is rejected (falls back to the
+ *  CLI's own default). */
+function safeModel(model: string | undefined): string | null {
+  const m = model?.trim();
+  return m && /^[\w.:-]+$/.test(m) ? m : null;
+}
+
+/** Pull per-call token + cost telemetry out of the `claude -p --output-format
+ *  json` envelope. Tokens come from the top-level `usage` block (raw
+ *  Anthropic-shaped counts), cost from `total_cost_usd`, both falling back to
+ *  the CLI-side `modelUsage[<model>]` aggregation on older envelope shapes. */
+function extractCliUsage(env: Record<string, unknown>): ChatUsage | undefined {
+  const usageBlock =
+    env.usage && typeof env.usage === "object" ? (env.usage as Record<string, unknown>) : null;
+  const modelUsage =
+    env.modelUsage && typeof env.modelUsage === "object"
+      ? (env.modelUsage as Record<string, unknown>)
+      : null;
+  const firstModelUsage = modelUsage
+    ? (Object.values(modelUsage).find((v) => v && typeof v === "object") as
+        | Record<string, unknown>
+        | undefined)
+    : undefined;
+
+  const numOr = (v: unknown, fallback?: number): number | undefined =>
+    typeof v === "number" && Number.isFinite(v) ? v : fallback;
+
+  const inputTokens = numOr(usageBlock?.input_tokens, numOr(firstModelUsage?.inputTokens));
+  const outputTokens = numOr(usageBlock?.output_tokens, numOr(firstModelUsage?.outputTokens));
+  if (inputTokens === undefined && outputTokens === undefined) return undefined;
+
+  // Prefer the top-level `model`; else the busiest `modelUsage` entry (the CLI
+  // also bills a tiny Haiku routing call, so pick by token volume, not order).
+  let model = typeof env.model === "string" ? env.model : undefined;
+  if (!model && modelUsage) {
+    let best = -1;
+    for (const [k, v] of Object.entries(modelUsage)) {
+      if (!v || typeof v !== "object") continue;
+      const e = v as Record<string, unknown>;
+      const total = (numOr(e.inputTokens) ?? 0) + (numOr(e.outputTokens) ?? 0);
+      if (total > best) {
+        best = total;
+        model = k;
+      }
+    }
+  }
+  return {
+    inputTokens: inputTokens ?? 0,
+    outputTokens: outputTokens ?? 0,
+    cacheReadInputTokens: numOr(
+      usageBlock?.cache_read_input_tokens,
+      numOr(firstModelUsage?.cacheReadInputTokens),
+    ),
+    cacheCreationInputTokens: numOr(
+      usageBlock?.cache_creation_input_tokens,
+      numOr(firstModelUsage?.cacheCreationInputTokens),
+    ),
+    costUSD: numOr(env.total_cost_usd, numOr(firstModelUsage?.costUSD)),
+    model,
+  };
+}
+
+/** The claude JSON envelope carries the answer in `result`; older/failed runs
+ *  may emit plain text despite `--output-format json`, so fall back to the raw
+ *  stdout when it doesn't parse. */
+function parseClaudeEnvelope(stdout: string): CliChatResult {
+  const trimmed = stdout.trim();
+  try {
+    const env = JSON.parse(trimmed) as Record<string, unknown>;
+    const text = typeof env.result === "string" ? env.result.trim() : trimmed;
+    return { text, usage: extractCliUsage(env) };
+  } catch {
+    return { text: trimmed };
+  }
+}
+
 /** Where a CLI on this machine reaches the MCP server (same express app). */
 function mcpEndpoint(): string {
   const base = process.env.MCP_PUBLIC_URL ?? `http://localhost:${process.env.PORT ?? 8787}`;
@@ -280,8 +370,8 @@ export async function cliChat(
   id: CliProviderId,
   prompt: string,
   signal?: AbortSignal,
-  opts?: { tools?: boolean },
-): Promise<string> {
+  opts?: { tools?: boolean; model?: string; effort?: ChatEffort },
+): Promise<CliChatResult> {
   const tools = opts?.tools ?? cliSupportsTools(id);
   switch (id) {
     case "claude": {
@@ -316,14 +406,22 @@ export async function cliChat(
           "mcp__grapevine",
         ];
       }
+      // --model / --effort are optional; empty lets the CLI use whatever the
+      // user's subscription defaults to. --output-format json gives us the
+      // resolved model + token/cost telemetry (the `usage` envelope).
+      const model = safeModel(opts?.model);
+      const args = ["-p"];
+      if (model) args.push("--model", model);
+      if (opts?.effort && isChatEffort(opts.effort)) args.push("--effort", opts.effort);
+      args.push("--output-format", "json", ...mcpArgs);
       try {
-        const r = await run(
-          "claude",
-          ["-p", "--output-format", "text", ...mcpArgs],
-          { stdin: prompt, timeoutMs: CLI_TIMEOUT_MS, signal },
-        );
+        const r = await run("claude", args, {
+          stdin: prompt,
+          timeoutMs: CLI_TIMEOUT_MS,
+          signal,
+        });
         if (r.code !== 0) throw cliError("claude", r);
-        return r.stdout.trim();
+        return parseClaudeEnvelope(r.stdout);
       } finally {
         if (dir) rm(dir, { recursive: true, force: true }).catch(() => {});
       }
@@ -340,9 +438,9 @@ export async function cliChat(
           { stdin: prompt, timeoutMs: CLI_TIMEOUT_MS, signal },
         );
         const answer = await readFile(outFile, "utf8").then((s) => s.trim()).catch(() => "");
-        if (answer) return answer;
+        if (answer) return { text: answer };
         if (r.code !== 0) throw cliError("codex", r);
-        return r.stdout.trim();
+        return { text: r.stdout.trim() };
       } finally {
         rm(dir, { recursive: true, force: true }).catch(() => {});
       }
@@ -355,7 +453,7 @@ export async function cliChat(
       });
       if (r.code !== 0) throw cliError("gemini", r);
       // some versions prepend credential-cache chatter on stdout
-      return r.stdout.replace(/^Loaded cached credentials\.?\s*/i, "").trim();
+      return { text: r.stdout.replace(/^Loaded cached credentials\.?\s*/i, "").trim() };
     }
     case "copilot": {
       // Copilot has no stdin prompt mode — the prompt rides -p as an argv
@@ -379,7 +477,7 @@ export async function cliChat(
         { timeoutMs: CLI_TIMEOUT_MS, signal },
       );
       if (r.code !== 0) throw cliError("copilot", r);
-      return r.stdout.trim();
+      return { text: r.stdout.trim() };
     }
   }
 }
@@ -409,8 +507,8 @@ export async function cliJSON(
     opts.user,
     "Return ONLY the JSON object described above — no prose, no markdown fences.",
   ].join("\n\n");
-  const raw = await cliChat(id, prompt, opts.signal, { tools: false });
-  return parseLooseJSON(raw);
+  const { text } = await cliChat(id, prompt, opts.signal, { tools: false });
+  return parseLooseJSON(text);
 }
 
 // ---------------------------------------------------------------------------

@@ -45,7 +45,7 @@ import {
   type CliProviderId,
 } from "../providers.js";
 import { store } from "../store.js";
-import type { User } from "../types.js";
+import { isChatEffort, type ChatEffort, type User } from "../types.js";
 import {
   boundAgentUser,
   buildCtx,
@@ -133,6 +133,9 @@ agent.post("/api/agent/chat", async (req, res) => {
     threadId?: string;
     message?: string;
     context?: ChatContext;
+    /** Claude Code CLI overrides picked from the chat composer. */
+    model?: string;
+    effort?: string;
   };
   let threadId =
     typeof body.threadId === "string" && /^[\w-]{8,64}$/.test(body.threadId)
@@ -199,6 +202,8 @@ agent.post("/api/agent/chat", async (req, res) => {
         city: settings.city,
         send,
         signal: ac.signal,
+        model: typeof body.model === "string" ? body.model : undefined,
+        effort: isChatEffort(body.effort) ? body.effort : undefined,
       });
       if (answer) persist(answer);
       return done();
@@ -360,8 +365,11 @@ async function cliChatTurn(opts: {
   city: string;
   send: (frame: Frame) => void;
   signal: AbortSignal;
+  /** Per-turn Claude Code overrides (ignored by the other CLIs). */
+  model?: string;
+  effort?: ChatEffort;
 }): Promise<string | null> {
-  const { provider, message, threadId, chat, city, send, signal } = opts;
+  const { provider, message, threadId, chat, city, send, signal, model, effort } = opts;
   const info = providerInfo(provider);
 
   const status = (await detectProviders()).find((p) => p.id === provider);
@@ -396,15 +404,19 @@ async function cliChatTurn(opts: {
   const prompt = buildCliPrompt(buildSystemPrompt(ctx, chat, withTools), threadId, message, {
     tools: withTools,
   });
-  const raw = await cliChat(
+  const { text: raw, usage } = await cliChat(
     provider,
     prompt,
     AbortSignal.any([signal, AbortSignal.timeout(CHAT_DEADLINE_MS)]),
+    { tools: withTools, model, effort },
   );
 
   // Same output rail as the Ollama path — identity leaks never reach the UI.
   const guard = personaGuard({ modelName: provider });
   const text = guard.push(raw) + guard.flush();
+  // Token/cost telemetry is about the call, not its content — surface it even
+  // when the persona rail swaps the reply.
+  if (usage) send({ type: "usage", usage });
   if (guard.tripped) {
     send({
       type: "notice",
