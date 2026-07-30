@@ -17,6 +17,7 @@ import { backfillImages } from "./images.js";
 import { mcp, mcpAuthMode } from "./mcp.js";
 import { detectProviders } from "./providers.js";
 import { push, startPushScheduler } from "./push.js";
+import { startRetentionSweep } from "./retention.js";
 import { store } from "./store.js";
 import { listInstalled, ollamaBase } from "./ollama.js";
 import { catalog, logo } from "./catalog.js";
@@ -453,5 +454,6 @@ app.listen(port, () => {
   startInboxPoll();
   startPushScheduler();
   startDiscoveryScheduler();
+  startRetentionSweep();
   warmupGuardrails();
 });

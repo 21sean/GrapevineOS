@@ -215,6 +215,18 @@ export const store = {
     return data ? rowToEvent(data) : undefined;
   },
 
+  /** Removes events by id (retention sweep). Returns how many rows went. */
+  async deleteEvents(ids: string[]): Promise<number> {
+    if (!ids.length) return 0;
+    const { data } = await db
+      .from("events")
+      .delete()
+      .in("id", ids)
+      .select("id")
+      .throwOnError();
+    return data.length;
+  },
+
   /**
    * Adds events. A batch row whose dedupe_key already exists refreshes the
    * stored copy in place (content fields only — the row keeps its id, rarity,
