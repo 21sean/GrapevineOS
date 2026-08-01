@@ -12,7 +12,6 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DiscoveryTab } from "@/components/admin/DiscoveryTab"
 import { InboxTab } from "@/components/admin/InboxTab"
-import { IngestTab } from "@/components/admin/IngestTab"
 import { ModelsTab } from "@/components/admin/ModelsTab"
 import { ProvidersTab } from "@/components/admin/ProvidersTab"
 import { SourcesTab } from "@/components/admin/SourcesTab"
@@ -23,7 +22,6 @@ import { cn } from "@/lib/utils"
 const TABS = [
   { value: "models", label: "Models", Panel: ModelsTab },
   { value: "providers", label: "Providers", Panel: ProvidersTab },
-  { value: "ingest", label: "Ingest", Panel: IngestTab },
   { value: "discover", label: "Discover", Panel: DiscoveryTab },
   { value: "inbox", label: "Inbox", Panel: InboxTab },
   { value: "sources", label: "Sources", Panel: SourcesTab },
@@ -102,7 +100,7 @@ export function AdminSheet() {
           className="flex min-h-0 flex-1 flex-col gap-0"
         >
           <div className="shrink-0 border-b border-border/60 px-5 pb-3">
-            {/* horizontally scrollable so six tabs never cram; scrollbar hidden */}
+            {/* horizontally scrollable so the tabs never cram; scrollbar hidden */}
             <TabsList className="w-full justify-start overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {TABS.map((t) => (
                 <TabsTrigger key={t.value} value={t.value}>
