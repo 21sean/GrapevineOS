@@ -285,7 +285,7 @@ app.get("/api/logo/:id", async (req, res) => {
 
 // ---------- ingestion ----------
 
-/** Scrape og:images for catalog events that never got artwork. */
+/** Clear shared/generic banners, then scrape og:images for events without art. */
 app.post("/api/ingest/backfill-images", async (_req, res) => {
   try {
     res.json(await backfillImages());

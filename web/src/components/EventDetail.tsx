@@ -311,22 +311,34 @@ export function EventDetail() {
 
   const body = (
     <>
-      {/* scraped og:image as a hero; dominant color holds the space while it
-          loads, and a load failure collapses the whole banner */}
+      {/* scraped og:image as a hero. Sources vary wildly — a tall gig poster,
+          a wide logo banner, a landscape photo — so we letterbox: a blurred,
+          zoomed copy fills the frame while the real image sits *contained* on
+          top, whole and uncropped. The dominant color holds the space while it
+          loads; a load failure collapses the whole banner. */}
       {event.imageUrl && (
         <div
-          className="relative -mb-2 h-40 shrink-0 overflow-hidden"
+          className="relative -mb-2 h-44 shrink-0 overflow-hidden"
           style={event.imageColor ? { backgroundColor: event.imageColor } : undefined}
         >
+          <img
+            src={event.imageUrl}
+            alt=""
+            aria-hidden
+            className="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl"
+          />
           <img
             src={event.imageUrl}
             alt=""
             onError={(e) => {
               e.currentTarget.parentElement!.style.display = "none"
             }}
-            className="h-full w-full object-cover"
+            className="relative h-full w-full object-contain"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent" />
+          {/* top scrim keeps the share/hide/close controls legible over a
+              light image; bottom scrim blends the hero into the sheet body */}
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-background/70 via-transparent to-transparent" />
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background/95 via-background/25 to-transparent" />
         </div>
       )}
       <SheetHeader className="gap-2 pr-16">
@@ -591,7 +603,7 @@ export function EventDetail() {
           <ScrollArea className="min-h-0 flex-1">{body}</ScrollArea>
         )}
 
-        <div className="absolute top-3 right-3 z-20 flex items-center gap-1">
+        <div className="absolute top-3 right-3 z-20 flex items-center gap-0.5 rounded-full bg-background/40 p-0.5 backdrop-blur-sm">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="icon-sm" onClick={shareEvent}>
