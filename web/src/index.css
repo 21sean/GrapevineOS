@@ -232,10 +232,56 @@
   pointer-events: none;
 }
 
+.gv-marker-label-main,
+.gv-marker-label-sub {
+  display: block;
+}
+
+/* only booked faces fill the sub line; keep it collapsed everywhere else */
+.gv-marker-label-sub:empty {
+  display: none;
+}
+
 /* labels appear past neighborhood zoom (class set from EventMap), or when selected */
 .gv-labels-on .gv-marker-label,
 .gv-marker[data-selected="true"] .gv-marker-label {
   opacity: 1;
+}
+
+/* ---------- booked events (saved to my calendar) ---------- */
+
+/* Apple Maps' calendar annotation, faithfully: venue name in calendar-salmon
+   with the event + time in white beneath, haloed text straight on the map —
+   no chip — and always visible, whatever the zoom: these are the user's own
+   plans, the one thing the map should never make them hunt for. */
+.gv-marker[data-booked="true"] .gv-marker-label {
+  opacity: 1;
+  max-width: 150px;
+  padding: 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-shadow:
+    0 0 2px oklch(0.15 0.02 300),
+    0 0 4px oklch(0.15 0.02 300 / 85%),
+    0 1px 3px oklch(0 0 0 / 70%);
+}
+
+/* venue name matches the dot (calendar-salmon, set via --marker-color) */
+.gv-marker[data-booked="true"] .gv-marker-label-main {
+  color: var(--marker-color);
+}
+
+.gv-marker[data-booked="true"] .gv-marker-label-sub {
+  margin-top: 1px;
+  color: oklch(0.97 0.005 260);
+  font-size: 11px;
+  font-weight: 500;
 }
 
 /* ---------- stacked markers (several events at one venue) ---------- */

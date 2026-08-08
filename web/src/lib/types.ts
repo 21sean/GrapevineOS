@@ -62,6 +62,9 @@ export interface CategoryMeta {
   icon: LucideIcon
 }
 
+/** Calendar-salmon for booked events' markers, matching Apple Maps' calendar POIs. */
+export const BOOKED_COLOR = "#f5828c"
+
 export const CATEGORY_META: Record<Category, CategoryMeta> = {
   music: { label: "Music", color: "#c08bfa", icon: Music },
   food: { label: "Food & drink", color: "#f5a356", icon: UtensilsCrossed },

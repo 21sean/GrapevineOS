@@ -10,7 +10,14 @@ import {
   type Muted,
 } from "./score"
 import { nextOccurrence } from "./recurrence"
-import { isLive, lightPresetForTime, localDay, type LightPreset } from "./time"
+import {
+  bookedAnnotation,
+  hasEnded,
+  isLive,
+  lightPresetForTime,
+  localDay,
+  type LightPreset,
+} from "./time"
 import type { GrapevineState } from "./store"
 import type { CityEvent } from "./types"
 
@@ -176,19 +183,55 @@ export const selectTour = memoSelector(
   sameList,
 )
 
+const sameLineMap = (a: ReadonlyMap<string, string>, b: ReadonlyMap<string, string>) => {
+  if (a.size !== b.size) return false
+  for (const [k, v] of b) if (a.get(k) !== v) return false
+  return true
+}
+
 /**
- * What the map draws: visible plus the agent's picks, which render even when
- * the user's filters would hide them — a recommendation with no pin is a
- * broken answer.
+ * Booked events (saved to "my calendar") → their Apple Maps-style calendar
+ * annotation ("Movie: The Odyssey at 8:35PM"). Recomputed on the clock tick,
+ * but the reference only moves when a line actually changes — a booking
+ * toggled, the day rolled over, a recurring occurrence advanced — so the
+ * map's marker effect skips the ticks that change nothing. Ended events drop
+ * out: a plan that already happened has no business annotating the map.
+ */
+export const selectBookedLines = memoSelector(
+  (s) => [s.events, s.calendar, s.now, s.settings?.tz],
+  (s): ReadonlyMap<string, string> => {
+    const lines = new Map<string, string>()
+    const synced = s.calendar?.synced
+    if (!synced?.length) return lines
+    const tz = s.settings?.tz ?? "America/Los_Angeles"
+    const booked = new Set(synced)
+    for (const e of s.events) {
+      if (booked.has(e.id) && !hasEnded(e, s.now, tz)) {
+        lines.set(e.id, bookedAnnotation(e, s.now, tz))
+      }
+    }
+    return lines
+  },
+  sameLineMap,
+)
+
+/**
+ * What the map draws: visible plus the agent's picks and the user's booked
+ * events, which render even when the user's filters would hide them — a
+ * recommendation (or a plan the user committed to) with no pin is a broken
+ * answer.
  */
 export const selectRendered = memoSelector(
-  (s) => [selectVisible(s), s.events, s.agentHighlight?.ids],
+  (s) => [selectVisible(s), s.events, s.agentHighlight?.ids, s.calendar, s.now, s.settings?.tz],
   (s) => {
     const visible = selectVisible(s)
     const ids = s.agentHighlight?.ids
-    if (!ids?.length) return visible
+    const booked = selectBookedLines(s)
+    if (!ids?.length && !booked.size) return visible
     const shown = new Set(visible.map((e) => e.id))
-    const extras = s.events.filter((e) => ids.includes(e.id) && !shown.has(e.id))
+    const extras = s.events.filter(
+      (e) => !shown.has(e.id) && (ids?.includes(e.id) || booked.has(e.id)),
+    )
     return extras.length ? [...visible, ...extras] : visible
   },
   sameList,
