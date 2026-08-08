@@ -146,6 +146,20 @@ export function timeRange(e: CityEvent, tz: string, now: Date): string {
   return day === "Today" ? range : `${day} · ${fmtTime(occ.start, tz)}`
 }
 
+/**
+ * The calendar line Apple Maps hangs under a venue that hosts one of your
+ * events: "Movie: The Odyssey at 8:35PM". Meridiem hugs the minutes the way
+ * Apple prints it; events past today pick up their day first.
+ */
+export function bookedAnnotation(e: CityEvent, now: Date, tz: string): string {
+  const occ = nextOccurrence(e, now, tz)
+  const time = fmtTime(occ.start, tz).replace(/\s/g, "")
+  const day = dayLabel(occ.start, tz, now)
+  if (day === "Today") return `${e.title} at ${time}`
+  if (day === "Tomorrow") return `${e.title} tomorrow at ${time}`
+  return `${e.title} on ${day} at ${time}`
+}
+
 /** Short status for badges/cards. */
 export function statusLabel(e: CityEvent, tz: string, now: Date): string {
   const occ = nextOccurrence(e, now, tz)

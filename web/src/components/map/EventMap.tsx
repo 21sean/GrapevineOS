@@ -4,6 +4,7 @@ import mapboxgl from "mapbox-gl"
 import "mapbox-gl/dist/mapbox-gl.css"
 import { useGrapevine } from "@/lib/store"
 import {
+  selectBookedLines,
   selectLightPreset,
   selectLiveIds,
   selectRendered,
@@ -11,7 +12,7 @@ import {
   selectTour,
   selectVisible,
 } from "@/lib/derived"
-import { CATEGORY_META, type Category, type CityEvent } from "@/lib/types"
+import { BOOKED_COLOR, CATEGORY_META, type Category, type CityEvent } from "@/lib/types"
 import { BASEMAP_LAYERS } from "@/lib/mapLayers"
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN as string
@@ -93,7 +94,8 @@ interface Stack {
   marker: mapboxgl.Marker
   el: HTMLDivElement
   iconEl: HTMLSpanElement
-  labelEl: HTMLDivElement
+  labelMainEl: HTMLSpanElement
+  labelSubEl: HTMLSpanElement
   countEl: HTMLSpanElement
   numEl: HTMLSpanElement
   events: CityEvent[]
@@ -142,6 +144,9 @@ export function EventMap() {
   // Liveness as a stable Set of ids: markers need "is this event live", not
   // the raw clock, and the set's identity only changes when liveness flips.
   const liveIds = useGrapevine(selectLiveIds)
+  // Booked events' Apple Maps-style calendar lines ("The Odyssey at 8:35PM"),
+  // keyed by event id; identity moves only when a line actually changes.
+  const bookedLines = useGrapevine(selectBookedLines)
 
   const agentIds = useMemo(
     () => new Set(agentHighlight?.ids ?? []),
@@ -276,16 +281,17 @@ export function EventMap() {
   // Latest decorate inputs for the stack pager handlers, which live in plain
   // DOM listeners outside React's render cycle. Synced in an effect (not
   // during render); listeners only fire after effects have run.
-  const decorCtxRef = useRef({ liveIds, activeId, agentIds, searchIds })
+  const decorCtxRef = useRef({ liveIds, activeId, agentIds, searchIds, bookedLines })
   useEffect(() => {
-    decorCtxRef.current = { liveIds, activeId, agentIds, searchIds }
-  }, [liveIds, activeId, agentIds, searchIds])
+    decorCtxRef.current = { liveIds, activeId, agentIds, searchIds, bookedLines }
+  }, [liveIds, activeId, agentIds, searchIds, bookedLines])
   // Snap a stack's face to the selected/toured/highlighted event only when
   // that target changes — never on unrelated re-runs, so a face the user
   // paged to by hand isn't yanked back by the next clock tick.
   const lastTargetRef = useRef<string | null>(null)
   const lastAgentSeqRef = useRef(0)
   const lastSearchRef = useRef("")
+  const lastBookedRef = useRef<ReadonlyMap<string, string>>(new Map())
 
   // --- markers: one stack per location, diffed by location key ---
   useEffect(() => {
@@ -316,6 +322,8 @@ export function EventMap() {
     const query = searchQuery.trim()
     const searchChanged = query !== lastSearchRef.current
     lastSearchRef.current = query
+    const bookedChanged = bookedLines !== lastBookedRef.current
+    lastBookedRef.current = bookedLines
 
     for (const [key, group] of groups) {
       let stack = stacksRef.current.get(key)
@@ -334,6 +342,13 @@ export function EventMap() {
         countEl.className = "gv-marker-count"
         const labelEl = document.createElement("div")
         labelEl.className = "gv-marker-label"
+        // two lines so a booked face can annotate Apple Maps-style: venue
+        // name on top, "event at time" beneath; plain faces leave sub empty
+        const labelMainEl = document.createElement("span")
+        labelMainEl.className = "gv-marker-label-main"
+        const labelSubEl = document.createElement("span")
+        labelSubEl.className = "gv-marker-label-sub"
+        labelEl.append(labelMainEl, labelSubEl)
         const pager = document.createElement("div")
         pager.className = "gv-stack-pager"
         const prev = document.createElement("button")
@@ -363,11 +378,13 @@ export function EventMap() {
           marker,
           el,
           iconEl,
-          labelEl,
+          labelMainEl,
+          labelSubEl,
           countEl,
           numEl,
           events: group,
-          idx: 0,
+          // a stack born holding a booked event leads with the user's plans
+          idx: Math.max(0, group.findIndex((e) => bookedLines.has(e.id))),
         }
 
         const cycle = (dir: number) => {
@@ -375,7 +392,7 @@ export function EventMap() {
           if (n < 2) return
           created.idx = (created.idx + dir + n) % n
           const ctx = decorCtxRef.current
-          decorateStack(created, ctx.liveIds, ctx.activeId, ctx.agentIds, ctx.searchIds)
+          decorateStack(created, ctx.liveIds, ctx.activeId, ctx.agentIds, ctx.searchIds, ctx.bookedLines)
           // Sheet open means the user is inspecting this venue — retarget it.
           // Sheet closed, paging is a silent preview: no camera move, no popup.
           const st = useGrapevine.getState()
@@ -411,8 +428,12 @@ export function EventMap() {
         // a stack whose shown face misses the query turns to a face that hits
         const i = group.findIndex((e) => searchIds.has(e.id))
         if (i >= 0) stack.idx = i
+      } else if (bookedChanged && bookedLines.size) {
+        // a fresh booking (or the calendar arriving) surfaces as the face
+        const i = group.findIndex((e) => bookedLines.has(e.id))
+        if (i >= 0) stack.idx = i
       }
-      decorateStack(stack, liveIds, activeId, agentIds, searchIds)
+      decorateStack(stack, liveIds, activeId, agentIds, searchIds, bookedLines)
     }
   }, [
     rendered,
@@ -426,6 +447,7 @@ export function EventMap() {
     agentHighlight?.seq,
     searchIds,
     searchQuery,
+    bookedLines,
   ])
 
   // --- traffic visibility (layer created lazily on first enable) ---
@@ -542,11 +564,15 @@ function decorateStack(
   selectedId: string | null,
   agentIds?: Set<string>,
   searchIds?: ReadonlySet<string> | null,
+  bookedLines?: ReadonlyMap<string, string>,
 ) {
   const e = stack.events[stack.idx]
   if (!e) return
   const { el } = stack
-  const color = CATEGORY_META[e.category].color
+  // a booked face wears calendar-salmon head to toe — dot, ring, venue name —
+  // the way Apple Maps paints a venue holding one of your calendar events
+  const bookedLine = bookedLines?.get(e.id)
+  const color = bookedLine ? BOOKED_COLOR : CATEGORY_META[e.category].color
   if (el.dataset.color !== color) {
     el.style.setProperty("--marker-color", color)
     el.dataset.color = color
@@ -554,6 +580,7 @@ function decorateStack(
   setData(el, "live", String(liveIds.has(e.id)))
   setData(el, "selected", String(e.id === selectedId))
   setData(el, "agent", String(agentIds?.has(e.id) ?? false))
+  setData(el, "booked", String(!!bookedLine))
   setData(el, "stack", String(stack.events.length > 1))
   // dim only when a search is active and nothing at this spot matches it —
   // agent pins stay lit, a dimmed recommendation is half a broken answer
@@ -565,7 +592,9 @@ function decorateStack(
     el.dataset.category = e.category
     stack.iconEl.innerHTML = ICON_SVG[e.category]
   }
-  setText(stack.labelEl, e.title)
+  // booked: venue on top, "event at time" beneath; otherwise just the title
+  setText(stack.labelMainEl, bookedLine ? e.venue : e.title)
+  setText(stack.labelSubEl, bookedLine ?? "")
   setText(stack.countEl, stack.events.length > 1 ? String(stack.events.length) : "")
   setText(stack.numEl, `${stack.idx + 1}/${stack.events.length}`)
 }
