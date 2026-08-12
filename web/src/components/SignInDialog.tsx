@@ -69,6 +69,17 @@ export function SignInDialog() {
             </p>
           )}
         </div>
+        <p className="text-center text-xs text-muted-foreground">
+          By continuing you agree to our{" "}
+          <a className="underline underline-offset-2 hover:text-foreground" href="/terms">
+            Terms
+          </a>{" "}
+          and{" "}
+          <a className="underline underline-offset-2 hover:text-foreground" href="/privacy">
+            Privacy Policy
+          </a>
+          .
+        </p>
       </DialogContent>
     </Dialog>
   )

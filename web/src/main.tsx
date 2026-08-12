@@ -11,17 +11,19 @@ if ("serviceWorker" in navigator) {
   })
 }
 
-// The OAuth 2.1 consent page (Supabase redirects MCP clients' users here)
-// renders standalone — no map, no store, no app shell. Lazy so the main
-// bundle path stays untouched for normal visits.
-const OAuthConsent = lazy(() => import("./components/OAuthConsent.tsx"))
-const isConsent = window.location.pathname === "/oauth/consent"
+// Full-page routes (OAuth consent, legal pages) render outside the map shell
+// — no map, no store. Lazy so the main bundle path stays untouched for normal
+// visits; the pathname switch itself lives in Standalone.
+const Standalone = lazy(() => import("./components/Standalone.tsx"))
+// Keep in sync with the pathname switch inside Standalone.
+const STANDALONE_PATHS = ["/oauth/consent", "/privacy", "/terms"]
+const isStandalone = STANDALONE_PATHS.includes(window.location.pathname)
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    {isConsent ? (
+    {isStandalone ? (
       <Suspense fallback={null}>
-        <OAuthConsent />
+        <Standalone />
       </Suspense>
     ) : (
       <App />
