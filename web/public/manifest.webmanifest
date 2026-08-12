@@ -1,0 +1,20 @@
+{
+  "name": "Grapevine",
+  "short_name": "Grapevine",
+  "description": "A live map of the San Diego events locals actually go to.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#131118",
+  "theme_color": "#131118",
+  "categories": ["lifestyle", "travel", "social"],
+  "icons": [
+    {
+      "src": "/grapevine.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+# Cloudflare Pages response headers. See _redirects for the SPA fallback.
+#
+# CSP is scoped to what Grapevine actually talks to:
+#   - self ......... the app, its assets, and the same-origin /api backend
+#   - *.mapbox.com . map style, tiles, sprites, and telemetry (events.mapbox.com)
+#   - *.supabase.co  Auth (PKCE token exchange) over https/wss
+#   - img https: ... event artwork is scraped from arbitrary organizer sites
+#   - blob: ........ mapbox-gl runs its renderer in a blob: web worker
+#   - 'unsafe-inline' style: React style props + mapbox-gl's injected styles
+# OAuth sign-in is a full-page redirect to Google/GitHub, so it needs no CSP
+# allowance. If you split the API onto its own host, add it to connect-src.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.mapbox.com https://*.supabase.co wss://*.supabase.co; worker-src 'self' blob:; manifest-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; upgrade-insecure-requests
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(self), microphone=(self), camera=(), payment=(), usb=(), browsing-topics=()
+
+# Hashed asset filenames are content-addressed, so they can cache forever.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The service worker and manifest must be revalidated so updates ship promptly.
+/sw.js
+  Cache-Control: no-cache
+/manifest.webmanifest
+  Cache-Control: no-cache

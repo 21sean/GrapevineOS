@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+# The OAuth consent screen only works mid-flow with a live authorization_id.
+Disallow: /oauth/consent

@@ -18,11 +18,33 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Grapevine" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <meta
       name="description"
       content="Grapevine · a live map of the San Diego events locals actually go to."
     />
     <title>Grapevine · what locals actually go to</title>
+
+    <!-- Social share cards (Open Graph + Twitter). og-image.png is the one
+         asset still to add: a 1200x630 PNG (SVG/WebP won't render on most
+         scrapers). Point og:url at the production origin once it's pinned. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Grapevine" />
+    <meta property="og:title" content="Grapevine · what locals actually go to" />
+    <meta
+      property="og:description"
+      content="A live map of the San Diego events locals actually go to."
+    />
+    <meta property="og:image" content="/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Grapevine · what locals actually go to" />
+    <meta
+      name="twitter:description"
+      content="A live map of the San Diego events locals actually go to."
+    />
+    <meta name="twitter:image" content="/og-image.png" />
   </head>
   <body>
     <div id="root"></div>
