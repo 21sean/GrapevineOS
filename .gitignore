@@ -3,6 +3,8 @@ dist/
 .env
 .env.local
 .env.*.local
+# Wrangler local-dev secrets (SUPABASE_SECRET_KEY for `wrangler dev`).
+.dev.vars
 *.log
 .DS_Store
 .wrangler/
