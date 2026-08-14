@@ -38,10 +38,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { StarRating } from "@/components/StarRating"
+import { VenueCard } from "@/components/venue/VenueCard"
 import { useClock } from "@/hooks/useClock"
 import { useConflicts } from "@/hooks/useConflicts"
 import { useEta } from "@/hooks/useEta"
 import { useIsMobile } from "@/hooks/useIsMobile"
+import { useVenue } from "@/hooks/useVenue"
 import { api } from "@/lib/api"
 import { useGrapevine } from "@/lib/store"
 import { fmtTime, isLive, statusLabel } from "@/lib/time"
@@ -139,6 +141,9 @@ export function EventDetail() {
   const isMobile = useIsMobile()
 
   const eta = useEta(detailOpen ? event : null)
+  // Only while open — the Places preview quota is 1,000 records a month, so a
+  // venue lookup should cost something only when someone is actually looking.
+  const venue = useVenue(detailOpen ? event : null)
   const tz = settings?.tz ?? "UTC"
   // Calendar clashes: other saved events and (when connected) Google busy
   // blocks that overlap this occurrence.
@@ -479,6 +484,16 @@ export function EventDetail() {
         <span className="-mt-3 text-xs text-muted-foreground">
           Traffic-aware, from {userPos ? "your location" : "the city center"}
         </span>
+
+        {/* what you're walking into: the venue's own hours, photos, access,
+            and how busy it usually is at this event's hour */}
+        <VenueCard
+          venue={venue.data}
+          loading={venue.loading}
+          tz={tz}
+          now={now}
+          occurrence={occ}
+        />
 
         <div className="flex gap-2">
           <Button

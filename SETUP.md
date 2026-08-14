@@ -30,7 +30,10 @@ Requirements:
   Google/GitHub providers (see **Auth** below)
 - **Mapbox**: a scoped public token (`pk.`, styles/tiles/fonts only) as
   `VITE_MAPBOX_TOKEN` in `web/.env.local`, and a secret token (`sk.`) as
-  `MAPBOX_SECRET_TOKEN` in `server/.env`
+  `MAPBOX_SECRET_TOKEN` in `server/.env`. Tick **`places:read`** on the secret
+  token to get the venue card (hours, photos, accessibility, busy times) in the
+  event panel; without it everything else still works and the card is omitted.
+  See [docs/mapbox-places.md](docs/mapbox-places.md) for the preview quota
 
 ## The email worker
 

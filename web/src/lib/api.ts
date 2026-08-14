@@ -19,6 +19,7 @@ import type {
   Settings,
   Source,
   User,
+  VenueDetails,
 } from "./types"
 
 async function json<T>(res: Response): Promise<T> {
@@ -91,6 +92,16 @@ export const api = {
       json<{ polygons: [number, number][][][] }>(r),
     )
   },
+
+  /**
+   * Mapbox Places detail for an event's venue: hours, photos, accessibility,
+   * and typical busyness. `venue` is null when Mapbox has no record for the
+   * place, or when the preview quota/scope makes the lookup unavailable.
+   */
+  venue: (id: string) =>
+    fetch(`/api/events/${id}/venue`).then((r) =>
+      json<{ venue: VenueDetails | null }>(r),
+    ),
 
   rate: (id: string) =>
     fetch(`/api/events/${id}/rate`, { method: "POST" }).then((r) =>

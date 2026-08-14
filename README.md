@@ -35,6 +35,13 @@ Setup, deployment, and operations live in [SETUP.md](SETUP.md).
 - **Agent interoperability.** The same tools are exposed three ways: inside
   the app, over an authenticated external REST API, and as an MCP server
   that Claude Code, Claude Desktop, or any MCP client can drive directly.
+- **Venue intelligence on the event panel.** Mapbox Places (public preview)
+  fills in what the listing never tells you: whether the place is open right
+  now, whether the door is step-free, whether it is known with locals, and
+  an hourly busyness chart with the event's own hours lit up, so the answer
+  is "what am I walking into at 8pm" rather than a generic POI card. Lazy,
+  memory-cached, and capped to stay inside the preview quota. See
+  [docs/mapbox-places.md](docs/mapbox-places.md).
 - **Free end to end.** No paid APIs anywhere in the loop: free email
   routing, free workers, free-tier Postgres, cached geocoding, and
   keyless web search.

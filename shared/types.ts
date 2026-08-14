@@ -181,3 +181,48 @@ export interface ChatUsage {
   /** The model the CLI actually billed (its resolved id, not our request). */
   model?: string;
 }
+
+/**
+ * Venue intelligence for one event's location, from the Mapbox Places API
+ * (public preview). A trimmed projection of the Place record: only the fields
+ * the detail panel actually renders cross the wire.
+ *
+ * `openingHours` stays as the raw OSM string rather than a baked "open now"
+ * boolean — the server caches the record for hours, so the client evaluates it
+ * against its own clock via shared/hours.ts (see the note there).
+ */
+export interface VenueDetails {
+  mapboxId: string;
+  name: string;
+  address?: string;
+  /** Human-readable primary category, e.g. "Bar", "Live Music Venue". */
+  category?: string;
+  categories: string[];
+  phone?: string;
+  website?: string;
+  /** OSM-format `opening_hours`, verbatim. Evaluate with shared/hours.ts. */
+  openingHours?: string;
+  /** IANA zone the hours are expressed in; falls back to the app's tz. */
+  tz?: string;
+  /** 0-1, "relative popularity based on signals across the web". */
+  popularity?: number;
+  /** "Cheap" | "Moderate" | "Expensive", when Mapbox has it. */
+  priceLevel?: string;
+  photos: VenuePhoto[];
+  /** Accessibility accommodations that are true for this venue. */
+  accessibility: string[];
+  /** Notable amenities: wi-fi, outdoor seating, and the like. */
+  features: string[];
+  /**
+   * Hourly busyness, 0-100, keyed "mon".."sun" with 24 entries each (local
+   * time). Only present for venues with enough activity data.
+   */
+  activity?: Record<string, number[]>;
+  permanentlyClosed?: boolean;
+}
+
+export interface VenuePhoto {
+  url: string;
+  width?: number;
+  height?: number;
+}
