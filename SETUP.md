@@ -38,11 +38,18 @@ Requirements:
 ## The email worker
 
 The worker (`workers/email-ingest`) inserts each parsed email into the
-`raw_emails` table; the local server polls unprocessed rows. No tunnel,
-nothing to redeploy when your laptop's address changes, and it catches up on
-anything that arrived while the machine was asleep. If the Supabase insert
-ever fails, the worker dead-letters the raw email to the `RAW_EMAILS` KV
-namespace (30-day TTL) so nothing is lost.
+`raw_emails` table. The local server subscribes to that table over Supabase
+Realtime, so extraction starts the moment mail lands. No tunnel, nothing to
+redeploy when your laptop's address changes, and a startup pass catches up on
+anything that arrived while the machine was asleep.
+
+If the Supabase insert ever fails, the worker dead-letters the raw email to
+the `RAW_EMAILS` KV namespace (30-day TTL) and an hourly cron retries those
+copies back into Supabase, deleting each one only after it inserts. Recovery
+is automatic; nothing waits on someone noticing.
+
+The worker has observability enabled, so `npx wrangler tail` (or the
+Workers logs in the dashboard) shows exactly what happened to a delivery.
 
 **Point the catch-all at the worker** (Cloudflare dashboard, your zone):
 
@@ -83,7 +90,7 @@ All app data lives in a Supabase Postgres project (free tier): `events`,
 `sources`, `users` (profiles for `auth.users`), `user_google_calendar`
 (Vault-backed), `calendar_entries`, `event_reactions`, `chat_threads`,
 `chat_messages`, `push_subscriptions`, `ingests`, `raw_emails`,
-`discovery_searches`, `app_settings`, `geocode_cache`.
+`discovery_searches`, `app_settings`, `place_lookups`, `place_details`.
 
 - **Schema** is tracked in `supabase/migrations/`.
 - **Access model**: RLS is enabled on every table with no policies and the
@@ -95,8 +102,9 @@ All app data lives in a Supabase Postgres project (free tier): `events`,
 - **Connections**: everything uses supabase-js/PostgREST over HTTPS. No raw
   Postgres connections, nothing to pool, free-tier friendly.
 - **Housekeeping**: nightly pg_cron purges keep storage flat: raw emails
-  (30d), push-send dedupe keys (60d), ingest logs (180d), and stale
-  geocode *misses* (90d, so transient failures heal; hits live forever).
+  (30d), push-send dedupe keys (60d), ingest logs (180d), and cached Mapbox
+  *misses* (90d, so transient failures heal). Mapbox hits — geocodes and
+  venue records alike — are kept permanently.
 - **Types**: `server/src/db-types.ts` is generated. Regenerate after schema
   changes with
   `npx supabase gen types typescript --project-id <your-project-id>`.
@@ -148,7 +156,7 @@ One-time dashboard setup (Authentication → Sign In / Providers):
   server-side geocoding (during ingest) and traffic-aware ETAs through
   `/api/eta`.
 - **Caching keeps you far under the free tier** (100k geocodes + 100k
-  directions/mo): geocodes persist to the `geocode_cache` table forever
+  directions/mo): geocodes persist to the `place_lookups` table forever
   (venues don't move; misses are cached too, so a bad venue string is billed
   once); ETAs cache for 10 minutes (traffic-aware); the browser additionally
   memoizes per session. Map rendering bills by monthly active user, not per

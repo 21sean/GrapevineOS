@@ -1,5 +1,7 @@
 import crypto from "node:crypto";
-import { generateJSON } from "./llm.js";
+import { MAX_CHUNKS, charsPerChunk } from "./budget.js";
+import { chunkDocument } from "./chunk.js";
+import { activeProvider, generateJSON } from "./llm.js";
 import { geocode } from "./mapbox.js";
 import { normalizeRRule } from "./recurrence.js";
 import { store } from "./store.js";
@@ -103,22 +105,53 @@ export async function extractEvents(opts: {
 }): Promise<ExtractedEvent[]> {
   const settings = await store.settings();
   const today = new Date().toLocaleDateString("en-CA", { timeZone: settings.tz });
-  const raw = await generateJSON({
-    system: EXTRACTION_SYSTEM(
-      settings.city,
-      settings.tz,
-      today,
-      opts.sourceKind === "search" ? "web" : "newsletter",
-    ),
-    user: opts.text.slice(0, 24000),
-    model: opts.model,
-  });
+  const system = EXTRACTION_SYSTEM(
+    settings.city,
+    settings.tz,
+    today,
+    opts.sourceKind === "search" ? "web" : "newsletter",
+  );
 
-  const items: any[] = Array.isArray(raw) ? raw : raw?.events ?? [];
+  // Cover the whole document instead of truncating it. Everything past the
+  // model's window used to be dropped in silence, which on a long newsletter
+  // meant the back half of the week simply never existed.
+  const budget = charsPerChunk(await activeProvider(opts.model));
+  const { chunks, dropped } = chunkDocument(opts.text, budget);
+  if (dropped > 0) {
+    console.log(
+      `[grapevine] extract: ${opts.source} exceeded the ${MAX_CHUNKS}-chunk budget — ` +
+        `${dropped} of ${opts.text.length} chars not read`,
+    );
+  }
+
+  const items: any[] = [];
+  for (const [i, chunk] of chunks.entries()) {
+    // One failing chunk must not discard the events the others found; a
+    // document that fails entirely still throws, so the row stays unprocessed
+    // and retries.
+    try {
+      const raw = await generateJSON({ system, user: chunk, model: opts.model });
+      items.push(...(Array.isArray(raw) ? raw : (raw?.events ?? [])));
+    } catch (err) {
+      if (chunks.length === 1) throw err;
+      console.log(
+        `[grapevine] extract: ${opts.source} chunk ${i + 1}/${chunks.length} failed — ` +
+          `${String(err).slice(0, 160)}`,
+      );
+    }
+  }
+
   const out: ExtractedEvent[] = [];
+  const seen = new Set<string>();
 
   for (const it of items) {
     if (!it?.title || !it?.start) continue;
+    // Chunks overlap on purpose, so the same event legitimately arrives more
+    // than once. Collapse here, before geocoding, so a duplicate never costs
+    // a Mapbox lookup.
+    const id = slugId(String(it.title), String(it.start));
+    if (seen.has(id)) continue;
+    seen.add(id);
     const category: Category = CATEGORIES.includes(it.category) ? it.category : "community";
     const rarity: Rarity = ["common", "notable", "rare"].includes(it.rarity) ? it.rarity : "common";
 
@@ -137,7 +170,7 @@ export async function extractEvents(opts: {
     }
 
     out.push({
-      id: slugId(String(it.title), String(it.start)),
+      id,
       title: String(it.title),
       description: String(it.description ?? ""),
       category,
