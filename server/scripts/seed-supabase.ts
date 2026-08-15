@@ -141,6 +141,7 @@ if (calendarEntries.length) {
 console.log(`calendar entries: ${calendarEntries.length}`);
 
 const geoRows = Object.entries(geocache).map(([query, v]) => ({
+  kind: "geocode",
   query,
   lng: v?.lng ?? null,
   lat: v?.lat ?? null,
@@ -148,8 +149,8 @@ const geoRows = Object.entries(geocache).map(([query, v]) => ({
 }));
 if (geoRows.length) {
   await db
-    .from("geocode_cache")
-    .upsert(geoRows, { onConflict: "query", ignoreDuplicates: true })
+    .from("place_lookups")
+    .upsert(geoRows, { onConflict: "kind,query", ignoreDuplicates: true })
     .throwOnError();
 }
 console.log(`geocode cache: ${geoRows.length}`);

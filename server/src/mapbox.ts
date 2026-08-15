@@ -4,8 +4,9 @@
  * the web app talks to these endpoints instead.
  *
  * Both calls are cached to stay far inside the free tier:
- *  - geocode: permanent (geocode_cache table) — venues don't move; misses
- *    are cached too (null lng/lat) so a bad venue string is billed once
+ *  - geocode: permanent (`place_lookups`, kind `geocode` — the same table the
+ *    venue cache resolves POIs in) — venues don't move; misses are cached too
+ *    (null lng/lat) so a bad venue string is billed once
  *  - eta: 10-minute in-memory TTL — traffic-aware, so it shouldn't live forever
  */
 import { db } from "./db.js";
@@ -152,8 +153,9 @@ export async function geocode(
   if (geoMemo.has(key)) return geoMemo.get(key)!;
 
   const { data: cached } = await db
-    .from("geocode_cache")
-    .select("*")
+    .from("place_lookups")
+    .select("lng, lat, name")
+    .eq("kind", "geocode")
     .eq("query", key)
     .maybeSingle()
     .throwOnError();
@@ -187,10 +189,16 @@ export async function geocode(
   memoSet(key, value);
   // Cache persistence is best-effort — a failed write just re-geocodes later.
   await db
-    .from("geocode_cache")
+    .from("place_lookups")
     .upsert(
-      { query: key, lng: value?.lng ?? null, lat: value?.lat ?? null, name: value?.name ?? "" },
-      { onConflict: "query", ignoreDuplicates: true },
+      {
+        kind: "geocode",
+        query: key,
+        lng: value?.lng ?? null,
+        lat: value?.lat ?? null,
+        name: value?.name ?? "",
+      },
+      { onConflict: "kind,query", ignoreDuplicates: true },
     );
   return value;
 }

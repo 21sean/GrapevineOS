@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -189,21 +190,47 @@ function Conversation({
     inputRef.current?.focus()
   }, [])
 
-  // Follow the stream — items change on every delta, so this tracks the tail.
   // The scroll container is the Radix ScrollArea viewport, not the root.
+  const viewport = useCallback(
+    () =>
+      listRef.current?.querySelector<HTMLElement>('[data-slot="scroll-area-viewport"]') ?? null,
+    [],
+  )
+
+  // Follow the stream, but only while the reader is at the tail — a reply that
+  // yanks the view back down every time a token lands makes scrolling up to
+  // re-read the previous answer impossible.
+  const pinned = useRef(true)
   useEffect(() => {
-    const el = listRef.current?.querySelector<HTMLElement>(
-      '[data-slot="scroll-area-viewport"]',
-    )
-    if (el) el.scrollTop = el.scrollHeight
-  }, [items])
+    const el = viewport()
+    if (!el) return
+    const onScroll = () => {
+      pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
+    }
+    el.addEventListener("scroll", onScroll, { passive: true })
+    return () => el.removeEventListener("scroll", onScroll)
+  }, [viewport])
+
+  useEffect(() => {
+    const el = viewport()
+    if (el && pinned.current) el.scrollTop = el.scrollHeight
+  }, [items, viewport])
+
+  /** Asking something new always jumps to the answer. */
+  const ask = useCallback(
+    (text: string) => {
+      pinned.current = true
+      send(text)
+    },
+    [send],
+  )
 
   function submit(e?: FormEvent) {
     e?.preventDefault()
     if (busy || !input.trim()) return
     speech.stop()
     setShowHistory(false)
-    send(input)
+    ask(input)
     setInput("")
   }
 
@@ -227,7 +254,7 @@ function Conversation({
             }}
           />
         ) : items.length === 0 ? (
-          <EmptyState onPick={(q) => send(q)} />
+          <EmptyState onPick={ask} />
         ) : (
           <div className="flex flex-col gap-4 px-4 py-4">
             {items.map((item, i) => (
@@ -236,7 +263,7 @@ function Conversation({
                 item={item}
                 itemIdx={i}
                 chat={chat}
-                onRetry={lastUserText ? () => send(lastUserText) : undefined}
+                onRetry={lastUserText ? () => ask(lastUserText) : undefined}
               />
             ))}
           </div>
@@ -505,7 +532,9 @@ function fmtTokens(n: number): string {
   return String(n)
 }
 
-/** Per-turn token/cost footer under a Claude Code reply. */
+/** Per-turn token/cost footer under a Claude Code reply. The input figure
+ *  counts everything the turn read, cache included — the raw uncached count
+ *  reads as single digits next to a real cost. */
 function UsageLine({ usage }: { usage: ChatUsage }) {
   const parts: string[] = []
   if (usage.model) parts.push(modelLabel(usage.model).replace(/^claude-/i, ""))
@@ -514,8 +543,16 @@ function UsageLine({ usage }: { usage: ChatUsage }) {
   if (typeof usage.costUSD === "number" && usage.costUSD > 0) {
     parts.push(`$${usage.costUSD.toFixed(usage.costUSD < 0.1 ? 3 : 2)}`)
   }
+  const cached = usage.cacheReadInputTokens ?? 0
   return (
-    <div className="font-mono text-[10px] text-muted-foreground/70" title="This turn's token usage">
+    <div
+      className="font-mono text-[10px] text-muted-foreground/70"
+      title={
+        cached
+          ? `This turn read ${fmtTokens(usage.inputTokens)} input tokens, ${fmtTokens(cached)} of them from cache`
+          : "This turn's token usage"
+      }
+    >
       {parts.join(" · ")}
     </div>
   )

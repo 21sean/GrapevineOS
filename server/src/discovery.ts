@@ -381,6 +381,17 @@ export async function runDiscovery(opts: {
       });
     }
   }
+  // Every page failing extraction is an outage, not an empty web — the local
+  // model is down, or the provider errored. Reported as a plain "extracted 0"
+  // it reads as "there are no events out there", and the agent passes that
+  // straight on to the user as a finding.
+  if (!perPage.length) {
+    const why = result.pagesSkipped.at(-1)?.error ?? "extraction failed";
+    return {
+      ...result,
+      error: `read ${pages.length} page${pages.length === 1 ? "" : "s"} but none could be processed — ${why}`,
+    };
+  }
 
   const keyOf = (e: CityEvent) => eventKey(e, settings.tz);
 
