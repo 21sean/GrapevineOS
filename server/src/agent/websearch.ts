@@ -170,7 +170,17 @@ export async function webSearch(
 // ---------------------------------------------------------------------------
 
 export type ReadPageResult =
-  | { url: string; title: string; byline?: string; text: string; truncated: boolean }
+  | {
+      url: string;
+      title: string;
+      byline?: string;
+      text: string;
+      truncated: boolean;
+      /** Raw HTML, only when the caller asks for it (see `withHtml`). Discovery
+       * needs it to harvest schema.org/Event markup, which Readability strips
+       * along with every other <script>. */
+      html?: string;
+    }
   | { error: string };
 
 /**
@@ -219,7 +229,7 @@ export function isBlockedUrl(rawUrl: string): boolean {
 
 export async function readPage(
   rawUrl: string,
-  opts: { signal?: AbortSignal; maxChars?: number } = {},
+  opts: { signal?: AbortSignal; maxChars?: number; withHtml?: boolean } = {},
 ): Promise<ReadPageResult> {
   const maxChars = Math.min(opts.maxChars ?? MAX_PAGE_CHARS, 16_000);
   let url: URL;
@@ -264,13 +274,17 @@ export async function readPage(
     const raw = (article?.textContent ?? dom.window.document.body?.textContent ?? "")
       .replace(/\s+/g, " ")
       .trim();
-    if (!raw) return { error: "no readable text on page" };
+    // A JS-rendered page can have no readable prose and still carry a full
+    // event calendar in its JSON-LD, so an empty distillation is only fatal
+    // when the caller has no use for the markup either.
+    if (!raw && !opts.withHtml) return { error: "no readable text on page" };
     return {
       url: res.url,
       title: article?.title || dom.window.document.title || url.hostname,
       ...(article?.byline ? { byline: article.byline } : {}),
       text: raw.slice(0, maxChars),
       truncated: raw.length > maxChars,
+      ...(opts.withHtml && { html }),
     };
   } catch (err) {
     return { error: `parse failed: ${String((err as Error)?.message ?? err).slice(0, 120)}` };

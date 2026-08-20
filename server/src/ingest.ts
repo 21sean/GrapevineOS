@@ -9,11 +9,11 @@ import { CATEGORIES, type Category, type CityEvent, type Rarity } from "./types.
 
 /** One rubric for the buzz fields, shared by extraction and re-rating so the
  * two prompts can't drift apart. */
-const RATIONALE_MAX = 140;
-const BUZZ_RUBRIC = `1.0-5.0, one decimal: how excited actual locals would be. Free community
+export const RATIONALE_MAX = 140;
+export const BUZZ_RUBRIC = `1.0-5.0, one decimal: how excited actual locals would be. Free community
 one-offs (parades, block parties, 5Ks) score high; generic paid promotions score low.`;
-const BUZZ_WHY_RUBRIC = `<=${RATIONALE_MAX} chars, blunt, like a jaded local`;
-const PROMOTED_RUBRIC = `true if this reads as a paid placement / sponsored plug / overpriced
+export const BUZZ_WHY_RUBRIC = `<=${RATIONALE_MAX} chars, blunt, like a jaded local`;
+export const PROMOTED_RUBRIC = `true if this reads as a paid placement / sponsored plug / overpriced
 club promo rather than something a newsletter editor picked`;
 
 const EXTRACTION_SYSTEM = (

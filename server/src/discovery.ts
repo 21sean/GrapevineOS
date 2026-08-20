@@ -21,11 +21,20 @@
  */
 import { scanText } from "./agent/guardrails.js";
 import { readPage, webSearch } from "./agent/websearch.js";
-import { extractEvents, slugId } from "./ingest.js";
+import {
+  BUZZ_RUBRIC,
+  BUZZ_WHY_RUBRIC,
+  PROMOTED_RUBRIC,
+  RATIONALE_MAX,
+  extractEvents,
+  slugId,
+} from "./ingest.js";
+import { type JsonLdCandidate, extractJsonLdEvents } from "./jsonld.js";
 import { generateJSON } from "./llm.js";
+import { geocode } from "./mapbox.js";
 import { commitIngest } from "./pipeline.js";
 import { eventKey, store } from "./store.js";
-import type { CityEvent, DiscoverySearch } from "./types.js";
+import { CATEGORIES, type Category, type CityEvent, type DiscoverySearch } from "./types.js";
 
 const MAX_RESULTS = 8; // search hits considered
 const MAX_PAGES = 4; // pages actually read per run
@@ -88,7 +97,14 @@ export interface DiscoveryCandidate {
 export interface DiscoveryRunResult {
   query: string;
   searchedAt: string; // ISO 8601
-  pagesRead: { url: string; title: string }[];
+  pagesRead: {
+    url: string;
+    title: string;
+    /** Present when the page's events came from schema.org markup rather than
+     * the model reading its prose. */
+    method?: "schema.org";
+    structured?: number;
+  }[];
   pagesSkipped: { url: string; error: string }[];
   extracted: number;
   verified: DiscoveryCandidate[];
@@ -170,8 +186,20 @@ function dateOnPage(e: CityEvent, pageText: string, tz: string): boolean {
   return false;
 }
 
-/** Deterministic gates. Returns a rejection reason or null to proceed. */
-function hardReject(e: CityEvent, pageText: string, now: Date): string | null {
+/**
+ * Deterministic gates. Returns a rejection reason or null to proceed.
+ *
+ * `requireTitleOnPage` is off for schema.org events: their title came from the
+ * page's own machine-readable data, which a client-rendered calendar may never
+ * repeat in its prose, so the anti-hallucination check has nothing to test and
+ * would reject perfectly good listings.
+ */
+function hardReject(
+  e: CityEvent,
+  pageText: string,
+  now: Date,
+  requireTitleOnPage = true,
+): string | null {
   const start = Date.parse(e.start);
   const end = Date.parse(e.end);
   if (!Number.isFinite(start) || !Number.isFinite(end)) return "unparseable date";
@@ -181,7 +209,8 @@ function hardReject(e: CityEvent, pageText: string, now: Date): string | null {
   if (start > now.getTime() + MAX_DAYS_OUT * dayMs)
     return `start is more than ${MAX_DAYS_OUT} days out`;
   if (!e.venue.trim()) return "no venue";
-  if (!titleOnPage(e.title, pageText)) return "title not found on the source page";
+  if (requireTitleOnPage && !titleOnPage(e.title, pageText))
+    return "title not found on the source page";
   return null;
 }
 
@@ -296,6 +325,106 @@ function applyFixes(e: CityEvent, v: Verdict): CityEvent {
 }
 
 // ---------------------------------------------------------------------------
+// Structured (schema.org/Event) path
+// ---------------------------------------------------------------------------
+
+/**
+ * Judgement-only prompt. The facts already came from the page's own markup, so
+ * the model never sees a chance to restate a date or a venue - it is asked for
+ * the opinions the markup cannot carry, keyed back by index.
+ */
+const ENRICH_SYSTEM = (city: string) => `
+You label local events for a ${city} events map. You are given events whose
+facts (title, venue, date, price) are already known and NOT up for revision.
+
+Return ONLY JSON shaped exactly like:
+{"labels":[{
+  "index": number,                    // the event's index, unchanged
+  "category": one of ${JSON.stringify(CATEGORIES)},
+  "tags": string[],                   // 2-5 lowercase interest tags, e.g. "live music","beer","family"
+  "buzz": number,                     // ${BUZZ_RUBRIC.replace(/\n/g, " ")}
+  "buzzWhy": string,                  // ${BUZZ_WHY_RUBRIC}
+  "promoted": boolean,                // ${PROMOTED_RUBRIC.replace(/\n/g, " ")}
+  "rarity": "common"|"notable"|"rare" // rare = one-off or annual; notable = special but recurring; common = weekly/anytime
+}]}
+
+Label every event you are given, once each.`;
+
+/** One batched call labels a whole page's structured events. */
+async function enrichCandidates(
+  candidates: JsonLdCandidate[],
+  city: string,
+): Promise<Map<number, Record<string, unknown>>> {
+  const out = new Map<number, Record<string, unknown>>();
+  const raw = await generateJSON({
+    system: ENRICH_SYSTEM(city),
+    user: JSON.stringify(
+      candidates.map((c, index) => ({
+        index,
+        title: c.title,
+        description: c.description.slice(0, 300),
+        venue: c.venue,
+        start: c.start,
+        price: c.price,
+      })),
+    ),
+  });
+  const list: any[] = Array.isArray(raw) ? raw : Array.isArray(raw?.labels) ? raw.labels : [];
+  for (const l of list) {
+    const i = Number(l?.index);
+    if (Number.isInteger(i) && i >= 0 && i < candidates.length) out.set(i, l);
+  }
+  return out;
+}
+
+/**
+ * Turn structured candidates into storable events: geocode whatever the markup
+ * did not carry, then apply the enrichment labels. Enrichment failing is not
+ * fatal - exact facts with default labels still beat no event at all.
+ */
+async function materializeJsonLd(
+  candidates: JsonLdCandidate[],
+  settings: { city: string; center: [number, number] },
+): Promise<CityEvent[]> {
+  let labels = new Map<number, Record<string, unknown>>();
+  try {
+    labels = await enrichCandidates(candidates, settings.city);
+  } catch (err) {
+    console.log(`[grapevine] discovery: enrichment failed, keeping raw markup — ${String(err).slice(0, 120)}`);
+  }
+
+  const out: CityEvent[] = [];
+  for (const [i, candidate] of candidates.entries()) {
+    // `precise` is a routing signal, not part of the stored event.
+    const { precise: _precise, ...c } = candidate;
+    let { lng, lat } = c;
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
+      const hit = await geocode([c.venue, c.address, settings.city].filter(Boolean).join(", "), settings.center);
+      if (!hit) continue; // no location, no marker
+      lng = hit.lng;
+      lat = hit.lat;
+    }
+    const l = labels.get(i) ?? {};
+    const buzz = Number(l.buzz);
+    out.push({
+      ...c,
+      id: slugId(c.title, c.start),
+      lng: lng as number,
+      lat: lat as number,
+      category: CATEGORIES.includes(l.category as Category) ? (l.category as Category) : c.category,
+      tags: Array.isArray(l.tags) ? l.tags.map(String).slice(0, 6) : c.tags,
+      rating: Number.isFinite(buzz) ? Math.min(5, Math.max(1, Math.round(buzz * 10) / 10)) : 3,
+      ...(l.buzzWhy ? { ratingRationale: String(l.buzzWhy).slice(0, RATIONALE_MAX) } : {}),
+      promoted: Boolean(l.promoted),
+      rarity: (["common", "notable", "rare"] as const).includes(l.rarity as any)
+        ? (l.rarity as CityEvent["rarity"])
+        : c.rarity,
+    });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // One discovery run
 // ---------------------------------------------------------------------------
 
@@ -334,16 +463,42 @@ export async function runDiscovery(opts: {
   // Read pages until enough succeed. Sequential on purpose: page reads feed
   // LLM extraction anyway, and gentle beats parallel for scraping.
   const maxPages = Math.min(Math.max(1, opts.maxPages ?? MAX_PAGES), 6);
-  const pages: { url: string; title: string; text: string }[] = [];
+  const pages: { url: string; title: string; text: string; structured: JsonLdCandidate[] }[] = [];
   for (const hit of search.results) {
     if (pages.length >= maxPages) break;
-    const page = await readPage(hit.url, { maxChars: PAGE_CHARS });
+    const page = await readPage(hit.url, { maxChars: PAGE_CHARS, withHtml: true });
     if ("error" in page) {
       result.pagesSkipped.push({ url: hit.url, error: page.error });
       continue;
     }
-    if (page.text.length < MIN_PAGE_CHARS) {
-      result.pagesSkipped.push({ url: hit.url, error: "too little readable text" });
+    // Harvest schema.org markup before judging the page on its prose: a
+    // JS-rendered calendar often distills to nothing readable while carrying a
+    // complete, exact event list in its JSON-LD.
+    const found = page.html ? extractJsonLdEvents(page.html, page.url) : [];
+    // Structured only wins when it is actually more exact. Listing pages on the
+    // big ticketing sites publish a bare date with no hour and no price, and
+    // the prose beside it says "7:30 PM" - so markup that is mostly imprecise
+    // gets ignored in favour of reading the page.
+    const precise = found.filter((c) => c.precise).length;
+    const structured = found.length && precise * 2 >= found.length ? found : [];
+    if (found.length && !structured.length) {
+      console.log(
+        `[grapevine] discovery: ${page.url} has schema.org markup but only ` +
+          `${precise}/${found.length} events carry a time — reading the prose instead`,
+      );
+    }
+    if (!structured.length && page.text.length < MIN_PAGE_CHARS) {
+      // Distinguish the two reasons a page reads as empty, because they call
+      // for different fixes: a genuinely thin page is not worth revisiting,
+      // while a big HTML payload that distills to nothing is client-rendered
+      // and would need a real browser.
+      const jsRendered = (page.html?.length ?? 0) > 50_000;
+      result.pagesSkipped.push({
+        url: hit.url,
+        error: jsRendered
+          ? "client-rendered: no readable text and no schema.org markup (needs a JS-capable fetcher)"
+          : "too little readable text",
+      });
       continue;
     }
     // Same content rail the in-app read_page tool applies: fetched web text
@@ -357,22 +512,38 @@ export async function runDiscovery(opts: {
       });
       continue;
     }
-    pages.push({ url: page.url, title: page.title, text: page.text });
-    result.pagesRead.push({ url: page.url, title: page.title });
+    pages.push({ url: page.url, title: page.title, text: page.text, structured });
+    result.pagesRead.push({
+      url: page.url,
+      title: page.title,
+      ...(structured.length && { method: "schema.org", structured: structured.length }),
+    });
   }
   if (!pages.length) return { ...result, error: "no readable result pages" };
 
   // Extract per page so every candidate stays attributable to one URL.
-  const perPage: { page: (typeof pages)[number]; events: CityEvent[] }[] = [];
+  const perPage: { page: (typeof pages)[number]; events: CityEvent[]; structured: boolean }[] = [];
   for (const page of pages) {
     try {
+      // Structured first. The publisher's own markup is exact, so this skips
+      // both the extraction call and the cross-check that exists to catch the
+      // model inventing details from prose.
+      if (page.structured.length) {
+        const events = await materializeJsonLd(page.structured, settings);
+        perPage.push({ page, events, structured: true });
+        result.extracted += events.length;
+        console.log(
+          `[grapevine] discovery: ${page.url} → ${events.length} events from schema.org markup (no extraction call)`,
+        );
+        continue;
+      }
       const events = await extractEvents({
         text: `Web page: ${page.title}\nURL: ${page.url}\n\n${page.text}`,
         source: "web-search",
         sourceKind: "search",
         sourceUrl: page.url,
       });
-      perPage.push({ page, events });
+      perPage.push({ page, events, structured: false });
       result.extracted += events.length;
     } catch (err) {
       result.pagesSkipped.push({
@@ -397,11 +568,11 @@ export async function runDiscovery(opts: {
 
   // Deterministic gates first — no LLM tokens spent on obvious fabrications,
   // and hard-rejected candidates must not corroborate anything.
-  const gated: { page: (typeof pages)[number]; events: CityEvent[] }[] = [];
-  for (const { page, events } of perPage) {
+  const gated: { page: (typeof pages)[number]; events: CityEvent[]; structured: boolean }[] = [];
+  for (const { page, events, structured } of perPage) {
     const survivors: CityEvent[] = [];
     for (const e of events) {
-      const reason = hardReject(e, page.text, now);
+      const reason = hardReject(e, page.text, now, !structured);
       if (reason) {
         result.rejected.push({
           event: e, verdict: "rejected", confidence: 0, reason,
@@ -411,7 +582,7 @@ export async function runDiscovery(opts: {
         survivors.push(e);
       }
     }
-    if (survivors.length) gated.push({ page, events: survivors });
+    if (survivors.length) gated.push({ page, events: survivors, structured });
   }
 
   // Corroboration: the same event (catalog dedupe key) found on 2+ DISTINCT
@@ -429,7 +600,24 @@ export async function runDiscovery(opts: {
   const corroborationsOf = (e: CityEvent) => keyPages.get(keyOf(e))?.size ?? 1;
 
   const bar = minConfidence();
-  for (const { page, events: survivors } of gated) {
+  for (const { page, events: survivors, structured } of gated) {
+    // schema.org events skip the cross-check: it exists to catch a model
+    // inventing details while reading prose, and here nothing was read. The
+    // deterministic date and venue gates above still applied.
+    if (structured) {
+      for (const e of survivors) {
+        result.verified.push({
+          event: e,
+          verdict: "confirmed",
+          confidence: 1,
+          evidence: "schema.org/Event markup published by the page",
+          sourceUrl: page.url,
+          corroborations: corroborationsOf(e),
+        });
+      }
+      continue;
+    }
+
     let verdicts: Map<number, Verdict>;
     try {
       verdicts = await verifyAgainstPage(page.text, survivors, settings.tz);
