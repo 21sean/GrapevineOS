@@ -16,6 +16,7 @@ import {
   isLive,
   lightPresetForTime,
   localDay,
+  MAP_THEME_PRESET,
   type LightPreset,
 } from "./time"
 import type { GrapevineState } from "./store"
@@ -301,8 +302,30 @@ export const selectLiveIds = memoSelector(
   sameIdSet,
 )
 
-export const selectLiveCount = (s: State): number => selectLiveIds(s).size
+/**
+ * The top bar's "N live now": live *and* through the current filters, so the
+ * headline count describes the same city the map is drawing — mute the farmers
+ * markets and the number drops with the pins. Search deliberately doesn't
+ * narrow it: a query dims markers rather than removing them, so the count would
+ * disagree with what's still pulsing on screen.
+ */
+export const selectLiveCount = memoSelector(
+  (s) => [selectVisible(s), selectLiveIds(s)],
+  (s) => {
+    const live = selectLiveIds(s)
+    let n = 0
+    for (const e of selectVisible(s)) if (live.has(e.id)) n++
+    return n
+  },
+)
 
-/** Basemap lighting for the wall clock in the city's timezone. */
-export const selectLightPreset = (s: State): LightPreset =>
+/** Basemap lighting the clock would pick right now, ignoring any override. */
+export const selectAutoLightPreset = (s: State): LightPreset =>
   lightPresetForTime(s.now, s.settings?.tz ?? "America/Los_Angeles")
+
+/**
+ * Basemap lighting the map should actually use: the wall clock in the city's
+ * timezone, unless the user pinned light or dark in the map-layers panel.
+ */
+export const selectLightPreset = (s: State): LightPreset =>
+  s.mapTheme === "auto" ? selectAutoLightPreset(s) : MAP_THEME_PRESET[s.mapTheme]

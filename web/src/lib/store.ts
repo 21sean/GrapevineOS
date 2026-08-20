@@ -14,6 +14,7 @@ import type {
 } from "./types"
 import { DEFAULT_FILTERS, normalizeFilters } from "./types"
 import { DEFAULT_MAP_LAYERS, type MapLayerKey } from "./mapLayers"
+import type { MapTheme } from "./time"
 import type { PolygonRings } from "./geo"
 
 /**
@@ -49,6 +50,9 @@ export interface GrapevineState {
   // per-basemap-layer visibility (device-local); true = shown. Keyed by the
   // Standard-style config toggles in lib/mapLayers.
   mapLayers: Record<MapLayerKey, boolean>
+  // basemap lighting: "auto" follows the city's wall clock, light/dark pin it
+  // (device-local; see selectLightPreset)
+  mapTheme: MapTheme
   userPos: [number, number] | null
   // width of the left event-list rail, in px (device-local, resizable)
   railWidth: number
@@ -101,6 +105,7 @@ export interface GrapevineState {
   advanceCarousel: (idx: number) => void
   setTraffic: (on: boolean) => void
   setMapLayer: (key: MapLayerKey, visible: boolean) => void
+  setMapTheme: (theme: MapTheme) => void
   resetMapLayers: () => void
   setUserPos: (pos: [number, number] | null) => void
   setRailWidth: (px: number) => void
@@ -179,6 +184,7 @@ export const useGrapevine = create<GrapevineState>()(
       carouselIdx: 0,
       trafficOn: true,
       mapLayers: { ...DEFAULT_MAP_LAYERS },
+      mapTheme: "auto",
       userPos: null,
       railWidth: 340,
       detailWidth: 448,
@@ -266,8 +272,10 @@ export const useGrapevine = create<GrapevineState>()(
       setMapLayer: (key, visible) =>
         set({ mapLayers: { ...get().mapLayers, [key]: visible } }),
 
+      setMapTheme: (mapTheme) => set({ mapTheme }),
+
       resetMapLayers: () =>
-        set({ mapLayers: { ...DEFAULT_MAP_LAYERS }, trafficOn: true }),
+        set({ mapLayers: { ...DEFAULT_MAP_LAYERS }, trafficOn: true, mapTheme: "auto" }),
 
       setUserPos: (userPos) => set({ userPos }),
       setRailWidth: (railWidth) => set({ railWidth }),
@@ -444,6 +452,7 @@ export const useGrapevine = create<GrapevineState>()(
         carouselMin: s.carouselMin,
         sortBy: s.sortBy,
         mapLayers: s.mapLayers,
+        mapTheme: s.mapTheme,
       }),
       // v0 persisted a `trafficOn` toggle; traffic is now always on, so drop
       // the stored value and let the `true` default win.
@@ -451,6 +460,8 @@ export const useGrapevine = create<GrapevineState>()(
       // v3 added filters.nearMinutes (normalize fills the missing key).
       // v4 added filters.hideCategories (normalize fills the missing key).
       // v5 added mapLayers (fill any missing basemap toggle with its default).
+      // mapTheme needs no migration: it's a scalar, so an older payload simply
+      // leaves it absent and persist's shallow merge keeps the "auto" default.
       migrate: (persisted, version) => {
         const p = persisted as Record<string, unknown> | undefined
         if (version < 1 && p && typeof p === "object") {
