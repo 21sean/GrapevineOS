@@ -14,13 +14,19 @@
  * handler throws so Cloudflare answers the sender with a transient failure
  * and the message is redelivered instead of silently dropped.
  *
+ * An hourly cron drains that dead letter back into Supabase once it is
+ * reachable again, so the KV copy is a delay rather than a 30-day expiry.
+ *
  * The logic lives in lib.ts — workerd requires every entry-point export to
- * be a handler, so this module exports nothing but the handler itself.
+ * be a handler, so this module exports nothing but the handlers themselves.
  */
-import { handleEmail, type Env } from "./lib";
+import { drainDeadLetters, handleEmail, type Env } from "./lib";
 
 export type { Env };
 
 export default {
   email: handleEmail,
+  scheduled: (_event, env, ctx) => {
+    ctx.waitUntil(drainDeadLetters(env));
+  },
 } satisfies ExportedHandler<Env>;

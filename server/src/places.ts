@@ -1,26 +1,30 @@
 /**
  * Mapbox Places API (public preview): the venue intelligence behind an event's
- * detail panel. Two hops, both cached:
+ * detail panel. Two hops, both cached in Postgres:
  *
  *   1. Search Box `/forward` resolves "Soda Bar" near the event's coordinates
- *      to a `mapbox_id`
- *   2. Places `/details/retrieve/{id}` returns the Place record for that id
+ *      to a `mapbox_id`, kept in `place_lookups` (kind `poi`)
+ *   2. Places `/details/retrieve/{id}` returns the Place record for that id,
+ *      projected down to what the card renders and kept in `place_details`
  *
- * Two hard limits from the preview shape this whole file:
+ * Both hops share one read: `venue_cache()` left-joins them, so a warm venue
+ * costs a single round trip and a cold one tells us in the same query whether
+ * the id is already known.
  *
- *  - **Quota.** 1,000 records per account per month. That is small enough that
- *    details are fetched lazily (only when someone opens a detail panel) and
- *    behind a budget guard, never during ingest. Ingest still geocodes through
- *    mapbox.ts as before.
- *  - **Terms.** Places data is "for temporary display and use only"; storing it
- *    needs a separate agreement with Mapbox. So this cache is deliberately
- *    in-memory only — unlike geocoding, none of it goes in `geocode_cache` or
- *    any other table, and it evaporates on restart by design.
+ * The preview allows 1,000 records per account per month, so details are
+ * fetched lazily — only when someone opens a detail panel, never during ingest
+ * — and once fetched they are kept. `place_details` is permanent storage, not
+ * a TTL cache: rows are never purged, a stored record is always served, and
+ * age only decides when to refresh it (see `REFRESH_AFTER_MS`). Mapbox
+ * describes this data as "for temporary display and use only" and asks for a
+ * separate agreement to store it; keeping it is a deliberate call made here.
  *
  * The token also needs the `places:read` scope, which is not on a default
  * secret token: a 403 here means the scope is missing, and it is reported as
  * such rather than swallowed as "no data".
  */
+import { db } from "./db.js";
+import type { Json } from "./db-types.js";
 import type { VenueDetails, VenuePhoto } from "./types.js";
 
 function token(): string {
@@ -29,52 +33,37 @@ function token(): string {
   return t;
 }
 
-// ---------- quota guard ----------
+// ---------- cache policy ----------
 
 /**
- * Public preview allows 1,000 records per account per month; we stop short of
- * it so an unattended scheduler can never eat the whole allowance. The counter
- * is per-process (same reason as the cache: nothing is persisted), so it is a
- * safety rail rather than an exact ledger — a restart forgets what was spent.
+ * Records are kept permanently: nothing expires them and no job deletes them.
+ * A stored record is always served, however old it is — the venue card showing
+ * last month's hours beats the card not showing at all, and it means a venue
+ * costs the preview quota once rather than once a fortnight.
+ *
+ * Age only decides when to refresh: past this, the next panel open re-fetches
+ * (and falls back to the stored copy if Mapbox is unreachable). Venue hours
+ * move slowly, so monthly is plenty.
  */
-const MONTHLY_CAP = Math.max(0, Number(process.env.MAPBOX_PLACES_MONTHLY_CAP ?? 900));
+const REFRESH_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
 
-let spend = { month: "", records: 0 };
+/** Misses are the exception — an absent record may appear, so re-ask hourly. */
+const MISS_TTL_MS = 60 * 60 * 1000;
 
-function budget(): { month: string; records: number } {
-  const month = new Date().toISOString().slice(0, 7);
-  if (spend.month !== month) spend = { month, records: 0 };
-  return spend;
-}
+const age = (at: string | null) => (at ? Date.now() - Date.parse(at) : Infinity);
 
-/** Records billed this month against the cap, for the admin/system readout. */
-export function placesBudget(): { used: number; cap: number; month: string } {
-  const b = budget();
-  return { used: b.records, cap: MONTHLY_CAP, month: b.month };
-}
+/**
+ * Concurrent opens of the same venue while it is cold — a shared link doing
+ * the rounds — collapse into one resolve-and-fetch instead of racing each
+ * other to buy the same record twice. Purely a dedupe: nothing is remembered
+ * here past the request, the cache is Postgres.
+ */
+const inflight = new Map<string, Promise<VenueDetails | null>>();
 
-// ---------- caches (memory only — see the file header) ----------
-
-const DETAILS_TTL_MS = 12 * 60 * 60 * 1000;
-const MISS_TTL_MS = 60 * 60 * 1000; // re-ask about an unknown venue at most hourly
-const CACHE_MAX = 500;
-
-const detailsCache = new Map<string, { at: number; value: VenueDetails | null }>();
-/** venue key to mapbox_id, or null when Search Box knows no such POI. */
-const idCache = new Map<string, string | null>();
-
-function cacheSet<T>(map: Map<string, T>, key: string, value: T): void {
-  if (map.size >= CACHE_MAX) {
-    const oldest = map.keys().next().value;
-    if (oldest !== undefined) map.delete(oldest);
-  }
-  map.set(key, value);
-}
-
-/** Drop everything — the admin "refresh venue data" escape hatch. */
-export function clearPlacesCache(): void {
-  detailsCache.clear();
-  idCache.clear();
+/** Drop the venue cache — the admin "refresh venue data" escape hatch. */
+export async function clearPlacesCache(): Promise<void> {
+  await db.from("place_details").delete().neq("mapbox_id", "").throwOnError();
+  await db.from("place_lookups").delete().eq("kind", "poi").throwOnError();
 }
 
 // ---------- venue resolution ----------
@@ -95,12 +84,30 @@ function metres(a: [number, number], b: [number, number]): number {
 }
 
 /**
- * How far a matched POI may sit from the event's own coordinates before we
- * call it a different place. Event coordinates come from forward-geocoding a
- * venue string, so some slack is right, but not enough to grab the bar across
- * the street and show its hours as this venue's.
+ * How far a matched POI may sit from the event's own coordinates before we call
+ * it a different place — and the radius depends on how much the name tells us,
+ * because an event's coordinates are not evidence you can lean on.
+ *
+ * They come from geocoding whatever address the newsletter printed, and that
+ * address is sometimes simply wrong: every seeded Observatory North Park show
+ * carried a downtown address, putting the event 4.6 km from the venue actually
+ * named in its own title. Trusting the point absolutely means the venue with
+ * the most events in the city silently has no card, and nothing ever says why.
+ *
+ * So the point is corroboration, not truth:
+ *
+ *  - a candidate whose NAME answers the query is accepted anywhere in the metro
+ *    (`NAMED_RADIUS_M`) — "The Observatory North Park" matching a POI called
+ *    The Observatory North Park is the venue, whatever the event row claims
+ *  - a candidate whose name says nothing ("Bayard St between Garnet and
+ *    Hornblend") has only the coordinates going for it, so it stays on the
+ *    tight radius — otherwise a vague location grabs a POI across town
+ *
+ * Both are still ranked name-first, distance-second, so a nearby exact match
+ * always wins over a far one.
  */
 const MATCH_RADIUS_M = 500;
+const NAMED_RADIUS_M = 25000;
 
 /** Loose comparison key: "The Casbah!" and "the casbah" should match. */
 const normalise = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -125,14 +132,20 @@ function nameRank(wanted: string, candidate: string): number {
  * Search Box ranks by relevance, not distance, and for a venue named after its
  * neighbourhood that is actively wrong: "Balboa Park" returns a brewery a
  * kilometre away ahead of the park itself. So we ask for several candidates,
- * keep only those near the event, and pick the best name match among them,
- * breaking ties by distance. Name beats distance on purpose, otherwise
- * "Petco Park" resolves to the taco stand two metres closer to the gate.
+ * drop the ones too far out for what their name proves (see the radii above),
+ * and pick the best name match among the rest, breaking ties by distance. Name
+ * beats distance on purpose, otherwise "Petco Park" resolves to the taco stand
+ * two metres closer to the gate.
+ *
+ * The answer — including "no such POI" — is written to `place_lookups` under
+ * the caller's key. `created_at` is stamped explicitly so re-resolving an
+ * expired miss restarts its clock.
  */
-async function resolveId(venue: string, at: [number, number]): Promise<string | null> {
-  const key = `${venue.trim().toLowerCase()}@${round3(at[0])},${round3(at[1])}`;
-  if (idCache.has(key)) return idCache.get(key)!;
-
+async function resolveId(
+  venue: string,
+  at: [number, number],
+  key: string,
+): Promise<string | null> {
   const url =
     `https://api.mapbox.com/search/searchbox/v1/forward` +
     `?q=${encodeURIComponent(venue)}&proximity=${at[0]},${at[1]}` +
@@ -147,14 +160,21 @@ async function resolveId(venue: string, at: [number, number]): Promise<string | 
     const coords = feat?.geometry?.coordinates;
     if (typeof id !== "string" || !Array.isArray(coords) || coords.length !== 2) continue;
     const away = metres(at, [coords[0], coords[1]]);
-    // A hit that lands somewhere else entirely is a miss, not a match.
-    if (away > MATCH_RADIUS_M) continue;
-    candidates.push({ id, rank: nameRank(venue, String(feat.properties?.name ?? "")), away });
+    const rank = nameRank(venue, String(feat.properties?.name ?? ""));
+    // A hit further out than its name earns is a miss, not a match.
+    if (away > (rank === 2 ? MATCH_RADIUS_M : NAMED_RADIUS_M)) continue;
+    candidates.push({ id, rank, away });
   }
   candidates.sort((a, b) => a.rank - b.rank || a.away - b.away);
 
   const value = candidates[0]?.id ?? null;
-  cacheSet(idCache, key, value);
+  await db
+    .from("place_lookups")
+    .upsert(
+      { kind: "poi", query: key, mapbox_id: value, created_at: new Date().toISOString() },
+      { onConflict: "kind,query" },
+    )
+    .throwOnError();
   return value;
 }
 
@@ -301,25 +321,14 @@ function projectPhotos(raw: unknown): VenuePhoto[] {
 export class PlacesScopeError extends Error {}
 export class PlacesQuotaError extends Error {}
 
-/**
- * Fetch and project one Place record. Counts against the monthly budget only
- * when Mapbox actually returns a record (the preview bills per record
- * returned, so a 404 is free).
- */
+/** Fetch and project one Place record, or null when Mapbox has none for the id. */
 async function fetchDetails(mapboxId: string): Promise<VenueDetails | null> {
-  const b = budget();
-  if (b.records >= MONTHLY_CAP) {
-    throw new PlacesQuotaError(
-      `Mapbox Places budget spent for ${b.month} (${b.records}/${MONTHLY_CAP} records)`,
-    );
-  }
-
   const url =
     `https://api.mapbox.com/places/v1/details/retrieve/${encodeURIComponent(mapboxId)}` +
     `?access_token=${token()}`;
   const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
 
-  if (res.status === 404 || res.status === 422) return null; // unknown/bad id, not billed
+  if (res.status === 404 || res.status === 422) return null; // unknown/bad id, no record billed
   if (res.status === 403) {
     throw new PlacesScopeError(
       "Mapbox token lacks the places:read scope — add it to MAPBOX_SECRET_TOKEN",
@@ -334,7 +343,6 @@ async function fetchDetails(mapboxId: string): Promise<VenueDetails | null> {
   // The single-id GET returns the record itself; tolerate the batch envelope too.
   const rec = body?.results?.[0] ?? body;
   if (!rec?.mapbox_id) return null;
-  b.records += 1;
 
   const { accessibility, features, priceLevel } = projectAttributes(rec.attributes);
   const popularity = rec.score?.popularity;
@@ -365,8 +373,9 @@ async function fetchDetails(mapboxId: string): Promise<VenueDetails | null> {
 
 /**
  * Venue intelligence for an event's location, or null when Mapbox has nothing
- * for it. Cached in memory; misses are cached (briefly) too so a venue with no
- * Places record does not re-spend the budget on every panel open.
+ * for it. Misses are cached (briefly) at both hops, so a venue with no POI and
+ * a POI with no Places record each cost one lookup an hour rather than one per
+ * panel open.
  */
 export async function venueDetails(
   venue: string,
@@ -376,26 +385,56 @@ export async function venueDetails(
   if (!name) return null;
 
   const key = `${name.toLowerCase()}@${round3(at[0])},${round3(at[1])}`;
-  const hit = detailsCache.get(key);
-  if (hit) {
-    const ttl = hit.value ? DETAILS_TTL_MS : MISS_TTL_MS;
-    if (Date.now() - hit.at < ttl) return hit.value;
+  const running = inflight.get(key);
+  if (running) return running;
+
+  const work = resolveVenue(name, at, key).finally(() => inflight.delete(key));
+  inflight.set(key, work);
+  return work;
+}
+
+async function resolveVenue(
+  name: string,
+  at: [number, number],
+  key: string,
+): Promise<VenueDetails | null> {
+  const { data } = await db.rpc("venue_cache", { p_query: key }).throwOnError();
+  const cached = data?.[0];
+  const stored = cached?.details ? (cached.details as unknown as VenueDetails) : null;
+
+  if (cached) {
+    // A remembered "no such POI" — re-ask occasionally, in case Search Box
+    // learns the venue later.
+    if (!cached.mapbox_id) {
+      if (age(cached.resolved_at) < MISS_TTL_MS) return null;
+    } else if (cached.details_at !== null) {
+      const ttl = stored ? REFRESH_AFTER_MS : MISS_TTL_MS;
+      if (age(cached.details_at) < ttl) return stored;
+    }
   }
 
-  const id = await resolveId(name, at);
-  if (!id) {
-    cacheSet(detailsCache, key, { at: Date.now(), value: null });
-    return null;
-  }
+  const id = cached?.mapbox_id ?? (await resolveId(name, at, key));
+  if (!id) return null;
 
   try {
     const value = await fetchDetails(id);
-    cacheSet(detailsCache, key, { at: Date.now(), value });
+    await db
+      .from("place_details")
+      .upsert(
+        {
+          mapbox_id: id,
+          details: value as unknown as Json,
+          fetched_at: new Date().toISOString(),
+        },
+        { onConflict: "mapbox_id" },
+      )
+      .throwOnError();
     return value;
   } catch (err) {
-    // Budget/scope problems are configuration, not "this venue has no data" —
-    // serve a stale record if we have one, otherwise let the caller report it.
-    if (hit) return hit.value;
+    // Quota/scope problems are configuration, not "this venue has no data" —
+    // serve the record due for refresh if we hold one, otherwise let the caller
+    // report it and say so in the panel.
+    if (stored) return stored;
     throw err;
   }
 }

@@ -15,6 +15,17 @@ import {
   type CliProviderId,
 } from "./providers.js";
 import { store } from "./store.js";
+import type { LlmProviderId } from "./types.js";
+
+/**
+ * Which engine an extraction call will actually use. Callers need this to
+ * size their input to the engine (see budget.ts) — an explicit Ollama model
+ * tag pins the local path regardless of the saved setting, exactly as
+ * generateJSON resolves it.
+ */
+export async function activeProvider(model?: string): Promise<LlmProviderId> {
+  return model ? "ollama" : (await store.settings()).extractProvider;
+}
 
 export async function generateJSON(opts: {
   system: string;
@@ -22,7 +33,7 @@ export async function generateJSON(opts: {
   /** Explicit Ollama model tag — forces the local path regardless of settings. */
   model?: string;
 }): Promise<any> {
-  const provider = opts.model ? "ollama" : (await store.settings()).extractProvider;
+  const provider = await activeProvider(opts.model);
   if (provider === "ollama") return chatJSON(opts);
   await assertCliReady(provider);
   return cliJSON(provider, { system: opts.system, user: opts.user });

@@ -1,4 +1,12 @@
-import { LayersIcon, TrafficConeIcon, type LucideIcon } from "lucide-react"
+import type { ReactNode } from "react"
+import {
+  LayersIcon,
+  MoonIcon,
+  SunIcon,
+  SunMoonIcon,
+  TrafficConeIcon,
+  type LucideIcon,
+} from "lucide-react"
 import {
   Popover,
   PopoverContent,
@@ -8,16 +16,27 @@ import {
 } from "@/components/ui/popover"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useGrapevine } from "@/lib/store"
+import { selectAutoLightPreset } from "@/lib/derived"
 import { BASEMAP_LAYERS } from "@/lib/mapLayers"
+import type { MapTheme } from "@/lib/time"
 import { cn } from "@/lib/utils"
+
+/** Lighting override: follow the city's clock, or pin the map light/dark. */
+const THEME_OPTIONS = [
+  { value: "auto", label: "Auto", icon: SunMoonIcon },
+  { value: "light", label: "Light", icon: SunIcon },
+  { value: "dark", label: "Dark", icon: MoonIcon },
+] as const satisfies readonly { value: MapTheme; label: string; icon: LucideIcon }[]
 
 /**
  * Map layers control: a floating glass button on the map that opens a popover
  * (collapsed by default) for hiding Mapbox basemap layers — POI labels, place
  * names, streets, transit, 3D buildings, walking paths — plus the live-traffic
- * overlay. Every toggle drives a Standard-style config property through the
- * store (see lib/mapLayers + EventMap); traffic is the one custom overlay.
+ * overlay and the lighting override. Every toggle drives a Standard-style
+ * config property through the store (see lib/mapLayers + EventMap); traffic is
+ * the one custom overlay.
  */
 export function MapLayers() {
   const mapLayers = useGrapevine((s) => s.mapLayers)
@@ -25,10 +44,17 @@ export function MapLayers() {
   const resetMapLayers = useGrapevine((s) => s.resetMapLayers)
   const trafficOn = useGrapevine((s) => s.trafficOn)
   const setTraffic = useGrapevine((s) => s.setTraffic)
+  const mapTheme = useGrapevine((s) => s.mapTheme)
+  const setMapTheme = useGrapevine((s) => s.setMapTheme)
+  // What the clock would pick — shown as the hint so "Auto" says what it means.
+  const autoPreset = useGrapevine(selectAutoLightPreset)
 
   const hiddenCount =
     BASEMAP_LAYERS.filter((l) => mapLayers[l.key] === false).length +
     (trafficOn ? 0 : 1)
+  // The badge counts hidden layers only, but Reset clears the lighting
+  // override too, so it has to appear when that alone is off-default.
+  const customized = hiddenCount > 0 || mapTheme !== "auto"
 
   return (
     <Popover>
@@ -48,13 +74,19 @@ export function MapLayers() {
         </button>
       </PopoverTrigger>
 
-      <PopoverContent align="end" sideOffset={8} className="w-64 p-3">
+      {/* The lighting row pushed the panel past a short viewport, so cap it at
+          the space Radix measured and let it scroll rather than run off-screen. */}
+      <PopoverContent
+        align="end"
+        sideOffset={8}
+        className="max-h-(--radix-popover-content-available-height) w-64 overflow-y-auto p-3"
+      >
         <PopoverHeader className="mb-1 flex-row items-center justify-between">
           <PopoverTitle className="flex items-center gap-2">
             <LayersIcon className="size-3.5 text-muted-foreground" />
             Map layers
           </PopoverTitle>
-          {hiddenCount > 0 && (
+          {customized && (
             <button
               type="button"
               onClick={resetMapLayers}
@@ -65,6 +97,38 @@ export function MapLayers() {
           )}
         </PopoverHeader>
 
+        <SectionLabel>Lighting</SectionLabel>
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          spacing={0}
+          value={mapTheme}
+          // Radix clears the value when the active item is pressed again; the
+          // lighting always has to be one of the three, so ignore the empty.
+          onValueChange={(v) => v && setMapTheme(v as MapTheme)}
+          className="mt-1 mb-0.5 w-full"
+        >
+          {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
+            <ToggleGroupItem
+              key={value}
+              value={value}
+              aria-label={`${label} map`}
+              className="flex-1 gap-1.5 text-xs"
+            >
+              <Icon className="size-3.5" />
+              {label}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+        <span className="px-1.5 text-xs text-muted-foreground">
+          {mapTheme === "auto"
+            ? `Follows the local clock — ${autoPreset} right now`
+            : "Pinned, ignoring the time of day"}
+        </span>
+
+        <Separator className="my-1.5" />
+        <SectionLabel>Basemap</SectionLabel>
         <div className="flex flex-col">
           {BASEMAP_LAYERS.map((l) => (
             <LayerRow
@@ -79,9 +143,7 @@ export function MapLayers() {
         </div>
 
         <Separator className="my-1.5" />
-        <span className="px-1.5 font-mono text-[10px] tracking-[0.14em] text-muted-foreground uppercase">
-          Overlays
-        </span>
+        <SectionLabel>Overlays</SectionLabel>
         <div className="flex flex-col">
           <LayerRow
             icon={TrafficConeIcon}
@@ -93,6 +155,14 @@ export function MapLayers() {
         </div>
       </PopoverContent>
     </Popover>
+  )
+}
+
+function SectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <span className="px-1.5 font-mono text-[10px] tracking-[0.14em] text-muted-foreground uppercase">
+      {children}
+    </span>
   )
 }
 

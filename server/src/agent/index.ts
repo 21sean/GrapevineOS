@@ -39,9 +39,11 @@ import {
   buildCliPrompt,
   cliChat,
   cliSupportsTools,
+  cliTranscript,
   detectProviders,
   providerInfo,
   pushCliTranscript,
+  seedCliTranscript,
   type CliProviderId,
 } from "../providers.js";
 import { store } from "../store.js";
@@ -202,6 +204,9 @@ agent.post("/api/agent/chat", async (req, res) => {
         city: settings.city,
         send,
         signal: ac.signal,
+        // Only an owned thread can be reloaded from storage; a stranger's id
+        // was already re-minted above, so this can't read someone else's chat.
+        user: ownsThread ? user : null,
         model: typeof body.model === "string" ? body.model : undefined,
         effort: isChatEffort(body.effort) ? body.effort : undefined,
       });
@@ -355,6 +360,22 @@ agent.post("/api/agent/chat", async (req, res) => {
 // CLI providers — one shot per turn through claude / codex / gemini, no tools.
 // ---------------------------------------------------------------------------
 
+/**
+ * Rebuild a thread's CLI transcript from the rows persisted for its owner.
+ * chat_messages is a flat role-tagged list; the CLI prompt wants user/assistant
+ * pairs, so unpaired tails (a blocked turn, an aborted stream) are skipped.
+ */
+async function savedExchanges(user: User, threadId: string) {
+  const rows = (await store.chatMessages(user.id, threadId).catch(() => null)) ?? [];
+  const pairs: { user: string; assistant: string }[] = [];
+  for (let i = 0; i < rows.length - 1; i++) {
+    if (rows[i].role !== "user" || rows[i + 1].role !== "assistant") continue;
+    pairs.push({ user: rows[i].content, assistant: rows[i + 1].content });
+    i++;
+  }
+  return pairs;
+}
+
 /** Returns the reply as shown to the user (for history), or null when the
  * turn never produced one (provider missing / not signed in). */
 async function cliChatTurn(opts: {
@@ -365,11 +386,14 @@ async function cliChatTurn(opts: {
   city: string;
   send: (frame: Frame) => void;
   signal: AbortSignal;
+  /** Signed-in owner of this thread, when there is one — used to reload
+   *  conversation memory this process has lost. */
+  user: User | null;
   /** Per-turn Claude Code overrides (ignored by the other CLIs). */
   model?: string;
   effort?: ChatEffort;
 }): Promise<string | null> {
-  const { provider, message, threadId, chat, city, send, signal, model, effort } = opts;
+  const { provider, message, threadId, chat, city, send, signal, user, model, effort } = opts;
   const info = providerInfo(provider);
 
   const status = (await detectProviders()).find((p) => p.id === provider);
@@ -390,30 +414,84 @@ async function cliChatTurn(opts: {
     return null;
   }
 
+  // Memory first: a restart (or reopening a thread from the history panel)
+  // leaves this process with no record of the conversation, and a follow-up
+  // like "keep searching" then reaches the model with nothing to continue from.
+  if (user && !cliTranscript(threadId).length) {
+    seedCliTranscript(threadId, await savedExchanges(user, threadId));
+  }
+
   const withTools = cliSupportsTools(provider);
-  send({
-    type: "notice",
-    code: "cli-mode",
-    message: withTools
-      ? `${info.name} answers with Grapevine's own MCP tools (event search, details, ETAs, calendar saves on the linked account) — live map pinning still needs the local Ollama agent.`
-      : `${info.name} answers from the event digest only — map pinning, ETAs, and calendar saves need the local Ollama agent.`,
-  });
+  // Once per conversation, not once per turn — repeated on every reply it was
+  // just noise stacked above the answer.
+  if (!cliTranscript(threadId).length) {
+    send({
+      type: "notice",
+      code: "cli-mode",
+      message: withTools
+        ? `${info.name} answers with Grapevine's own MCP tools (event search, details, ETAs, web discovery, calendar saves on the linked account) — live map pinning still needs the local Ollama agent.`
+        : `${info.name} answers from the event digest only — map pinning, ETAs, and calendar saves need the local Ollama agent.`,
+    });
+  }
   send({ type: "status", label: `Asking ${info.name}…` });
 
   const ctx = await buildCtx(coercePos(chat.userPos));
   const prompt = buildCliPrompt(buildSystemPrompt(ctx, chat, withTools), threadId, message, {
     tools: withTools,
   });
+
+  // Same output rail as the Ollama path, applied to the stream so an identity
+  // leak is caught mid-reply rather than after the user has read it.
+  const guard = personaGuard({ modelName: provider });
+  let shown = "";
   const { text: raw, usage } = await cliChat(
     provider,
     prompt,
     AbortSignal.any([signal, AbortSignal.timeout(CHAT_DEADLINE_MS)]),
-    { tools: withTools, model, effort },
+    {
+      tools: withTools,
+      model,
+      effort,
+      events: {
+        onText: (chunk) => {
+          if (guard.tripped) return;
+          const out = guard.push(chunk);
+          if (guard.tripped || !out) return;
+          shown += out;
+          send({ type: "delta", text: out });
+        },
+        onThinking: () => {
+          if (!shown) send({ type: "status", label: "Thinking…" });
+        },
+        onTool: (run) =>
+          send({
+            type: "tool",
+            name: run.label,
+            label: run.label,
+            state: run.state,
+            ...(run.detail && { detail: run.detail }),
+          }),
+      },
+    },
   );
 
-  // Same output rail as the Ollama path — identity leaks never reach the UI.
-  const guard = personaGuard({ modelName: provider });
-  const text = guard.push(raw) + guard.flush();
+  let text = shown;
+  if (!text.trim() && raw.trim()) {
+    // Nothing streamed: the other CLIs answer in one shot, and a Claude turn
+    // can too when the reply arrives as a single final message.
+    const out = guard.push(raw) + guard.flush();
+    if (!guard.tripped && out) {
+      text = out;
+      send({ type: "delta", text: out });
+    }
+  } else if (!guard.tripped) {
+    const rest = guard.flush();
+    if (rest && !guard.tripped) {
+      text += rest;
+      send({ type: "delta", text: rest });
+    }
+  }
+
   // Token/cost telemetry is about the call, not its content — surface it even
   // when the persona rail swaps the reply.
   if (usage) send({ type: "usage", usage });
@@ -424,11 +502,15 @@ async function cliChatTurn(opts: {
       message: "The reply broke character (model identity leak) — replaced by the persona rail.",
     });
     const refusal = personaRefusalMessage(city);
-    send({ type: "delta", text: refusal });
+    // "replace" rather than "delta": whatever streamed before the rail tripped
+    // is already on screen and has to go.
+    send({ type: "replace", text: refusal });
+    // Record the refusal, not the leak — otherwise the next turn is primed
+    // with exactly the text the rail exists to suppress.
+    pushCliTranscript(threadId, message, refusal);
     return refusal;
   }
-  send({ type: "delta", text });
-  pushCliTranscript(threadId, message, raw);
+  pushCliTranscript(threadId, message, raw || text);
   return text;
 }
 

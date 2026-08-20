@@ -9,6 +9,7 @@
 import crypto from "node:crypto";
 import { dayInTz } from "../../shared/time.js";
 import { db } from "./db.js";
+import { backfillPatch, collapseNearDuplicates, nearDuplicate } from "./dedupe.js";
 import { normalizeRRule } from "./recurrence.js";
 import type { Json, Tables, TablesInsert } from "./db-types.js";
 import { isLlmProviderId } from "./types.js";
@@ -243,15 +244,52 @@ export const store = {
     );
     // First occurrence wins within a batch, like the old in-memory dedupe.
     const seen = new Set<string>();
-    const batch = valid.filter((e) => {
+    const keyed = valid.filter((e) => {
       const k = eventKey(e, tz);
       if (seen.has(k)) return false;
       seen.add(k);
       return true;
     });
+
+    // eventKey only catches identical spellings, so a run that meets one event
+    // under two names ("Hillcrest CityFest" / "… Summer Block Party") still has
+    // two rows at this point. Fold those together before the write.
+    const { events: batch, collapsed } = collapseNearDuplicates(keyed);
+    for (const c of collapsed) {
+      console.log(`[grapevine] dedupe: "${c.dropped}" folded into "${c.kept}"`);
+    }
     if (!batch.length) return [];
 
-    const slugs = [...new Set(batch.map((e) => e.source))];
+    // Second pass, against what is already stored: a later run meeting the same
+    // event under a different name must not create a sibling row. Scoped to the
+    // batch's own start instants, so this is one narrow indexed lookup rather
+    // than a full-catalog scan.
+    const instants = [...new Set(batch.map((e) => new Date(e.start).toISOString()))];
+    const { data: sameInstant } = await db
+      .from("events")
+      .select("*")
+      .in("starts_at", instants)
+      .throwOnError();
+    const stored = sameInstant.map(rowToEvent);
+    const fresh: CityEvent[] = [];
+    for (const e of batch) {
+      // A key match is not a near-duplicate problem: the upsert below already
+      // refreshes that row in place, so let it through.
+      const twin = stored.find((s) => eventKey(s, tz) !== eventKey(e, tz) && nearDuplicate(s, e));
+      if (!twin) {
+        fresh.push(e);
+        continue;
+      }
+      // Same event, different spelling. Enrich the stored row instead of adding
+      // a second one; its title stays put because dedupe_key is derived from it
+      // on write and updateEvent cannot keep the two in step.
+      const patch = backfillPatch(twin, e);
+      if (Object.keys(patch).length) await this.updateEvent(twin.id, patch);
+      console.log(`[grapevine] dedupe: "${e.title}" already stored as "${twin.title}"`);
+    }
+    if (!fresh.length) return [];
+
+    const slugs = [...new Set(fresh.map((e) => e.source))];
     await db
       .from("sources")
       .upsert(
@@ -266,7 +304,7 @@ export const store = {
       )
       .throwOnError();
 
-    const rows = batch.map((e) => eventToRow(e, tz));
+    const rows = fresh.map((e) => eventToRow(e, tz));
     const { data } = await db
       .from("events")
       .upsert(rows, { onConflict: "dedupe_key", ignoreDuplicates: true })

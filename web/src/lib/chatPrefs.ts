@@ -13,14 +13,21 @@ import { CHAT_EFFORT_LEVELS, type ChatEffort } from "@/lib/types"
  *    doesn't lose a half-typed message.
  */
 
-/** Explicit model ids (not the CLI's short aliases — those have been observed
- *  to route "opus" to Haiku on some accounts, silently downgrading the call).
- *  "" = the CLI's own default (honours the user's `/model` choice). */
+/** Explicit model ids, not the CLI's short aliases ("opus", "sonnet") — an
+ *  alias resolves against the account and has been observed to land somewhere
+ *  other than the tier it names. "" = the CLI's own default (honours the
+ *  user's `/model` choice).
+ *
+ *  Only tiers a Pro/Max subscription actually serves belong here: a model the
+ *  account can't reach doesn't error, it quietly answers on a different one
+ *  (claude-fable-5 comes back as Opus 5), which is the silent downgrade this
+ *  list exists to avoid. The usage footer reports whichever model wrote the
+ *  reply, so add a tier here only after checking it round-trips as itself. */
 export const CLAUDE_CHAT_MODELS = [
   { value: "", label: "Default" },
-  { value: "claude-haiku-4-5-20251001", label: "Haiku 4.5" },
-  { value: "claude-sonnet-4-6", label: "Sonnet 4.6" },
-  { value: "claude-opus-4-8", label: "Opus 4.8" },
+  { value: "claude-haiku-4-5", label: "Haiku 4.5" },
+  { value: "claude-sonnet-5", label: "Sonnet 5" },
+  { value: "claude-opus-5", label: "Opus 5" },
 ] as const
 
 export const CHAT_EFFORT_OPTIONS: { value: "" | ChatEffort; label: string }[] = [

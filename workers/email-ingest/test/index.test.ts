@@ -8,6 +8,7 @@ import worker from "../src/index";
 import {
   MAX_BODY_CHARS,
   MAX_PARSE_BYTES,
+  drainDeadLetters,
   emailKey,
   insertRawEmail,
   sourceSlug,
@@ -71,6 +72,50 @@ function makeEnv(overrides: Partial<Env> & { kvPut?: ReturnType<typeof vi.fn> } 
     } as Env,
     kvPut,
   };
+}
+
+const PARKED: Record<string, string> = {
+  sdtoday_parked1: JSON.stringify({
+    to: "sdtoday@sean.ventures",
+    from: "news@sdtoday.com",
+    subject: "Parked one",
+    text: "body",
+    receivedAt: "2026-07-31T00:00:00.000Z",
+  }),
+};
+
+/** Env whose KV behaves like a real dead-letter namespace over `contents`. */
+function makeDrainEnv(contents: Record<string, string>, overrides: Partial<Env> = {}) {
+  const store = { ...contents };
+  const del = vi.fn(async (k: string) => {
+    delete store[k];
+  });
+  const env = {
+    RAW_EMAILS: {
+      list: async () => ({ keys: Object.keys(store).map((name) => ({ name })) }),
+      get: async (k: string) => store[k] ?? null,
+      put: vi.fn(async () => {}),
+      delete: del,
+    } as unknown as Env["RAW_EMAILS"],
+    SUPABASE_URL: "https://sb.test",
+    SUPABASE_SECRET_KEY: "sk-test",
+    ...overrides,
+  } as Env;
+  return { env, store, del };
+}
+
+async function runScheduled(env: Env, ctx?: unknown) {
+  const c = (ctx ?? makeCtx().ctx) as { waitUntil: (p: Promise<unknown>) => void };
+  const waited: Promise<unknown>[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  worker.scheduled!({} as any, env, {
+    waitUntil: (p: Promise<unknown>) => {
+      waited.push(p);
+      c.waitUntil(p);
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any);
+  await Promise.all(waited);
 }
 
 function makeCtx() {
@@ -146,6 +191,15 @@ describe("stripHtml", () => {
 
   it("does not double-decode", () => {
     expect(stripHtml("&amp;lt;b&amp;gt;")).toBe("&lt;b&gt;");
+  });
+
+  it("collapses the invisible spacer runs marketing templates pad with", () => {
+    const padded = "Welcome!" + "&zwnj; ".repeat(50) + "​​﻿" + "<p>Trivia 7pm</p>";
+    expect(stripHtml(padded)).toBe("Welcome! Trivia 7pm");
+  });
+
+  it("decodes the extra punctuation entities newsletters use", () => {
+    expect(stripHtml("Beer &bull; 8pm &middot; 72&deg; &raquo;")).toBe("Beer • 8pm · 72° »");
   });
 
   it("leaves unknown entities alone and survives bad code points", () => {
@@ -474,5 +528,82 @@ describe("ingest ping", () => {
     await runEmail(makeMessage(), env, ctx);
 
     expect(ctx.waitUntil).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// dead-letter drain (scheduled handler)
+// ---------------------------------------------------------------------------
+
+describe("drainDeadLetters", () => {
+  it("re-inserts a parked email and deletes it from KV", async () => {
+    const { calls } = mockFetch(new Response(null, { status: 201 }));
+    const { env, store, del } = makeDrainEnv(PARKED);
+
+    const result = await drainDeadLetters(env);
+
+    expect(result).toEqual({ drained: 1, failed: 0 });
+    expect(insertedRow(calls).email_key).toBe("sdtoday_parked1");
+    expect(insertedRow(calls).source).toBe("sdtoday");
+    expect(insertedRow(calls).subject).toBe("Parked one");
+    expect(del).toHaveBeenCalledWith("sdtoday_parked1");
+    expect(store).toEqual({});
+  });
+
+  it("keeps the copy when Supabase is still down", async () => {
+    mockFetch(new Response("nope", { status: 503 }), new Response("nope", { status: 503 }));
+    const { env, store, del } = makeDrainEnv(PARKED);
+
+    const result = await drainDeadLetters(env);
+
+    expect(result).toEqual({ drained: 0, failed: 1 });
+    expect(del).not.toHaveBeenCalled();
+    expect(Object.keys(store)).toEqual(["sdtoday_parked1"]);
+  });
+
+  it("skips unparseable values instead of deleting them", async () => {
+    const { fn } = mockFetch();
+    const { env, store, del } = makeDrainEnv({ junk: "not json" });
+
+    const result = await drainDeadLetters(env);
+
+    expect(result).toEqual({ drained: 0, failed: 1 });
+    expect(fn).not.toHaveBeenCalled();
+    expect(del).not.toHaveBeenCalled();
+    expect(Object.keys(store)).toEqual(["junk"]);
+  });
+
+  it("tolerates a key that expired between list and get", async () => {
+    const { fn } = mockFetch();
+    const { env } = makeDrainEnv({});
+    env.RAW_EMAILS.list = (async () => ({
+      keys: [{ name: "gone" }],
+    })) as unknown as Env["RAW_EMAILS"]["list"];
+
+    await expect(drainDeadLetters(env)).resolves.toEqual({ drained: 0, failed: 0 });
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("pings the ingest endpoint after a successful drain", async () => {
+    const { calls } = mockFetch(
+      new Response(null, { status: 201 }),
+      new Response(null, { status: 200 }),
+    );
+    const { env } = makeDrainEnv(PARKED, { INGEST_URL: "https://api.test/ingest" });
+
+    await drainDeadLetters(env);
+
+    expect(calls[1]!.url).toBe("https://api.test/ingest");
+  });
+
+  it("the scheduled handler runs the drain inside waitUntil", async () => {
+    mockFetch(new Response(null, { status: 201 }));
+    const { env, del } = makeDrainEnv(PARKED);
+    const { ctx } = makeCtx();
+
+    await runScheduled(env, ctx);
+
+    expect(ctx.waitUntil).toHaveBeenCalledTimes(1);
+    expect(del).toHaveBeenCalledWith("sdtoday_parked1");
   });
 });

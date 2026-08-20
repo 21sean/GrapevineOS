@@ -29,6 +29,15 @@ export function minutesUntilStart(e: CityEvent, now: Date, tz?: string): number 
 export type LightPreset = "dawn" | "day" | "dusk" | "night"
 
 /**
+ * What the user asked the basemap lighting to be: follow the clock (default),
+ * or pin it light/dark regardless of the hour.
+ */
+export type MapTheme = "auto" | "light" | "dark"
+
+/** The preset each manual override pins the basemap to. */
+export const MAP_THEME_PRESET = { light: "day", dark: "night" } as const
+
+/**
  * Pick the basemap lighting from the local hour in `tz`, so the map dawns,
  * brightens, and darkens in step with the city on screen (Pacific for San
  * Diego). h23 hour cycle keeps midnight at 0 rather than 24.

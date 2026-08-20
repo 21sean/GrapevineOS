@@ -39,8 +39,9 @@ Setup, deployment, and operations live in [SETUP.md](SETUP.md).
   fills in what the listing never tells you: whether the place is open right
   now, whether the door is step-free, whether it is known with locals, and
   an hourly busyness chart with the event's own hours lit up, so the answer
-  is "what am I walking into at 8pm" rather than a generic POI card. Lazy,
-  memory-cached, and capped to stay inside the preview quota. See
+  is "what am I walking into at 8pm" rather than a generic POI card. Lookups
+  are lazy and cached in Postgres by venue id, so a bar shared by five events
+  is fetched once and the preview quota lasts. See
   [docs/mapbox-places.md](docs/mapbox-places.md).
 - **Free end to end.** No paid APIs anywhere in the loop: free email
   routing, free workers, free-tier Postgres, cached geocoding, and
@@ -73,8 +74,11 @@ machine by default.
    `promoted` flag for pay-to-play placements. Nothing leaves your machine.
 
 The inbox is the pipeline. Each newsletter lands as one idempotent Postgres
-row the local server polls; if an insert ever fails, the worker dead-letters
-the raw email to KV so nothing is lost:
+row, and the server hears about it over Supabase Realtime and extracts on
+arrival. That subscription is an outbound websocket, so it works from a laptop
+behind NAT with nothing exposed to the internet. If an insert ever fails, the
+worker dead-letters the raw email to KV and retries it on an hourly cron until
+it lands, so an outage costs latency rather than the email:
 
 <p align="center">
   <img src="docs/email-worker.png" width="900" alt="Email ingestion pipeline: newsletters sent to a catch-all address hit Cloudflare Email Routing, then a Cloudflare Email Worker parses each message (the To: line becomes the source tag) and writes one idempotent row to the Supabase raw_emails table, which the local server polls for unprocessed rows. If the insert fails the worker dead-letters the raw email to a Cloudflare KV store with a 30-day TTL; an optional push mode can POST straight to the API for instant processing.">
@@ -252,8 +256,10 @@ what those surfaces show shapes the next reaction.
 The same framework-free executors behind the in-app agent are exposed to
 external assistants two ways:
 
-- **MCP server**: Streamable HTTP at `POST /mcp`, stateless, so it works across
-  server restarts. Claude Code, Claude Desktop, or any MCP client can search
+- **MCP server**: [FastMCP 4](https://github.com/punkpeye/fastmcp) over
+  Streamable HTTP at `POST /mcp`, stateless, so it works across server
+  restarts. Tool arguments are Zod schemas, validated before a tool runs.
+  Claude Code, Claude Desktop, or any MCP client can search
   events, look up details, get ETAs, save to the calendar, tune interests, run
   verified web discovery (`discover_events`), and manage its scheduled
   searches. Auth is **OAuth 2.1 with Supabase Auth as the authorization

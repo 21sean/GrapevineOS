@@ -330,30 +330,6 @@ export type Database = {
           },
         ]
       }
-      geocode_cache: {
-        Row: {
-          created_at: string
-          lat: number | null
-          lng: number | null
-          name: string
-          query: string
-        }
-        Insert: {
-          created_at?: string
-          lat?: number | null
-          lng?: number | null
-          name?: string
-          query: string
-        }
-        Update: {
-          created_at?: string
-          lat?: number | null
-          lng?: number | null
-          name?: string
-          query?: string
-        }
-        Relationships: []
-      }
       ingests: {
         Row: {
           added: number
@@ -384,6 +360,54 @@ export type Database = {
           received_at?: string
           source?: string
           subject?: string | null
+        }
+        Relationships: []
+      }
+      place_details: {
+        Row: {
+          details: Json | null
+          fetched_at: string
+          mapbox_id: string
+        }
+        Insert: {
+          details?: Json | null
+          fetched_at?: string
+          mapbox_id: string
+        }
+        Update: {
+          details?: Json | null
+          fetched_at?: string
+          mapbox_id?: string
+        }
+        Relationships: []
+      }
+      place_lookups: {
+        Row: {
+          created_at: string
+          kind: string
+          lat: number | null
+          lng: number | null
+          mapbox_id: string | null
+          name: string
+          query: string
+        }
+        Insert: {
+          created_at?: string
+          kind: string
+          lat?: number | null
+          lng?: number | null
+          mapbox_id?: string | null
+          name?: string
+          query: string
+        }
+        Update: {
+          created_at?: string
+          kind?: string
+          lat?: number | null
+          lng?: number | null
+          mapbox_id?: string | null
+          name?: string
+          query?: string
         }
         Relationships: []
       }
@@ -472,6 +496,7 @@ export type Database = {
       }
       raw_emails: {
         Row: {
+          attempts: number
           body_text: string
           char_count: number | null
           email_key: string
@@ -486,6 +511,7 @@ export type Database = {
           to_addr: string
         }
         Insert: {
+          attempts?: number
           body_text?: string
           char_count?: number | null
           email_key: string
@@ -500,6 +526,7 @@ export type Database = {
           to_addr?: string
         }
         Update: {
+          attempts?: number
           body_text?: string
           char_count?: number | null
           email_key?: string
@@ -640,6 +667,15 @@ export type Database = {
       google_calendar_set: {
         Args: { p_refresh_token: string; p_scope?: string; p_user_id: string }
         Returns: undefined
+      }
+      venue_cache: {
+        Args: { p_query: string }
+        Returns: {
+          details: Json | null
+          details_at: string | null
+          mapbox_id: string | null
+          resolved_at: string
+        }[]
       }
     }
     Enums: {

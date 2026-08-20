@@ -8,7 +8,7 @@
  *
  * Times are Pacific (-07:00 in July). End times marked "est." in descriptions
  * where the venue didn't publish one. Missing coordinates are geocoded via
- * Mapbox (cached in geocode_cache), never guessed.
+ * Mapbox (cached in place_lookups), never guessed.
  */
 import "dotenv/config";
 import { db } from "../src/db.js";

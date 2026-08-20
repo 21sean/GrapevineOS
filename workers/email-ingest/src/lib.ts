@@ -94,7 +94,31 @@ const NAMED_ENTITIES: Record<string, string> = {
   copy: "©",
   reg: "®",
   trade: "™",
+  bull: "•",
+  middot: "·",
+  laquo: "«",
+  raquo: "»",
+  deg: "°",
+  times: "×",
+  // Invisible spacers. Marketing templates emit these by the hundred to pad
+  // the preview text; decoding them to "" (rather than leaving the literal
+  // "&zwnj;" text) is what lets the whitespace collapse below actually
+  // collapse them.
+  zwnj: "",
+  zwj: "",
+  shy: "",
+  ensp: " ",
+  emsp: " ",
+  thinsp: " ",
 };
+
+/**
+ * Zero-width and soft-hyphen characters, which survive whitespace collapsing
+ * because they are not whitespace. A single welcome email can carry hundreds
+ * of them in a row, and every one is a character charged against the 24k-char
+ * extraction window without carrying any meaning.
+ */
+const INVISIBLES = /[\u200b-\u200d\u2060\ufeff\u00ad]/g;
 
 /** Crude but dependency-free HTML→text for emails with no text/plain part:
  * drop style/script blocks and tags, then decode the entities newsletters
@@ -106,6 +130,10 @@ export function stripHtml(html: string): string {
     .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => safeCodePoint(parseInt(hex, 16)))
     .replace(/&#(\d+);/g, (_, dec: string) => safeCodePoint(parseInt(dec, 10)))
     .replace(/&([a-z]+);/gi, (m, name: string) => NAMED_ENTITIES[name.toLowerCase()] ?? m)
+    // After entity decoding, so literal U+200B and a decoded "&zwnj;" are
+    // removed by the same pass, and before the whitespace collapse so the
+    // spacer runs they were padding actually fold into one space.
+    .replace(INVISIBLES, "")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -275,6 +303,62 @@ export async function handleEmail(
   if (pushEnabled(env.INGEST_URL)) {
     ctx.waitUntil(pingIngest(env.INGEST_URL, env.INGEST_KEY, key));
   }
+}
+
+/**
+ * Retry dead letters back into Supabase (the scheduled handler).
+ *
+ * The dead letter used to be a one-way door: a Supabase outage parked the
+ * email in KV with a 30-day TTL and a comment telling a human to run
+ * `wrangler kv key get` and re-ingest it by hand. Nobody was ever going to
+ * notice in time, so "nothing is lost" quietly expired after a month. This
+ * closes the loop — once Supabase is reachable again the parked emails insert
+ * themselves and are deleted from KV.
+ *
+ * Bounded per run so a large backlog can't blow the CPU budget; whatever is
+ * left waits for the next tick. Deletion only happens after a successful
+ * insert, so a crash mid-drain re-tries rather than loses. The insert is
+ * idempotent on email_key, so a redelivered email that already made it in is
+ * a no-op followed by a KV cleanup — exactly what we want.
+ */
+export const DRAIN_LIMIT = 100;
+
+export async function drainDeadLetters(env: Env): Promise<{ drained: number; failed: number }> {
+  let drained = 0;
+  let failed = 0;
+  const listed = await env.RAW_EMAILS.list({ limit: DRAIN_LIMIT });
+  for (const entry of listed.keys) {
+    const raw = await env.RAW_EMAILS.get(entry.name);
+    if (raw === null) continue; // expired between list and get
+    let payload: EmailPayload;
+    try {
+      payload = JSON.parse(raw) as EmailPayload;
+    } catch {
+      // Not a dead letter we wrote (or corrupt) — leave it for a human rather
+      // than deleting data we can't identify.
+      console.log(`dead-letter ${entry.name} is not valid JSON: skipping`);
+      failed++;
+      continue;
+    }
+    try {
+      await insertRawEmail(env, entry.name, payload);
+      await env.RAW_EMAILS.delete(entry.name);
+      drained++;
+    } catch (err) {
+      // Still broken. Keep the copy and try again next tick.
+      console.log(`dead-letter ${entry.name} still failing: ${err}`);
+      failed++;
+    }
+  }
+  if (drained || failed) {
+    console.log(`dead-letter drain: ${drained} recovered, ${failed} still parked`);
+  }
+  // Recovered rows are new work — wake the processor the same way an inbound
+  // email does. (Realtime already covers this; the ping is for tunnel setups.)
+  if (drained && pushEnabled(env.INGEST_URL)) {
+    await pingIngest(env.INGEST_URL, env.INGEST_KEY, `drain:${drained}`);
+  }
+  return { drained, failed };
 }
 
 async function pingIngest(url: string, ingestKey: string | undefined, key: string): Promise<void> {

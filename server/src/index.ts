@@ -14,7 +14,7 @@ import {
   wantsCommit,
 } from "./discovery.js";
 import { backfillImages } from "./images.js";
-import { mcp, mcpAuthMode } from "./mcp.js";
+import { mcp, mcpAuthMode, startMcpServer } from "./mcp.js";
 import { detectProviders } from "./providers.js";
 import { push, startPushScheduler } from "./push.js";
 import { startRetentionSweep } from "./retention.js";
@@ -23,12 +23,7 @@ import { listInstalled, ollamaBase } from "./ollama.js";
 import { catalog, logo } from "./catalog.js";
 import { systemInfo } from "./system.js";
 import { eta, isochrone } from "./mapbox.js";
-import {
-  PlacesQuotaError,
-  PlacesScopeError,
-  placesBudget,
-  venueDetails,
-} from "./places.js";
+import { PlacesQuotaError, PlacesScopeError, venueDetails } from "./places.js";
 import { extractEvents, rateEvent } from "./ingest.js";
 import { kickInbox, listInbox, reprocessInbox, startInboxPoll } from "./inbox.js";
 import { commitIngest } from "./pipeline.js";
@@ -38,7 +33,10 @@ const app = express();
 // Behind a tunnel/reverse proxy (the MCP connector path), X-Forwarded-Proto
 // must win so OAuth discovery URLs come out https.
 app.set("trust proxy", true);
-app.use(express.json({ limit: "2mb" }));
+// /mcp is reverse-proxied to the FastMCP listener verbatim, so its JSON-RPC
+// body must stay an unread stream — everything else gets the usual parser.
+const parseJson = express.json({ limit: "2mb" });
+app.use((req, res, next) => (req.path === "/mcp" ? next() : parseJson(req, res, next)));
 
 // ---------- auth (Google sign-in, sessions, /api/me) ----------
 
@@ -237,19 +235,17 @@ app.get("/api/isochrone", async (req, res) => {
  * Keyed off an event id rather than a free-text venue on purpose — an open
  * ?venue= proxy would let anyone spend our 1,000-record monthly preview quota
  * on arbitrary lookups. This way only venues already in the map can be asked
- * about, and the answer is cached in memory (see places.ts on why not on disk).
+ * about, and the answer comes from the Postgres venue cache when it's warm
+ * (see places.ts).
  */
 app.get("/api/events/:id/venue", async (req, res) => {
   const event = await store.eventById(req.params.id);
   if (!event) return res.status(404).json({ error: "unknown event" });
   try {
-    const venue = await venueDetails(event.venue, [event.lng, event.lat]);
-    // The preview quota is small and otherwise invisible, so every answer
-    // carries the running count — `curl`ing one venue tells you where you are.
-    res.json({ venue, budget: placesBudget() });
+    res.json({ venue: await venueDetails(event.venue, [event.lng, event.lat]) });
   } catch (err) {
-    // A missing scope or a spent budget is a configuration answer, not a 502:
-    // the panel just hides the venue card and the admin readout explains why.
+    // A missing scope or an exhausted quota is a configuration answer, not a
+    // 502: the panel just hides the venue card, and the message says why.
     if (err instanceof PlacesScopeError || err instanceof PlacesQuotaError) {
       return res.status(200).json({ venue: null, unavailable: String(err.message) });
     }
@@ -489,4 +485,7 @@ app.listen(port, () => {
   startDiscoveryScheduler();
   startRetentionSweep();
   warmupGuardrails();
+  startMcpServer().catch((err) =>
+    console.error("[grapevine] mcp failed to start:", String(err).slice(0, 300)),
+  );
 });

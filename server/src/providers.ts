@@ -102,8 +102,11 @@ interface RunResult {
   stderr: string;
 }
 
-/** shell:true skips arg escaping — quote anything with whitespace ourselves. */
+/** shell:true skips arg escaping — quote anything with whitespace ourselves.
+ *  An empty argument must be quoted too, or the shell drops it entirely (that
+ *  would silently turn `--tools ""` into a dangling flag). */
 function shellArg(s: string): string {
+  if (s === "") return '""';
   return /[\s"]/.test(s) ? `"${s.replace(/"/g, '\\"')}"` : s;
 }
 
@@ -112,7 +115,13 @@ const viaShell = process.platform === "win32";
 function run(
   bin: string,
   args: string[],
-  opts: { stdin?: string; timeoutMs: number; signal?: AbortSignal },
+  opts: {
+    stdin?: string;
+    timeoutMs: number;
+    signal?: AbortSignal;
+    /** Consume stdout line by line instead of buffering it (NDJSON streams). */
+    onLine?: (line: string) => void;
+  },
 ): Promise<RunResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(bin, viaShell ? args.map(shellArg) : args, {
@@ -140,10 +149,27 @@ function run(
       }
     }
 
-    child.stdout.on("data", (d) => (stdout += d));
+    let pending = "";
+    child.stdout.on("data", (d) => {
+      if (!opts.onLine) {
+        stdout += d;
+        return;
+      }
+      pending += d;
+      for (let nl = pending.indexOf("\n"); nl >= 0; nl = pending.indexOf("\n")) {
+        const line = pending.slice(0, nl).trim();
+        pending = pending.slice(nl + 1);
+        if (line) opts.onLine(line);
+      }
+    });
     child.stderr.on("data", (d) => (stderr += d));
     child.on("error", (err) => finish(err));
-    child.on("close", (code) => finish(undefined, { code, stdout, stderr }));
+    child.on("close", (code) => {
+      // A stream that ends without a trailing newline still has one last line.
+      if (opts.onLine && pending.trim()) opts.onLine(pending.trim());
+      pending = "";
+      finish(undefined, { code, stdout, stderr });
+    });
     if (opts.stdin !== undefined) {
       child.stdin.on("error", () => {}); // EPIPE if the CLI exits early
       child.stdin.write(opts.stdin);
@@ -282,6 +308,21 @@ export interface CliChatResult {
   usage?: ChatUsage;
 }
 
+/**
+ * Live progress from a CLI turn. Claude Code is the only provider that can
+ * report it (`--output-format stream-json`); supplying `onText` is what
+ * switches that mode on. Without it a turn is a single blocking call, which is
+ * a long stare at a spinner when the model is also making tool calls.
+ */
+export interface CliStreamEvents {
+  /** Visible answer text, as it arrives. */
+  onText?: (chunk: string) => void;
+  /** First reasoning token — the UI can say "thinking" before any text lands. */
+  onThinking?: () => void;
+  /** One "start" per tool call, one "done" when its result comes back. */
+  onTool?: (run: { label: string; state: "start" | "done"; detail?: string }) => void;
+}
+
 /** Guard the `--model` value before it reaches an argv: it is spawned under a
  *  shell on Windows, so a stray metacharacter would otherwise break out. Model
  *  ids are `[a-z0-9._:-]` only, so anything else is rejected (falls back to the
@@ -291,58 +332,71 @@ function safeModel(model: string | undefined): string | null {
   return m && /^[\w.:-]+$/.test(m) ? m : null;
 }
 
-/** Pull per-call token + cost telemetry out of the `claude -p --output-format
- *  json` envelope. Tokens come from the top-level `usage` block (raw
- *  Anthropic-shaped counts), cost from `total_cost_usd`, both falling back to
- *  the CLI-side `modelUsage[<model>]` aggregation on older envelope shapes. */
-function extractCliUsage(env: Record<string, unknown>): ChatUsage | undefined {
+/** Dated snapshot ids (claude-haiku-4-5-20251001) label as their alias. */
+function canonicalModelId(model: string | undefined): string | undefined {
+  return model?.replace(/-\d{8}$/, "");
+}
+
+/**
+ * Pull per-call token + cost telemetry out of a `claude -p` envelope — the
+ * `--output-format json` result object and the final `result` line of a
+ * stream-json run share this shape.
+ *
+ * Two things the literal reading gets wrong:
+ *  - `usage.input_tokens` counts only the *uncached* prefix, so a turn that
+ *    reads 30k tokens from cache reports single digits, which reads as
+ *    nonsense next to the cost. What we show is fresh + cache read + cache
+ *    write: what the turn actually processed.
+ *  - The CLI bills small side calls (topic titles, routing) to a cheaper
+ *    model, and those can carry more *input* tokens than the real turn does
+ *    once caching is in play — ranking `modelUsage` by total tokens therefore
+ *    picks the side call and mislabels the reply. Prefer the model the stream
+ *    reported on its assistant messages, then the entry that wrote the most
+ *    output.
+ */
+function extractCliUsage(
+  env: Record<string, unknown>,
+  answeringModel?: string,
+): ChatUsage | undefined {
+  const num = (v: unknown): number | undefined =>
+    typeof v === "number" && Number.isFinite(v) ? v : undefined;
+
   const usageBlock =
     env.usage && typeof env.usage === "object" ? (env.usage as Record<string, unknown>) : null;
   const modelUsage =
     env.modelUsage && typeof env.modelUsage === "object"
-      ? (env.modelUsage as Record<string, unknown>)
+      ? (env.modelUsage as Record<string, Record<string, unknown>>)
       : null;
-  const firstModelUsage = modelUsage
-    ? (Object.values(modelUsage).find((v) => v && typeof v === "object") as
-        | Record<string, unknown>
-        | undefined)
-    : undefined;
 
-  const numOr = (v: unknown, fallback?: number): number | undefined =>
-    typeof v === "number" && Number.isFinite(v) ? v : fallback;
-
-  const inputTokens = numOr(usageBlock?.input_tokens, numOr(firstModelUsage?.inputTokens));
-  const outputTokens = numOr(usageBlock?.output_tokens, numOr(firstModelUsage?.outputTokens));
-  if (inputTokens === undefined && outputTokens === undefined) return undefined;
-
-  // Prefer the top-level `model`; else the busiest `modelUsage` entry (the CLI
-  // also bills a tiny Haiku routing call, so pick by token volume, not order).
-  let model = typeof env.model === "string" ? env.model : undefined;
-  if (!model && modelUsage) {
-    let best = -1;
-    for (const [k, v] of Object.entries(modelUsage)) {
-      if (!v || typeof v !== "object") continue;
-      const e = v as Record<string, unknown>;
-      const total = (numOr(e.inputTokens) ?? 0) + (numOr(e.outputTokens) ?? 0);
-      if (total > best) {
-        best = total;
-        model = k;
-      }
+  let model = answeringModel ?? (typeof env.model === "string" ? env.model : undefined);
+  let busiest: Record<string, unknown> | undefined;
+  if (modelUsage) {
+    let mostOutput = -1;
+    for (const [name, entry] of Object.entries(modelUsage)) {
+      if (!entry || typeof entry !== "object") continue;
+      const out = num(entry.outputTokens) ?? 0;
+      if (out <= mostOutput) continue;
+      mostOutput = out;
+      busiest = entry;
+      if (!answeringModel) model = name;
     }
   }
+
+  const fresh = num(usageBlock?.input_tokens) ?? num(busiest?.inputTokens);
+  const outputTokens = num(usageBlock?.output_tokens) ?? num(busiest?.outputTokens);
+  if (fresh === undefined && outputTokens === undefined) return undefined;
+  const cacheRead =
+    num(usageBlock?.cache_read_input_tokens) ?? num(busiest?.cacheReadInputTokens);
+  const cacheWrite =
+    num(usageBlock?.cache_creation_input_tokens) ?? num(busiest?.cacheCreationInputTokens);
+
   return {
-    inputTokens: inputTokens ?? 0,
+    inputTokens: (fresh ?? 0) + (cacheRead ?? 0) + (cacheWrite ?? 0),
     outputTokens: outputTokens ?? 0,
-    cacheReadInputTokens: numOr(
-      usageBlock?.cache_read_input_tokens,
-      numOr(firstModelUsage?.cacheReadInputTokens),
-    ),
-    cacheCreationInputTokens: numOr(
-      usageBlock?.cache_creation_input_tokens,
-      numOr(firstModelUsage?.cacheCreationInputTokens),
-    ),
-    costUSD: numOr(env.total_cost_usd, numOr(firstModelUsage?.costUSD)),
-    model,
+    cacheReadInputTokens: cacheRead,
+    cacheCreationInputTokens: cacheWrite,
+    costUSD: num(env.total_cost_usd) ?? num(busiest?.costUSD),
+    model: canonicalModelId(model),
   };
 }
 
@@ -360,6 +414,107 @@ function parseClaudeEnvelope(stdout: string): CliChatResult {
   }
 }
 
+/** "mcp__grapevine__search_events" reads as "search_events" in the UI. */
+function toolLabel(name: unknown): string {
+  return String(name ?? "tool").replace(/^mcp__[^_]+__/, "");
+}
+
+/** One identifying argument, so two searches in a row don't look identical. */
+function toolDetail(input: unknown): string | undefined {
+  if (!input || typeof input !== "object") return undefined;
+  const o = input as Record<string, unknown>;
+  const hint = o.query ?? o.event_id ?? o.id ?? o.near;
+  return typeof hint === "string" && hint ? hint.slice(0, 60) : undefined;
+}
+
+/**
+ * A Claude Code turn read as it happens: `--output-format stream-json` emits
+ * one JSON object per line, and `--include-partial-messages` adds the token
+ * deltas. Text goes out as it arrives, tool calls surface as they start and
+ * finish, and the closing `result` line carries the authoritative answer plus
+ * the usage envelope.
+ */
+async function claudeStream(
+  args: string[],
+  prompt: string,
+  signal: AbortSignal | undefined,
+  events: CliStreamEvents,
+): Promise<CliChatResult> {
+  let streamed = "";
+  let finalText: string | undefined;
+  let answeringModel: string | undefined;
+  let usage: ChatUsage | undefined;
+  let failure: string | undefined;
+  let announcedThinking = false;
+  // tool_use id -> label, so the "done" event can name the run it closes.
+  const openTools = new Map<string, string>();
+
+  const onLine = (line: string) => {
+    let msg: any;
+    try {
+      msg = JSON.parse(line);
+    } catch {
+      return; // non-JSON chatter (progress banners) is not ours to read
+    }
+    switch (msg?.type) {
+      case "stream_event": {
+        const delta = msg.event?.type === "content_block_delta" ? msg.event.delta : null;
+        if (delta?.type === "text_delta" && typeof delta.text === "string") {
+          streamed += delta.text;
+          events.onText?.(delta.text);
+        } else if (delta?.type === "thinking_delta" && !announcedThinking) {
+          announcedThinking = true;
+          events.onThinking?.();
+        }
+        return;
+      }
+      case "assistant": {
+        const message = msg.message ?? {};
+        if (typeof message.model === "string") answeringModel = message.model;
+        // Assistant frames repeat as the message grows — dedupe on block id.
+        for (const block of message.content ?? []) {
+          if (block?.type !== "tool_use" || openTools.has(block.id)) continue;
+          const label = toolLabel(block.name);
+          openTools.set(block.id, label);
+          events.onTool?.({ label, state: "start", detail: toolDetail(block.input) });
+        }
+        return;
+      }
+      case "user": {
+        for (const block of msg.message?.content ?? []) {
+          if (block?.type !== "tool_result") continue;
+          const label = openTools.get(block.tool_use_id);
+          if (!label) continue;
+          openTools.delete(block.tool_use_id);
+          events.onTool?.({
+            label,
+            state: "done",
+            ...(block.is_error && { detail: "failed" }),
+          });
+        }
+        return;
+      }
+      case "result": {
+        if (typeof msg.result === "string") finalText = msg.result;
+        if (msg.is_error) failure = String(msg.result ?? msg.subtype ?? "unknown error");
+        usage = extractCliUsage(msg, answeringModel);
+        return;
+      }
+    }
+  };
+
+  const r = await run("claude", args, {
+    stdin: prompt,
+    timeoutMs: CLI_TIMEOUT_MS,
+    signal,
+    onLine,
+  });
+  if (failure) throw new Error(`claude failed: ${failure.slice(0, 300)}`);
+  if (r.code !== 0) throw cliError("claude", r);
+  // Deltas are the live view; `result` is the answer the CLI stands behind.
+  return { text: (finalText ?? streamed).trim(), usage };
+}
+
 /** Where a CLI on this machine reaches the MCP server (same express app). */
 function mcpEndpoint(): string {
   const base = process.env.MCP_PUBLIC_URL ?? `http://localhost:${process.env.PORT ?? 8787}`;
@@ -370,7 +525,13 @@ export async function cliChat(
   id: CliProviderId,
   prompt: string,
   signal?: AbortSignal,
-  opts?: { tools?: boolean; model?: string; effort?: ChatEffort },
+  opts?: {
+    tools?: boolean;
+    model?: string;
+    effort?: ChatEffort;
+    /** Supply onText to stream the turn instead of blocking on it. */
+    events?: CliStreamEvents;
+  },
 ): Promise<CliChatResult> {
   const tools = opts?.tools ?? cliSupportsTools(id);
   switch (id) {
@@ -407,14 +568,25 @@ export async function cliChat(
         ];
       }
       // --model / --effort are optional; empty lets the CLI use whatever the
-      // user's subscription defaults to. --output-format json gives us the
-      // resolved model + token/cost telemetry (the `usage` envelope).
+      // user's subscription defaults to.
       const model = safeModel(opts?.model);
       const args = ["-p"];
       if (model) args.push("--model", model);
       if (opts?.effort && isChatEffort(opts.effort)) args.push("--effort", opts.effort);
-      args.push("--output-format", "json", ...mcpArgs);
+      // Built-in tools stay off. The concierge's whole toolbox is Grapevine's
+      // own MCP server, and leaving Bash/Read/Write enabled would hand a chat
+      // turn the run of the server machine — while also tempting the model to
+      // answer event questions with a generic web search instead of
+      // discover_events, which is what actually adds them to the catalog.
+      args.push("--tools", "");
+      // stream-json gives token deltas and tool events; plain json is one
+      // blocking call, which is all the extraction pipeline needs.
+      const streaming = !!opts?.events?.onText;
+      args.push("--output-format", streaming ? "stream-json" : "json");
+      if (streaming) args.push("--include-partial-messages", "--verbose");
+      args.push(...mcpArgs);
       try {
+        if (streaming) return await claudeStream(args, prompt, signal, opts!.events!);
         const r = await run("claude", args, {
           stdin: prompt,
           timeoutMs: CLI_TIMEOUT_MS,
@@ -528,6 +700,19 @@ export function cliTranscript(threadId: string): Exchange[] {
   return transcripts.get(threadId) ?? [];
 }
 
+/**
+ * Prime a thread from persisted history. CLI providers have no server-side
+ * checkpointer, so this map is their only memory — and it dies with the
+ * process. Without a reseed, a server restart (or reopening a saved
+ * conversation from the history panel) drops every earlier turn, and a
+ * follow-up like "keep searching" reaches the model with nothing to continue
+ * from. No-op once the thread has live turns.
+ */
+export function seedCliTranscript(threadId: string, history: Exchange[]): void {
+  if (transcripts.has(threadId) || !history.length) return;
+  transcripts.set(threadId, history.slice(-MAX_EXCHANGES));
+}
+
 export function pushCliTranscript(threadId: string, user: string, assistant: string): void {
   const list = transcripts.get(threadId) ?? [];
   list.push({ user, assistant });
@@ -543,15 +728,25 @@ export function pushCliTranscript(threadId: string, user: string, assistant: str
 
 /** Reality check for CLI sessions that get MCP tools: the in-app UI tools the
  * system prompt describes don't exist there — remap to the MCP toolbox. */
-const CLI_TOOLS_NOTE = `Tools in this session: you are connected to the "grapevine" MCP server —
+const CLI_TOOLS_NOTE = `Tools in this session: the "grapevine" MCP server is your entire toolbox —
 search_events, get_event, get_eta, list_saved_events, save_event, unsave_event,
-set_event_rarity, update_interests. The in-app tools mentioned above
-(show_on_map, set_filters, propose_calendar, save_calendar, search_web,
-read_page) do NOT exist here: never claim to have pinned the map or changed
-filters. Recommend events in text with the [Title](event:id) grammar, use
-search_events/get_event beyond the digest, get_eta for travel questions, and
-save_event/unsave_event only when the user explicitly asks (saves land on the
-linked Grapevine account).`;
+set_event_rarity, discover_events, list_scheduled_searches, schedule_search,
+unschedule_search, update_interests. You have no web search, no shell, and no
+file access, so never claim to have browsed a site directly.
+
+The in-app tools mentioned above (show_on_map, set_filters, propose_calendar,
+save_calendar, search_web, read_page) do NOT exist here: never claim to have
+pinned the map or changed filters. Recommend events in text with the
+[Title](event:id) grammar, use search_events/get_event beyond the digest, and
+get_eta for travel questions.
+
+When the user wants events that aren't in the catalog yet — "find more", "keep
+searching", "add events" — call discover_events. It searches the open web and
+verifies each candidate against its source page before writing. It dry-runs by
+default: report what it found, then call it again with dry_run:false once the
+user confirms. Offer schedule_search when they want an ongoing watch. Writes
+(save_event, unsave_event, update_interests, committing discoveries) land on
+the linked Grapevine account, so only make them when the user asks.`;
 
 /** System prompt + rolling transcript + the new message, as one CLI prompt. */
 export function buildCliPrompt(

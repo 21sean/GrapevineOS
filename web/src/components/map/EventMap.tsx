@@ -172,7 +172,8 @@ export function EventMap() {
 
   // Map lighting tracks the wall clock in the city's own timezone — Pacific for
   // San Diego — so the basemap moves through dawn/day/dusk/night with real time
-  // instead of sitting on a fixed preset. The clock ticks every 30s, but the
+  // instead of sitting on a fixed preset, unless the user pinned light or dark
+  // in the map-layers panel (store.mapTheme). The clock ticks every 30s, but the
   // selector yields the same string until the hour crosses a boundary, so this
   // component doesn't re-render for it. Falls back to LA time until settings
   // arrive.
