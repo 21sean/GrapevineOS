@@ -1,6 +1,4 @@
-# Grapevine
-
-*Creator, Agentic Local-Events Platform*
+# Grapevine *Agentic Local-Events Platform*
 
 A live 3D map of the San Diego events locals actually go to. Free local
 newsletters are the data source, a local LLM is the parser and critic, and the
