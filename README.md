@@ -1,15 +1,11 @@
 # Grapevine
 
-**A live 3D map of the San Diego events locals actually go to.**
+*Creator, Agentic Local-Events Platform*
 
-Ticketing sites are flooded with promoted, overpriced junk. Grapevine flips the
-model: free local newsletters are the data source, a local LLM is the parser
-and critic, and the map only surfaces what has real buzz. The parades, 5Ks,
-block parties, and free shows that never make it onto Eventbrite's front page.
-
-Everything runs locally and on free tiers. Ollama does the language work,
-Cloudflare Email Routing feeds the pipeline, Supabase stores the data, and
-Mapbox draws the map. Nothing leaves your machine by default.
+A live 3D map of the San Diego events locals actually go to. Free local
+newsletters are the data source, a local LLM is the parser and critic, and the
+map only surfaces what has real buzz. Everything runs locally and on free
+tiers, so nothing leaves your machine by default.
 
 Setup, deployment, and operations live in [SETUP.md](SETUP.md).
 
