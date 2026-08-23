@@ -184,8 +184,14 @@ export const HARDENING: { title: string; items: HardeningNote[] }[] = [
       {
         risk: "The red team runs without tools.",
         handled:
-          "Simulated conversations bind no toolbox: a red-team run is about what the model says, and tool calls against a frozen fixture catalog would spend the whole budget on ETA lookups. The tool-borne attack path is the content rail's, covered by the calibration corpus and by the envelope cases in the guardrails suite instead.",
+          "Adversarial conversations bind no toolbox: a red-team run is about what the model says, and tool calls against a frozen fixture catalog would spend the whole budget on ETA lookups. The tool-borne attack path is the content rail's, covered by the calibration corpus and by the envelope cases in the guardrails suite instead.",
         where: "server/src/evals/redteam.ts",
+      },
+      {
+        risk: "A hand-written attack ladder only finds the failures whoever wrote it imagined.",
+        handled:
+          "The attacks are PyRIT's — Microsoft's Crescendo and red-teaming loops, with their adversarial prompts, their backtracking on refusal, and their scorers. We supply the target adapter and the objectives that are specific to this app, and nothing else. It runs entirely on the local Ollama daemon; no hosted red-team service is involved.",
+        where: "server/redteam/run_attack.py",
       },
     ],
   },

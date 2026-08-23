@@ -1,0 +1,13 @@
+# PyRIT drives the multi-turn red team suite (server/src/evals/suites/guardrails-redteam.ts).
+#
+#   python -m venv server/redteam/.venv
+#   server/redteam/.venv/Scripts/pip install -r server/redteam/requirements.txt   # Windows
+#   server/redteam/.venv/bin/pip install -r server/redteam/requirements.txt       # macOS/Linux
+#
+# The suite skips with a reason when this isn't installed, so it is optional.
+# Set REDTEAM_PYTHON to point at a different interpreter.
+#
+# Pinned rather than floated: an attack framework changing its escalation or
+# its scoring between runs would move the eval's numbers with no commit to
+# explain them.
+pyrit==1.0.1

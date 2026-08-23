@@ -24,3 +24,5 @@ server/.evals/
 
 # Local PyRIT virtualenv for the red-team suite.
 server/redteam/.venv/
+__pycache__/
+*.pyc
