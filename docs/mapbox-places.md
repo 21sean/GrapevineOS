@@ -109,7 +109,7 @@ for them, and letting them roam would put a POI across town on the card.
 ## Where the cache lives
 
 Both hops are cached in Postgres, in two tables that also carry the geocoding
-cache (`supabase/migrations/20260729140000_places_cache.sql`):
+cache (`supabase/migrations/20260729170913_places_cache.sql`):
 
 | Table | Key | Holds |
 |---|---|---|

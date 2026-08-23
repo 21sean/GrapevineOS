@@ -153,7 +153,7 @@ async function tick(): Promise<void> {
         console.log(
           "[grapevine] inbox: found unprocessed mail that realtime never announced — " +
             "the subscription is open but silent. Apply " +
-            "supabase/migrations/20260731160000_raw_emails_realtime.sql " +
+            "supabase/migrations/20260731191301_raw_emails_realtime.sql " +
             "(raw_emails must be in the supabase_realtime publication).",
         );
       }
