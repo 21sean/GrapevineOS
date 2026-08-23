@@ -28,7 +28,6 @@ import {
   type AgentCtx,
   type ChatContext,
 } from "./context.js";
-import { scanText } from "./guardrails.js";
 import { readPage, webSearch } from "./websearch.js";
 
 /** Push a frame onto the "custom" stream (no-op outside a streamed run). */
@@ -99,27 +98,14 @@ export function makeTools(ctx: AgentCtx, chat: ChatContext) {
   );
 
   const webSearchTool = tool(
-    async (input, config) => {
-      const result = await webSearch(input.query, { limit: input.limit, signal: config?.signal });
-      // Content rail: web text is untrusted — drop hits that read like
-      // indirect prompt injection before they enter the model's context.
-      if ("results" in result) {
-        const verdicts = await Promise.all(
-          result.results.map((hit) => scanText(`${hit.title}\n${hit.snippet}`)),
-        );
-        const results = result.results.filter((_, i) => !verdicts[i].malicious);
-        const dropped = result.results.length - results.length;
-        return JSON.stringify({
-          ...result,
-          count: results.length,
-          results,
-          ...(dropped && {
-            note: `${dropped} result(s) withheld by guardrails (suspected prompt injection)`,
-          }),
-        });
-      }
-      return JSON.stringify(result);
-    },
+    // Returns what the web said, verbatim. The content rail is a graph node
+    // now (graph.ts): it scans this result before the model is called again,
+    // so every web-facing tool is covered by one rail instead of each tool
+    // remembering to call the classifier itself.
+    async (input, config) =>
+      JSON.stringify(
+        await webSearch(input.query, { limit: input.limit, signal: config?.signal }),
+      ),
     {
       name: "search_web",
       description:
@@ -132,17 +118,8 @@ export function makeTools(ctx: AgentCtx, chat: ChatContext) {
   );
 
   const readPageTool = tool(
-    async (input, config) => {
-      const result = await readPage(input.url, { signal: config?.signal });
-      if ("text" in result) {
-        const verdict = await scanText(result.text);
-        if (verdict.malicious)
-          return JSON.stringify({
-            error: `page withheld by guardrails — its content looks like a prompt-injection attempt (score ${verdict.score.toFixed(2)}). Do not retry this url.`,
-          });
-      }
-      return JSON.stringify(result);
-    },
+    // Untrusted by definition; scanned by the content_rail node (graph.ts).
+    async (input, config) => JSON.stringify(await readPage(input.url, { signal: config?.signal })),
     {
       name: "read_page",
       description:

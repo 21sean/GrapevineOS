@@ -8,6 +8,14 @@ import type {
   CliProviderStatus,
   DiscoveryRunResult,
   DiscoverySearch,
+  EvalCatalog,
+  EvalFrame,
+  EvalRun,
+  GuardrailDashboard,
+  GuardrailLabel,
+  GuardrailRail,
+  GuardrailScan,
+  GuardrailMode,
   Filters,
   GcalEvent,
   GcalEventPatch,
@@ -477,4 +485,94 @@ export const api = {
     fetch(`/api/discovery/searches/${encodeURIComponent(id)}/run`, {
       method: "POST",
     }).then((r) => json<DiscoveryRunResult>(r)),
+
+  // ---------- evals ----------
+
+  evals: () => fetch("/api/evals").then((r) => json<EvalCatalog>(r)),
+
+  evalHistory: () =>
+    fetch("/api/evals/history").then((r) => json<{ runs: EvalRun[] }>(r)),
+
+  /**
+   * Streams one NDJSON frame per case as it finishes, so a long suite shows
+   * progress instead of a spinner. Abort via `signal`; the server stops
+   * between cases and does not record a partial run to history.
+   */
+  async runEvals(
+    suites: string[] | undefined,
+    onFrame: (frame: EvalFrame) => void,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const res = await fetch("/api/evals/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(suites?.length ? { suites } : {}),
+      signal,
+    })
+    if (!res.ok || !res.body) throw new Error(await res.text())
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ""
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split("\n")
+      buffer = lines.pop() ?? ""
+      for (const line of lines) {
+        if (!line.trim()) continue
+        try {
+          onFrame(JSON.parse(line) as EvalFrame)
+        } catch (err) {
+          if (err instanceof SyntaxError) continue
+          throw err
+        }
+      }
+    }
+  },
+
+  // ---------- guardrails ----------
+
+  /**
+   * The whole dashboard in one request. `window` is the comparison period:
+   * the server also returns the equivalent window before it, which is what
+   * makes the drift number a comparison rather than a vibe.
+   */
+  guardrails: (windowDays = 7) =>
+    fetch(`/api/guardrails?window=${windowDays}`).then((r) => json<GuardrailDashboard>(r)),
+
+  /** The review queue. Highest-scoring unlabelled decisions by default. */
+  guardrailScans: (params: {
+    rail?: GuardrailRail
+    blocked?: boolean
+    unlabelled?: boolean
+    minScore?: number
+    order?: "recent" | "score"
+    limit?: number
+  } = {}) => {
+    const q = new URLSearchParams()
+    if (params.rail) q.set("rail", params.rail)
+    if (params.blocked !== undefined) q.set("blocked", String(params.blocked))
+    if (params.unlabelled) q.set("unlabelled", "true")
+    if (params.minScore !== undefined) q.set("min_score", String(params.minScore))
+    if (params.order) q.set("order", params.order)
+    if (params.limit) q.set("limit", String(params.limit))
+    return fetch(`/api/guardrails/scans?${q}`).then((r) => json<{ scans: GuardrailScan[] }>(r))
+  },
+
+  /** Record a judgement. `null` clears one. */
+  labelGuardrailScan: (id: number, label: GuardrailLabel | null) =>
+    fetch(`/api/guardrails/scans/${id}/label`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label }),
+    }).then((r) => json<{ ok: true }>(r)),
+
+  /** Retune. Returns what is actually in force, which env can still override. */
+  setGuardrailConfig: (patch: { mode?: GuardrailMode; threshold?: number }) =>
+    fetch("/api/guardrails/config", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    }).then((r) => json<{ mode: GuardrailMode; threshold: number; note?: string }>(r)),
 }

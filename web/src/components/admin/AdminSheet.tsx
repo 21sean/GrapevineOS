@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/sheet"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DiscoveryTab } from "@/components/admin/DiscoveryTab"
+import { EvalsTab } from "@/components/admin/EvalsTab"
+import { GuardrailsTab } from "@/components/admin/GuardrailsTab"
 import { InboxTab } from "@/components/admin/InboxTab"
 import { ModelsTab } from "@/components/admin/ModelsTab"
 import { ProvidersTab } from "@/components/admin/ProvidersTab"
@@ -25,6 +27,8 @@ const TABS = [
   { value: "discover", label: "Discover", Panel: DiscoveryTab },
   { value: "inbox", label: "Inbox", Panel: InboxTab },
   { value: "sources", label: "Sources", Panel: SourcesTab },
+  { value: "evals", label: "Evals", Panel: EvalsTab },
+  { value: "guardrails", label: "Guardrails", Panel: GuardrailsTab },
 ] as const
 
 export function AdminSheet() {

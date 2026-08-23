@@ -12,7 +12,7 @@ import { db } from "./db.js";
 import { backfillPatch, collapseNearDuplicates, nearDuplicate } from "./dedupe.js";
 import { normalizeRRule } from "./recurrence.js";
 import type { Json, Tables, TablesInsert } from "./db-types.js";
-import { isLlmProviderId } from "./types.js";
+import { isGuardrailMode, isLlmProviderId } from "./types.js";
 import type {
   CalendarEntry,
   ChatMessage,
@@ -20,6 +20,9 @@ import type {
   CityEvent,
   DiscoverySearch,
   GoogleCalendarGrant,
+  GuardrailLabel,
+  GuardrailRail,
+  GuardrailScan,
   IngestRecord,
   PushSub,
   Reaction,
@@ -51,7 +54,68 @@ function coerceProvider(v: string): Settings["chatProvider"] {
   return isLlmProviderId(v) ? v : "ollama";
 }
 
+/**
+ * The guardrail threshold is a probability, and a rail configured to 0 (or to
+ * NaN by a bad write) would block every message ever sent. Clamped on the way
+ * out as well as on the way in, because the column predates nothing and a row
+ * can be edited from the SQL console.
+ */
+function clampThreshold(v: number | null | undefined): number {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0 || n > 1) return 0.8;
+  return n;
+}
+
+/** One human-judged decision, as the threshold sweep consumes it. */
+export interface LabelledScan {
+  score: number | null;
+  label: GuardrailLabel;
+  /** Whether the classifier flagged it (blocked, or would have in observe mode). */
+  flagged: boolean;
+  rail: GuardrailRail;
+}
+
 // ---------- row mappers ----------
+
+/**
+ * One recorded guardrail decision, as the review queue renders it. `rail` and
+ * `label` are checked text columns rather than enums (a new rail should be a
+ * migration, not a type error at the boundary), so they are narrowed here.
+ */
+function rowToGuardrailScan(r: {
+  id: number;
+  at: string;
+  rail: string;
+  surface: string;
+  score: number | null;
+  threshold: number | null;
+  blocked: boolean;
+  would_block: boolean;
+  ms: number;
+  chars: number;
+  text: string | null;
+  pattern: string | null;
+  provider: string | null;
+  label: string | null;
+}): GuardrailScan {
+  return {
+    id: r.id,
+    at: r.at,
+    rail: r.rail as GuardrailRail,
+    surface: r.surface,
+    score: r.score,
+    threshold: r.threshold,
+    blocked: r.blocked,
+    wouldBlock: r.would_block,
+    ms: r.ms,
+    chars: r.chars,
+    text: r.text,
+    pattern: r.pattern,
+    provider: r.provider,
+    label: (r.label as GuardrailLabel | null) ?? null,
+  };
+}
+
 
 function rowToEvent(r: Tables<"events">): CityEvent {
   return {
@@ -414,6 +478,8 @@ export const store = {
         ollamaUrl: "",
         chatProvider: "ollama",
         extractProvider: "ollama",
+        guardMode: "on",
+        guardThreshold: 0.8,
       };
     }
     return {
@@ -424,6 +490,8 @@ export const store = {
       ollamaUrl: data.ollama_url,
       chatProvider: coerceProvider(data.chat_provider),
       extractProvider: coerceProvider(data.extract_provider),
+      guardMode: isGuardrailMode(data.guard_mode) ? data.guard_mode : "on",
+      guardThreshold: clampThreshold(data.guard_threshold),
     };
   },
 
@@ -441,6 +509,8 @@ export const store = {
         ollama_url: next.ollamaUrl,
         chat_provider: next.chatProvider,
         extract_provider: next.extractProvider,
+        guard_mode: next.guardMode,
+        guard_threshold: next.guardThreshold,
       })
       .throwOnError();
     return next;
@@ -982,6 +1052,107 @@ export const store = {
       .select()
       .throwOnError();
     return data.length > 0;
+  },
+
+  // ---------- guardrail telemetry (read side; writes go through
+  // agent/telemetry.ts, which batches and never blocks a chat turn) ----------
+
+  /**
+   * The aggregation the dashboard draws: per-rail histograms and percentiles
+   * for the recent window and the one before it, plus a daily series.
+   *
+   * A Postgres function rather than a query here, because the alternative is
+   * shipping every row to Node to be counted -- fine at a thousand scans,
+   * absurd at a million, and the crossover arrives without anyone noticing.
+   */
+  async guardrailStats(windowDays: number, buckets: number): Promise<unknown> {
+    const { data } = await db
+      .rpc("guardrail_stats", { p_window_days: windowDays, p_buckets: buckets })
+      .throwOnError();
+    return data;
+  },
+
+  /**
+   * The review queue. Ordered by score so the most suspicious thing that was
+   * ALLOWED sits next to the least suspicious thing that was blocked -- the
+   * two places a threshold is actually wrong. `rail` and `blocked` narrow it;
+   * `unlabelled` hides rows somebody has already judged.
+   */
+  async guardrailScans(opts: {
+    rail?: GuardrailRail;
+    blocked?: boolean;
+    unlabelled?: boolean;
+    /** Only rows at or above this score -- the near-miss band. */
+    minScore?: number;
+    order?: "recent" | "score";
+    limit?: number;
+  } = {}): Promise<GuardrailScan[]> {
+    let q = db
+      .from("guardrail_scans")
+      .select(
+        "id, at, rail, surface, score, threshold, blocked, would_block, ms, chars, text, pattern, provider, label",
+      );
+    if (opts.rail) q = q.eq("rail", opts.rail);
+    if (opts.blocked !== undefined) q = q.eq("blocked", opts.blocked);
+    if (opts.unlabelled) q = q.is("label", null);
+    if (opts.minScore !== undefined) q = q.gte("score", opts.minScore);
+    q =
+      opts.order === "score"
+        ? q.order("score", { ascending: false, nullsFirst: false })
+        : q.order("at", { ascending: false });
+    const { data } = await q.limit(Math.min(500, Math.max(1, opts.limit ?? 100))).throwOnError();
+    return data.map(rowToGuardrailScan);
+  },
+
+  /**
+   * Every labelled row's (score, label, blocked) -- the calibration set the
+   * threshold sweep is computed from. Only the three columns the sweep needs:
+   * this is read on every dashboard load and the text is the large part.
+   */
+  async guardrailLabelled(limit = 5_000): Promise<LabelledScan[]> {
+    const { data } = await db
+      .from("guardrail_scans")
+      .select("score, label, blocked, would_block, rail")
+      .not("label", "is", null)
+      .order("at", { ascending: false })
+      .limit(limit)
+      .throwOnError();
+    return data
+      .filter((r): r is typeof r & { label: string } => !!r.label)
+      .map((r) => ({
+        score: r.score,
+        label: r.label as GuardrailLabel,
+        // What the classifier CALLED it, which in observe mode is not what
+        // happened to it. The sweep reads the call, not the consequence.
+        flagged: r.blocked || r.would_block,
+        rail: r.rail as GuardrailRail,
+      }));
+  },
+
+  /** Record an operator's judgement. Returns false for an unknown id. */
+  async labelGuardrailScan(id: number, label: GuardrailLabel | null): Promise<boolean> {
+    const { data } = await db
+      .from("guardrail_scans")
+      .update({ label, labeled_at: label ? new Date().toISOString() : null })
+      .eq("id", id)
+      .select("id")
+      .throwOnError();
+    return data.length > 0;
+  },
+
+  /**
+   * Drop scans older than the retention window. Returns how many went.
+   * Called by the retention sweep; see retention.ts for why this is bounded
+   * rather than kept forever.
+   */
+  async pruneGuardrailScans(olderThan: Date): Promise<number> {
+    const { data } = await db
+      .from("guardrail_scans")
+      .delete()
+      .lt("at", olderThan.toISOString())
+      .select("id")
+      .throwOnError();
+    return data.length;
   },
 
 };

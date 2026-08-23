@@ -8,8 +8,15 @@
  *
  * Queries chain .throwOnError(), so callers get typed data or an exception —
  * route handlers catch and translate to HTTP errors.
+ *
+ * The client is built on first use rather than at import. Importing this
+ * module used to throw when the keys were absent, which meant anything that
+ * merely sat in the same import graph — the offline eval suites, a typecheck
+ * script, a one-off tool — needed production credentials to load code it was
+ * never going to call. Missing keys still fail loudly, just at the first query
+ * instead of at startup.
  */
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "./db-types.js";
 
 function env(name: string): string {
@@ -23,8 +30,24 @@ function env(name: string): string {
   return v;
 }
 
-export const db = createClient<Database>(
-  env("SUPABASE_URL"),
-  env("SUPABASE_SECRET_KEY"),
-  { auth: { persistSession: false, autoRefreshToken: false } },
-);
+let client: SupabaseClient<Database> | null = null;
+
+function connection(): SupabaseClient<Database> {
+  return (client ??= createClient<Database>(env("SUPABASE_URL"), env("SUPABASE_SECRET_KEY"), {
+    auth: { persistSession: false, autoRefreshToken: false },
+  }));
+}
+
+/**
+ * Behaves exactly like the client it stands in for — `db.from(...)`,
+ * `db.rpc(...)`, `db.storage` — but resolves it on first property access.
+ * Methods are bound to the real client so `this` is never the proxy.
+ */
+export const db: SupabaseClient<Database> = new Proxy({} as SupabaseClient<Database>, {
+  get(_target, prop) {
+    const c = connection() as unknown as Record<string | symbol, unknown>;
+    const value = c[prop];
+    return typeof value === "function" ? value.bind(c) : value;
+  },
+  has: (_target, prop) => prop in (connection() as object),
+});

@@ -24,6 +24,8 @@ export type Database = {
           chat_provider: string
           city: string
           extract_provider: string
+          guard_mode: string
+          guard_threshold: number
           id: number
           model: string
           ollama_url: string
@@ -36,6 +38,8 @@ export type Database = {
           chat_provider?: string
           city: string
           extract_provider?: string
+          guard_mode?: string
+          guard_threshold?: number
           id?: number
           model?: string
           ollama_url?: string
@@ -48,6 +52,8 @@ export type Database = {
           chat_provider?: string
           city?: string
           extract_provider?: string
+          guard_mode?: string
+          guard_threshold?: number
           id?: number
           model?: string
           ollama_url?: string
@@ -326,6 +332,80 @@ export type Database = {
             columns: ["source_id"]
             isOneToOne: false
             referencedRelation: "sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guardrail_scans: {
+        Row: {
+          at: string
+          blocked: boolean
+          chars: number
+          guard_model: string | null
+          id: number
+          label: string | null
+          labeled_at: string | null
+          ms: number
+          pattern: string | null
+          provider: string | null
+          rail: string
+          score: number | null
+          surface: string
+          text: string | null
+          text_hash: string
+          thread_id: string | null
+          threshold: number | null
+          user_id: string | null
+          would_block: boolean
+        }
+        Insert: {
+          at?: string
+          blocked?: boolean
+          chars?: number
+          guard_model?: string | null
+          id?: never
+          label?: string | null
+          labeled_at?: string | null
+          ms?: number
+          pattern?: string | null
+          provider?: string | null
+          rail: string
+          score?: number | null
+          surface?: string
+          text?: string | null
+          text_hash: string
+          thread_id?: string | null
+          threshold?: number | null
+          user_id?: string | null
+          would_block?: boolean
+        }
+        Update: {
+          at?: string
+          blocked?: boolean
+          chars?: number
+          guard_model?: string | null
+          id?: never
+          label?: string | null
+          labeled_at?: string | null
+          ms?: number
+          pattern?: string | null
+          provider?: string | null
+          rail?: string
+          score?: number | null
+          surface?: string
+          text?: string | null
+          text_hash?: string
+          thread_id?: string | null
+          threshold?: number | null
+          user_id?: string | null
+          would_block?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guardrail_scans_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -656,6 +736,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      guardrail_stats: {
+        Args: { p_buckets?: number; p_window_days?: number }
+        Returns: Json
+      }
       google_calendar_clear: { Args: { p_user_id: string }; Returns: undefined }
       google_calendar_get: {
         Args: { p_user_id: string }

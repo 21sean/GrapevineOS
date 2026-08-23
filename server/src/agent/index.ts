@@ -14,6 +14,7 @@
  *   {type:"tool", name, label, state, detail?}  tool start/done
  *   {type:"action", action}                     map highlight / proposals
  *   {type:"notice", code, message}              degraded-mode explanations
+ *   {type:"guardrail", rail, ...}               a rail acted on this turn
  *   {type:"done", threadId} · {type:"error", message}
  */
 import { AIMessage, HumanMessage, type BaseMessage } from "@langchain/core/messages";
@@ -28,7 +29,6 @@ import {
   wantsCommit,
 } from "../discovery.js";
 import {
-  GUARD_MODEL_LABEL,
   inputRefusalMessage,
   personaGuard,
   personaRefusalMessage,
@@ -180,22 +180,40 @@ agent.post("/api/agent/chat", async (req, res) => {
       return res.end();
     }
 
-    // Input rail: flagged messages never reach the graph (or its checkpointer,
-    // so a blocked turn can't poison the thread history either).
-    const verdict = await scanText(message.slice(0, MAX_MESSAGE_CHARS));
-    if (verdict.malicious) {
-      send({
-        type: "notice",
-        code: "guardrails",
-        message: `Blocked by the local safety classifier (${GUARD_MODEL_LABEL}, score ${verdict.score.toFixed(2)}).`,
-      });
-      send({ type: "delta", text: inputRefusalMessage(settings.city) });
-      return done();
-    }
+    // The input rail lives in the graph now (graph.ts, `input_rail`), so the
+    // Ollama path is covered by routing rather than by an early return here.
+    // The CLI providers never enter the graph, so they carry their own copy
+    // of the rail below — the alternative is a chat surface with no rail at
+    // all, which is how a rail quietly stops covering half the traffic.
 
     // Subscription-authed CLI providers (Claude Code / Codex / Gemini CLI)
     // answer digest-only, outside the LangGraph agent.
     if (settings.chatProvider && settings.chatProvider !== "ollama") {
+      const verdict = await scanText(message.slice(0, MAX_MESSAGE_CHARS), {
+        rail: "input",
+        surface: "chat-cli",
+        threadId,
+        userId: user?.id,
+        provider: settings.chatProvider,
+      });
+      if (verdict.blocked) {
+        send({
+          type: "guardrail",
+          rail: "input",
+          blocked: true,
+          score: Number(verdict.score.toFixed(4)),
+          threshold: verdict.threshold,
+        });
+        send({
+          type: "notice",
+          code: "guardrails",
+          message: `Blocked by the local safety classifier (score ${verdict.score.toFixed(2)}, threshold ${verdict.threshold.toFixed(2)}).`,
+        });
+        send({ type: "delta", text: inputRefusalMessage(settings.city) });
+        // Deliberately not persisted: a blocked turn stays out of the
+        // transcript so it cannot prime the next one.
+        return done();
+      }
       const answer = await cliChatTurn({
         provider: settings.chatProvider,
         message: message.slice(0, MAX_MESSAGE_CHARS),
@@ -255,6 +273,15 @@ agent.post("/api/agent/chat", async (req, res) => {
       baseUrl,
       model: settings.model,
       toolsOk,
+      city: settings.city,
+      // Stamped onto every rail decision this turn records, so the panel can
+      // slice the distribution by surface and by provider.
+      telemetry: {
+        surface: "chat",
+        threadId,
+        userId: user?.id,
+        provider: settings.model,
+      },
     });
 
     // Server restarts wipe the in-memory checkpointer. When the client resumes
@@ -270,10 +297,15 @@ agent.post("/api/agent/chat", async (req, res) => {
     const strip = thinkStripper();
     // Output rail: deterministic persona/identity-leak scrubber over the
     // streamed answer, keyed to whichever model the admin has selected.
-    const guard = personaGuard({ modelName: settings.model });
+    const guard = personaGuard({
+      modelName: settings.model,
+      telemetry: { surface: "chat", threadId, userId: user?.id, provider: settings.model },
+    });
     const stream = await graph.stream(
-      // turnInput also resets the per-turn tool budget (Overwrite on toolRounds).
-      turnInput([...seed, new HumanMessage(message.slice(0, MAX_MESSAGE_CHARS))]),
+      // The new turn goes in unvetted (`pending`); the input_rail node decides
+      // whether it ever becomes a message. turnInput also resets the per-turn
+      // tool budget (Overwrite on toolRounds).
+      turnInput(message.slice(0, MAX_MESSAGE_CHARS), seed),
       {
         configurable: { thread_id: threadId },
         streamMode: ["messages", "custom"],
@@ -288,9 +320,21 @@ agent.post("/api/agent/chat", async (req, res) => {
 
     // What the user actually saw, assembled for the persisted history.
     let answer = "";
+    // Set when the input rail refuses the turn: its refusal is written by the
+    // graph node rather than streamed from the model, and a blocked turn is
+    // deliberately kept out of the persisted transcript.
+    let railBlocked = false;
     for await (const [mode, chunk] of stream as AsyncIterable<[string, unknown]>) {
       if (mode === "custom") {
-        send(chunk as Frame);
+        const frame = chunk as Frame;
+        if (frame.type === "guardrail" && frame.rail === "input" && frame.blocked) {
+          railBlocked = true;
+        }
+        // The rail nodes emit their refusal as a custom frame, so it has to
+        // join `answer` the way a streamed token would — otherwise the reply
+        // the user read is not the reply anything downstream sees.
+        if (frame.type === "delta" && typeof frame.text === "string") answer += frame.text;
+        send(frame);
         continue;
       }
       // mode === "messages": [chunk, metadata] tuples from LLM calls inside nodes
@@ -334,7 +378,9 @@ agent.post("/api/agent/chat", async (req, res) => {
       send({ type: "replace", text: refusal });
       answer = refusal; // history records what the user actually saw
     }
-    persist(answer);
+    // A turn the input rail refused stays out of the transcript entirely, so
+    // it cannot prime the next one. Everything else is persisted as read.
+    if (!railBlocked) persist(answer);
     done();
   } catch (err) {
     if (ac.signal.aborted) {
@@ -442,7 +488,10 @@ async function cliChatTurn(opts: {
 
   // Same output rail as the Ollama path, applied to the stream so an identity
   // leak is caught mid-reply rather than after the user has read it.
-  const guard = personaGuard({ modelName: provider });
+  const guard = personaGuard({
+    modelName: provider,
+    telemetry: { surface: "chat-cli", threadId, userId: user?.id ?? undefined, provider },
+  });
   let shown = "";
   const { text: raw, usage } = await cliChat(
     provider,

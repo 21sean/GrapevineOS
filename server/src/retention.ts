@@ -5,6 +5,13 @@
  * digest, the inbox history), so this is DB hygiene: without it the events
  * table grows forever and every client downloads all of history on load.
  *
+ * The same sweep bounds guardrail telemetry (GUARDRAIL_RETENTION_DAYS,
+ * default 30, 0 disables). Those rows hold the text that was scanned --
+ * real user messages and text fetched from pages we do not control -- so a
+ * table that grows forever is a liability that grows forever. Thirty days is
+ * long enough to tune a threshold against and short enough that the corpus
+ * is never a permanent record of what anyone typed.
+ *
  * What goes: an ended, unreferenced event once it is past its retention
  * window — a short one for one-offs (EVENT_ONEOFF_RETENTION_DAYS, default 1: a
  * concert is dead the morning after, and lingering ones just bloat every
@@ -83,16 +90,55 @@ export async function pruneEndedEvents(): Promise<number> {
   return removed;
 }
 
-/** Boot pass + a slow interval; failures log and retry next cycle. */
-export function startRetentionSweep(): void {
-  if (retentionDays() === 0) {
-    console.log("[grapevine] retention: disabled (EVENT_RETENTION_DAYS=0)");
-    return;
+/**
+ * How long a recorded guardrail decision is kept. Independent of the event
+ * window: they bound different things, and someone shortening one almost never
+ * means the other.
+ */
+function guardrailRetentionDays(): number {
+  const raw = Number(process.env.GUARDRAIL_RETENTION_DAYS ?? 30);
+  return Number.isFinite(raw) && raw >= 0 ? raw : 30;
+}
+
+/** One pass over the telemetry table. Returns how many rows went. */
+export async function pruneGuardrailScans(): Promise<number> {
+  const days = guardrailRetentionDays();
+  if (days === 0) return 0;
+  const cutoff = new Date(Date.now() - days * 86_400_000);
+  const removed = await store.pruneGuardrailScans(cutoff);
+  if (removed) {
+    console.log(`[grapevine] retention: pruned ${removed} guardrail scan${removed === 1 ? "" : "s"} older than ${days}d`);
   }
-  const run = () =>
-    pruneEndedEvents().catch((err) =>
-      console.log(`[grapevine] retention error: ${String(err).slice(0, 200)}`),
-    );
+  return removed;
+}
+
+/**
+ * Boot pass + a slow interval; failures log and retry next cycle.
+ *
+ * The two sweeps are independent: EVENT_RETENTION_DAYS=0 disables event
+ * pruning, and guardrail telemetry still has to be bounded, because a table
+ * of everything anyone typed is not something to leave running because an
+ * unrelated switch was flipped.
+ */
+export function startRetentionSweep(): void {
+  const events = retentionDays() > 0;
+  const scans = guardrailRetentionDays() > 0;
+  if (!events) console.log("[grapevine] retention: events disabled (EVENT_RETENTION_DAYS=0)");
+  if (!scans) console.log("[grapevine] retention: guardrail scans disabled (GUARDRAIL_RETENTION_DAYS=0)");
+  if (!events && !scans) return;
+
+  const run = async () => {
+    if (events) {
+      await pruneEndedEvents().catch((err) =>
+        console.log(`[grapevine] retention error: ${String(err).slice(0, 200)}`),
+      );
+    }
+    if (scans) {
+      await pruneGuardrailScans().catch((err) =>
+        console.log(`[grapevine] guardrail retention error: ${String(err).slice(0, 200)}`),
+      );
+    }
+  };
   void run();
-  setInterval(run, SWEEP_INTERVAL_MS);
+  setInterval(() => void run(), SWEEP_INTERVAL_MS);
 }

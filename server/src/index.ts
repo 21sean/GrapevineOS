@@ -2,7 +2,7 @@ import "dotenv/config";
 import express from "express";
 import { Readable } from "node:stream";
 import { agent } from "./agent/index.js";
-import { warmupGuardrails } from "./agent/guardrails.js";
+import { invalidateGuardConfig, warmupGuardrails } from "./agent/guardrails.js";
 import { auth, sessionUser } from "./auth.js";
 import { calendar } from "./calendar.js";
 import {
@@ -15,6 +15,8 @@ import {
 } from "./discovery.js";
 import { backfillImages } from "./images.js";
 import { mcp, mcpAuthMode, startMcpServer } from "./mcp.js";
+import { evals } from "./evals/index.js";
+import { guardrails } from "./guardrails/index.js";
 import { detectProviders } from "./providers.js";
 import { push, startPushScheduler } from "./push.js";
 import { startRetentionSweep } from "./retention.js";
@@ -57,6 +59,14 @@ app.use(mcp);
 // ---------- web push (reminders + weekly digest) ----------
 
 app.use(push);
+
+// ---------- evals (the offline quality gate behind Admin -> Evals) ----------
+
+app.use(evals);
+
+// ---------- guardrail observability (Admin -> Guardrails) ----------
+
+app.use(guardrails);
 
 // ---------- events ----------
 
@@ -134,17 +144,20 @@ app.put("/api/settings", async (req, res) => {
     return res.status(400).json({ error: "unknown extractProvider" });
   }
   try {
-    res.json(
-      await store.saveSettings({
-        ...(city !== undefined && { city }),
-        ...(center !== undefined && { center }),
-        ...(tz !== undefined && { tz }),
-        ...(model !== undefined && { model }),
-        ...(ollamaUrl !== undefined && { ollamaUrl }),
-        ...(chatProvider !== undefined && { chatProvider }),
-        ...(extractProvider !== undefined && { extractProvider }),
-      }),
-    );
+    const saved = await store.saveSettings({
+      ...(city !== undefined && { city }),
+      ...(center !== undefined && { center }),
+      ...(tz !== undefined && { tz }),
+      ...(model !== undefined && { model }),
+      ...(ollamaUrl !== undefined && { ollamaUrl }),
+      ...(chatProvider !== undefined && { chatProvider }),
+      ...(extractProvider !== undefined && { extractProvider }),
+    });
+    // The rails cache mode/threshold for a few seconds; a save from any
+    // settings surface has to drop that cache or the retune appears to have
+    // been ignored. (Admin -> Guardrails does this for its own writes too.)
+    invalidateGuardConfig();
+    res.json(saved);
   } catch (err) {
     res.status(502).json({ error: String(err) });
   }

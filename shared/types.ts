@@ -97,6 +97,10 @@ export interface Settings {
   chatProvider: LlmProviderId;
   /** Who runs newsletter extraction and buzz ratings (default: ollama). */
   extractProvider: LlmProviderId;
+  /** What the injection rails do with a message at or over the threshold. */
+  guardMode: GuardrailMode;
+  /** MALICIOUS probability at which the rails act, 0-1. */
+  guardThreshold: number;
 }
 
 export interface Source {
@@ -225,4 +229,317 @@ export interface VenuePhoto {
   url: string;
   width?: number;
   height?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Evals — the quality gate behind Admin → Evals (server/src/evals)
+// ---------------------------------------------------------------------------
+
+/**
+ * What a suite needs before it can run. `offline` suites are pure functions
+ * over frozen fixtures: no network, no model, no database, same answer every
+ * time. `model` suites need the local guardrails ONNX weights on disk, so
+ * they can be legitimately unavailable rather than failing. `judge` suites are
+ * graded by an LLM (DeepEval metrics against a local Ollama judge): they need
+ * a running model, they cost real inference time, and they are the only kind
+ * whose threshold is meaningfully below 1 -- a judge that agreed with itself
+ * every single time would not be measuring anything.
+ */
+export type EvalKind = "offline" | "model" | "judge";
+
+/** `skipped` is deliberately not a failure — an unrunnable check is unknown. */
+export type EvalStatus = "pass" | "fail" | "skipped";
+
+export interface EvalCaseResult {
+  id: string;
+  name: string;
+  status: EvalStatus;
+  /** Compact "what we actually got". Never a stack trace, never a secret. */
+  detail: string;
+  /** Why the case exists — the regression it guards against. */
+  note?: string;
+  ms: number;
+}
+
+export interface EvalSuiteResult {
+  id: string;
+  title: string;
+  what: string;
+  kind: EvalKind;
+  status: EvalStatus;
+  /** passed / (passed + failed). Skipped cases are excluded from the ratio. */
+  score: number;
+  /** Score the suite must reach to pass. 1 means every case must pass. */
+  threshold: number;
+  passed: number;
+  failed: number;
+  skipped: number;
+  ms: number;
+  /** Set when the whole suite could not run (a dependency is unavailable). */
+  skipReason?: string;
+  cases: EvalCaseResult[];
+}
+
+export interface EvalRun {
+  id: string;
+  startedAt: string; // ISO 8601
+  ms: number;
+  status: EvalStatus;
+  passed: number;
+  failed: number;
+  skipped: number;
+  suites: EvalSuiteResult[];
+  /**
+   * Fingerprint of the case set that ran. A run whose hash differs from the
+   * baseline's changed the questions, so its score is not comparable — that
+   * is a rewrite, not a regression.
+   */
+  caseSetHash: string;
+  /** "suite/case" ids that failed here and passed in the last comparable run. */
+  regressions?: string[];
+  /** "suite/case" ids that pass here and failed in the last comparable run. */
+  fixes?: string[];
+}
+
+export interface EvalSuiteInfo {
+  id: string;
+  title: string;
+  what: string;
+  kind: EvalKind;
+  threshold: number;
+  caseCount: number;
+  /** Human reason the suite cannot run right now, if it cannot. */
+  unavailable?: string;
+}
+
+/**
+ * A seeded example user. Personas are fixtures, not accounts: they never
+ * touch auth, never write to the database, and exist so personalization can
+ * be asserted against a person with a stated taste instead of a vibe.
+ */
+export interface EvalPersona {
+  id: string;
+  name: string;
+  /** One line: who they are and what they'd ask for. */
+  blurb: string;
+  initials: string;
+  /** Category id that tints the persona card, for a bit of visual identity. */
+  tint: Category;
+  loves: string[];
+  avoids: string[];
+  homeLabel: string;
+  /** Reactions this persona has already left, in plain language. */
+  history: { title: string; reaction: Reaction }[];
+  /** The promises the persona's cases enforce, for the panel to list. */
+  checks: string[];
+}
+
+export interface EvalCatalog {
+  suites: EvalSuiteInfo[];
+  personas: EvalPersona[];
+  lastRun: EvalRun | null;
+  /** The frozen instant every offline suite evaluates at. */
+  fixtureNow: string;
+  /** Size of the frozen event catalog the persona suites search. */
+  fixtureEvents: number;
+  /** True when an eval run is already in flight (runs are serialized). */
+  running: boolean;
+}
+
+/** One line of the NDJSON stream a run emits. */
+export type EvalFrame =
+  | { type: "suite-start"; id: string; title: string; total: number }
+  | { type: "case"; suite: string; result: EvalCaseResult }
+  | { type: "suite-done"; result: EvalSuiteResult }
+  | { type: "done"; run: EvalRun }
+  | { type: "error"; message: string };
+
+// ---------------------------------------------------------------------------
+// Guardrail telemetry — the observability behind Admin → Guardrails
+// (server/src/guardrails, server/src/agent/telemetry.ts)
+// ---------------------------------------------------------------------------
+
+/**
+ * What the injection rails do with text at or over the threshold.
+ *
+ * `observe` is the one that matters for tuning: it scores and records
+ * everything and blocks nothing, so a candidate threshold can be measured
+ * against real traffic before it is switched on. Retuning by flipping a
+ * number on production and waiting for complaints is not tuning.
+ */
+export type GuardrailMode = "on" | "observe" | "off";
+
+export const GUARDRAIL_MODES: GuardrailMode[] = ["on", "observe", "off"];
+
+export function isGuardrailMode(v: unknown): v is GuardrailMode {
+  return typeof v === "string" && (GUARDRAIL_MODES as string[]).includes(v);
+}
+
+/**
+ * `input` is the user's own message, `content` is untrusted web text on its
+ * way into the model's context, `output` is the deterministic persona
+ * scrubber on the streamed reply. They fail differently and are tuned
+ * separately, so nothing here ever pools them.
+ */
+export type GuardrailRail = "input" | "content" | "output";
+
+export const GUARDRAIL_RAILS: GuardrailRail[] = ["input", "content", "output"];
+
+/**
+ * Where a scan happened. A union for the call sites that exist, plus string
+ * so a new one records as itself instead of failing an insert — an unfamiliar
+ * surface showing up in the panel is the correct way to learn about it.
+ */
+export type GuardrailSurface =
+  | "chat"
+  | "chat-cli"
+  | "search_web"
+  | "read_page"
+  | "discovery"
+  | "warmup"
+  | "unknown"
+  | (string & {});
+
+/** Operator triage. Labelled rows are the calibration set the sweep scores. */
+export type GuardrailLabel = "correct" | "false_positive" | "false_negative";
+
+export const GUARDRAIL_LABELS: GuardrailLabel[] = [
+  "correct",
+  "false_positive",
+  "false_negative",
+];
+
+export function isGuardrailLabel(v: unknown): v is GuardrailLabel {
+  return typeof v === "string" && (GUARDRAIL_LABELS as string[]).includes(v);
+}
+
+/** One recorded decision, as the review queue renders it. */
+export interface GuardrailScan {
+  id: number;
+  at: string; // ISO 8601
+  rail: GuardrailRail;
+  surface: GuardrailSurface;
+  /** Null on the output rail, which is regex and has no score to report. */
+  score: number | null;
+  threshold: number | null;
+  blocked: boolean;
+  /** Observe mode: over threshold, deliberately allowed through. */
+  wouldBlock: boolean;
+  ms: number;
+  chars: number;
+  /** Truncated at write time; absent when GUARDRAIL_STORE_TEXT=off. */
+  text: string | null;
+  /** Output rail: which persona pattern fired. */
+  pattern: string | null;
+  provider: string | null;
+  label: GuardrailLabel | null;
+}
+
+/** One histogram bucket: how many scans landed here, and how many blocked. */
+export interface GuardrailBucket {
+  /** Inclusive lower edge of the score range. */
+  lo: number;
+  hi: number;
+  n: number;
+  blocked: number;
+}
+
+/** One rail's distribution over one window. */
+export interface GuardrailWindow {
+  n: number;
+  blocked: number;
+  /** Observe-mode scans that would have blocked. */
+  wouldBlock: number;
+  /** Rows carrying a score — the output rail contributes none. */
+  scored: number;
+  meanMs: number;
+  p50: number | null;
+  p90: number | null;
+  p95: number | null;
+  p99: number | null;
+  max: number | null;
+  buckets: GuardrailBucket[];
+}
+
+/**
+ * One rail, with the window before last for comparison. `drift` is the
+ * population stability index between them — the standard "has this
+ * distribution moved" number, not a bespoke one.
+ */
+export interface GuardrailRailStats {
+  rail: GuardrailRail;
+  recent: GuardrailWindow;
+  baseline: GuardrailWindow | null;
+  /** PSI vs the baseline window; null when there isn't enough history. */
+  drift: number | null;
+  /** How to read that number, in words. */
+  driftVerdict: "stable" | "moderate" | "significant" | "unknown";
+}
+
+/** One day of one rail, for the trend lines. */
+export interface GuardrailDay {
+  day: string; // YYYY-MM-DD
+  rail: GuardrailRail;
+  n: number;
+  blocked: number;
+  p95: number | null;
+}
+
+/**
+ * One candidate threshold, scored against the labelled set. This is the table
+ * that answers "what should the threshold be" with something other than a
+ * shrug: at each candidate, how much traffic it blocks, and — where an
+ * operator has labelled the outcome — how many of those calls were wrong.
+ */
+export interface GuardrailSweepPoint {
+  threshold: number;
+  /** Share of all scored traffic this threshold would block, 0-1. */
+  blockRate: number;
+  /** Labelled-set confusion at this threshold. */
+  truePositives: number;
+  falsePositives: number;
+  trueNegatives: number;
+  falseNegatives: number;
+  precision: number | null;
+  recall: number | null;
+  f1: number | null;
+}
+
+export interface GuardrailSweep {
+  points: GuardrailSweepPoint[];
+  /** Threshold with the best F1 on the labelled set, when there is one. */
+  bestF1: number | null;
+  /** Labelled rows the sweep was computed from. */
+  labelled: number;
+  /** Why the sweep is empty or weak, when it is. */
+  note?: string;
+}
+
+/** Write-queue health. A rising `dropped` means the numbers above are partial. */
+export interface GuardrailTelemetryHealth {
+  queued: number;
+  written: number;
+  dropped: number;
+  storingText: boolean;
+  lastError: string | null;
+}
+
+/** Everything Admin → Guardrails renders, in one response. */
+export interface GuardrailDashboard {
+  mode: GuardrailMode;
+  threshold: number;
+  /** The classifier behind the input and content rails. */
+  model: string;
+  modelLabel: string;
+  /** False when the classifier failed to load and the rails are failing open. */
+  classifierReady: boolean;
+  windowDays: number;
+  /** Rows in the table, all time. */
+  total: number;
+  oldest: string | null;
+  rails: GuardrailRailStats[];
+  daily: GuardrailDay[];
+  sweep: GuardrailSweep;
+  labelCounts: Record<GuardrailLabel, number>;
+  health: GuardrailTelemetryHealth;
 }

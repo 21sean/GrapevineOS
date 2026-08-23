@@ -504,8 +504,11 @@ export async function runDiscovery(opts: {
     // Same content rail the in-app read_page tool applies: fetched web text
     // is untrusted input to the extraction LLM, so a page the injection
     // classifier flags never reaches a prompt.
-    const verdict = await scanText(`${page.title}\n${page.text}`);
-    if (verdict.malicious) {
+    const verdict = await scanText(`${page.title}\n${page.text}`, {
+      rail: "content",
+      surface: "discovery",
+    });
+    if (verdict.blocked) {
       result.pagesSkipped.push({
         url: hit.url,
         error: "page withheld by guardrails (possible prompt injection)",
