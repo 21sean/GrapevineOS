@@ -27,6 +27,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Spinner } from "@/components/ui/spinner"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { ModelEffortPicker } from "@/components/chat/ModelEffortPicker"
 import { CalendarCard, InterestsCard } from "@/components/chat/ProposalCards"
 import { EVENT_LINK_RE, RichText } from "@/components/chat/RichText"
@@ -46,6 +47,26 @@ const SUGGESTIONS = [
   "Free stuff this weekend",
   "Live music near me",
 ]
+
+/**
+ * Label for an icon-only control, in the app's tooltip rather than the
+ * browser's.
+ *
+ * The chat was the one surface still using the native `title` attribute:
+ * half its buttons carried only an aria-label and so showed nothing at all
+ * on hover, and the ones that did have a `title` waited out the OS delay and
+ * then rendered an opaque system box over the glass. TopBar has used the
+ * Radix tooltip since it was written; this is the same thing, so the two
+ * surfaces behave identically.
+ */
+function Hint({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  )
+}
 
 /**
  * "Ask Grapevine" — the agent surface. One always-mounted component (the
@@ -139,15 +160,17 @@ function DesktopPalette({
       ref={panelRef}
       className="glass pointer-events-auto absolute top-16 left-1/2 z-30 flex w-[min(640px,92vw)] -translate-x-1/2 flex-col overflow-hidden rounded-2xl"
     >
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label="Close"
-        onClick={onClose}
-        className="absolute top-1.5 right-1.5 z-10 rounded-full text-muted-foreground"
-      >
-        <XIcon />
-      </Button>
+      <Hint label="Close — Esc">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Close"
+          onClick={onClose}
+          className="absolute top-1.5 right-1.5 z-10 rounded-full text-muted-foreground"
+        >
+          <XIcon />
+        </Button>
+      </Hint>
       {children}
     </div>
   )
@@ -286,38 +309,40 @@ function Conversation({
         )}
       >
         {user && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={showHistory ? "Back to chat" : "Chat history"}
-            title={showHistory ? "Back to chat" : "Chat history"}
-            aria-pressed={showHistory}
-            onClick={() => setShowHistory((v) => !v)}
-            className={cn(
-              "rounded-full text-muted-foreground",
-              showHistory && "bg-accent text-foreground",
-            )}
-          >
-            <HistoryIcon />
-          </Button>
+          <Hint label={showHistory ? "Back to chat" : "Chat history"}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={showHistory ? "Back to chat" : "Chat history"}
+              aria-pressed={showHistory}
+              onClick={() => setShowHistory((v) => !v)}
+              className={cn(
+                "rounded-full text-muted-foreground",
+                showHistory && "bg-accent text-foreground",
+              )}
+            >
+              <HistoryIcon />
+            </Button>
+          </Hint>
         )}
         {items.length > 0 && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label="New chat"
-            title="New chat"
-            onClick={() => {
-              setShowHistory(false)
-              reset()
-              inputRef.current?.focus()
-            }}
-            className="rounded-full text-muted-foreground"
-          >
-            <SquarePenIcon />
-          </Button>
+          <Hint label="New chat">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="New chat"
+              onClick={() => {
+                setShowHistory(false)
+                reset()
+                inputRef.current?.focus()
+              }}
+              className="rounded-full text-muted-foreground"
+            >
+              <SquarePenIcon />
+            </Button>
+          </Hint>
         )}
         <input
           ref={inputRef}
@@ -329,47 +354,52 @@ function Conversation({
           className="h-9 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
         />
         {speech.supported && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={speech.listening ? "Stop dictation" : "Speak your request"}
-            title={speech.listening ? "Stop dictation" : "Speak your request"}
-            aria-pressed={speech.listening}
-            onClick={() => {
-              if (!speech.listening) dictationBase.current = input
-              speech.toggle()
-              inputRef.current?.focus()
-            }}
-            className={cn(
-              "rounded-full text-muted-foreground",
-              speech.listening && "animate-pulse bg-destructive/15 text-destructive",
-            )}
-          >
-            <MicIcon />
-          </Button>
+          <Hint label={speech.listening ? "Stop dictation" : "Speak your request"}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={speech.listening ? "Stop dictation" : "Speak your request"}
+              aria-pressed={speech.listening}
+              onClick={() => {
+                if (!speech.listening) dictationBase.current = input
+                speech.toggle()
+                inputRef.current?.focus()
+              }}
+              className={cn(
+                "rounded-full text-muted-foreground",
+                speech.listening && "animate-pulse bg-destructive/15 text-destructive",
+              )}
+            >
+              <MicIcon />
+            </Button>
+          </Hint>
         )}
         {busy ? (
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="secondary"
-            aria-label="Stop"
-            onClick={stop}
-            className="rounded-full"
-          >
-            <SquareIcon className="size-3" />
-          </Button>
+          <Hint label="Stop generating">
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="secondary"
+              aria-label="Stop"
+              onClick={stop}
+              className="rounded-full"
+            >
+              <SquareIcon className="size-3" />
+            </Button>
+          </Hint>
         ) : (
-          <Button
-            type="submit"
-            size="icon-sm"
-            aria-label="Send"
-            disabled={!input.trim()}
-            className="rounded-full"
-          >
-            <ArrowUpIcon />
-          </Button>
+          <Hint label="Send — Enter">
+            <Button
+              type="submit"
+              size="icon-sm"
+              aria-label="Send"
+              disabled={!input.trim()}
+              className="rounded-full"
+            >
+              <ArrowUpIcon />
+            </Button>
+          </Hint>
         )}
       </form>
     </div>
@@ -545,16 +575,19 @@ function UsageLine({ usage }: { usage: ChatUsage }) {
   }
   const cached = usage.cacheReadInputTokens ?? 0
   return (
-    <div
-      className="font-mono text-[10px] text-muted-foreground/70"
-      title={
+    <Hint
+      label={
         cached
           ? `This turn read ${fmtTokens(usage.inputTokens)} input tokens, ${fmtTokens(cached)} of them from cache`
           : "This turn's token usage"
       }
     >
-      {parts.join(" · ")}
-    </div>
+      {/* tabIndex so the explanation is reachable without a pointer — this is
+          the only place the cache split is written down. */}
+      <div tabIndex={0} className="font-mono text-[10px] text-muted-foreground/70">
+        {parts.join(" · ")}
+      </div>
+    </Hint>
   )
 }
 

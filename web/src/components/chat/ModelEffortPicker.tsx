@@ -5,6 +5,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   CHAT_EFFORT_OPTIONS,
   CLAUDE_CHAT_MODELS,
@@ -34,18 +35,22 @@ export function ModelEffortPicker() {
 
   return (
     <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 gap-1 rounded-full px-2.5 text-xs text-muted-foreground"
-          title="Model and reasoning effort"
-        >
-          {trigger}
-          <ChevronDownIcon className="size-3 opacity-60" />
-        </Button>
-      </PopoverTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 rounded-full px-2.5 text-xs text-muted-foreground"
+            >
+              {trigger}
+              <ChevronDownIcon className="size-3 opacity-60" />
+            </Button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Model and reasoning effort</TooltipContent>
+      </Tooltip>
       <PopoverContent align="start" className="w-52 p-1.5">
         <Section label="Model">
           {CLAUDE_CHAT_MODELS.map((m) => (
