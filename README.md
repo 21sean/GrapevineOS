@@ -5,7 +5,7 @@ newsletters are the data source, a local LLM is the parser and critic, and the
 map only surfaces what has real buzz. Everything runs locally and on free
 tiers, so nothing leaves your machine by default.
 
-Setup, deployment, and operations live in [SETUP.md](SETUP.md).
+Setup, deployment, and operations live in [docs/setup.md](docs/setup.md).
 
 ## Highlights
 
@@ -48,7 +48,7 @@ and surface on a 3D map. No paid APIs, no inbound tunnel, nothing leaves your
 machine by default.
 
 <p align="center">
-  <img src="docs/how-it-works.png" width="900" alt="How Grapevine works, end to end: free local newsletters are emailed to a catch-all Cloudflare address; a Cloudflare Email Worker writes each one as an idempotent row to a deny-all Supabase Postgres database; the local Express server polls unprocessed rows, and a local Ollama model types the events, rates their buzz 1 to 5, and flags promos while Mapbox geocodes each venue (cached); the enriched events are written back to Postgres and served over HTTPS to a React and Mapbox GL client that renders a pitched 3D night map with a carousel, filters, and the Ask Grapevine concierge.">
+  <img src="docs/images/how-it-works.png" width="900" alt="How Grapevine works, end to end: free local newsletters are emailed to a catch-all Cloudflare address; a Cloudflare Email Worker writes each one as an idempotent row to a deny-all Supabase Postgres database; the local Express server polls unprocessed rows, and a local Ollama model types the events, rates their buzz 1 to 5, and flags promos while Mapbox geocodes each venue (cached); the enriched events are written back to Postgres and served over HTTPS to a React and Mapbox GL client that renders a pitched 3D night map with a carousel, filters, and the Ask Grapevine concierge.">
 </p>
 
 ### The data-source playbook (no paid APIs)
@@ -75,7 +75,7 @@ worker dead-letters the raw email to KV and retries it on an hourly cron until
 it lands, so an outage costs latency rather than the email:
 
 <p align="center">
-  <img src="docs/email-worker.png" width="900" alt="Email ingestion pipeline: newsletters sent to a catch-all address hit Cloudflare Email Routing, then a Cloudflare Email Worker parses each message (the To: line becomes the source tag) and writes one idempotent row to the Supabase raw_emails table, which the local server polls for unprocessed rows. If the insert fails the worker dead-letters the raw email to a Cloudflare KV store with a 30-day TTL; an optional push mode can POST straight to the API for instant processing.">
+  <img src="docs/images/email-worker.png" width="900" alt="Email ingestion pipeline: newsletters sent to a catch-all address hit Cloudflare Email Routing, then a Cloudflare Email Worker parses each message (the To: line becomes the source tag) and writes one idempotent row to the Supabase raw_emails table, which the local server polls for unprocessed rows. If the insert fails the worker dead-letters the raw email to a Cloudflare KV store with a 30-day TTL; an optional push mode can POST straight to the API for instant processing.">
 </p>
 
 You can also paste any newsletter into **Admin -> Ingest** at any time. Same
@@ -144,7 +144,7 @@ and Admin -> Providers can swap a subscription CLI in for chat without touching
 the graph.
 
 <p align="center">
-  <img src="docs/ask-grapevine.png" width="900" alt="The Ask Grapevine agent as a LangGraph state machine: a user message (Cmd-K) enters the agent node, the chat engine with tools bound (Ollama by default) and a system prompt rebuilt each turn; if the model emits tool_calls they run in the tools node (data tools like search_events and read_page run server-side, UI tools show_on_map, set_filters, propose_calendar, save_calendar, set_rarity, and update_interests emit confirm cards) and results return to the agent while the typed toolRounds counter is under six; if the model emits no tool_calls the reply streams to the browser; once the budget is spent a finalize node answers with no tools so the loop can never spin forever. Graph state is a Zod 4 StateSchema (messages plus a toolRounds ReducedValue an Overwrite zeroes each turn) checkpointed by an ephemeral MemorySaver keyed by thread id; model nodes retry connection failures (safe before the first token) and idle-out stalled generations at 45s, while the tools node never retries so UI frames stream exactly once. Beyond the loop: chat can route to a subscription CLI (Claude Code, Codex, Gemini, or Copilot), one-shot and digest-grounded with no API keys; Claude Code hooks back into Grapevine's own /mcp endpoint to keep event search, ETAs, and calendar saves; and external agents drive the same core over REST (the installable OpenClaw skill) and MCP (Claude Code and Claude Desktop).">
+  <img src="docs/images/ask-grapevine.png" width="900" alt="The Ask Grapevine agent as a LangGraph state machine: a user message (Cmd-K) enters the agent node, the chat engine with tools bound (Ollama by default) and a system prompt rebuilt each turn; if the model emits tool_calls they run in the tools node (data tools like search_events and read_page run server-side, UI tools show_on_map, set_filters, propose_calendar, save_calendar, set_rarity, and update_interests emit confirm cards) and results return to the agent while the typed toolRounds counter is under six; if the model emits no tool_calls the reply streams to the browser; once the budget is spent a finalize node answers with no tools so the loop can never spin forever. Graph state is a Zod 4 StateSchema (messages plus a toolRounds ReducedValue an Overwrite zeroes each turn) checkpointed by an ephemeral MemorySaver keyed by thread id; model nodes retry connection failures (safe before the first token) and idle-out stalled generations at 45s, while the tools node never retries so UI frames stream exactly once. Beyond the loop: chat can route to a subscription CLI (Claude Code, Codex, Gemini, or Copilot), one-shot and digest-grounded with no API keys; Claude Code hooks back into Grapevine's own /mcp endpoint to keep event search, ETAs, and calendar saves; and external agents drive the same core over REST (the installable OpenClaw skill) and MCP (Claude Code and Claude Desktop).">
 </p>
 
 - **Typed graph state** (LangGraph `StateSchema`, plain Zod 4): the transcript
@@ -192,7 +192,7 @@ with no paid APIs.
 &nbsp;![local · no paid APIs](https://img.shields.io/badge/local-no_paid_APIs-0b3b2e)
 
 <p align="center">
-  <img src="docs/guardrails.png" width="900" alt="Guardrails, defense in depth: a user message passes an input rail (Llama Prompt Guard 2, 86M ONNX) that blocks on malicious ≥ 0.80 before either engine runs; benign messages enter the engine, a LangGraph agent on Ollama or a CLI provider (Claude Code, Codex, Gemini, Copilot), with the same rails bracketing both paths; a content rail re-checks the agent's search_web and read_page text and withholds indirect-injection hits (web discovery has its own verify gate); a deterministic output persona guard, keyed to the active model or CLI provider, replaces identity leaks before the reply reaches the browser. Every rail fails safe.">
+  <img src="docs/images/guardrails.png" width="900" alt="Guardrails, defense in depth: a user message passes an input rail (Llama Prompt Guard 2, 86M ONNX) that blocks on malicious ≥ 0.80 before either engine runs; benign messages enter the engine, a LangGraph agent on Ollama or a CLI provider (Claude Code, Codex, Gemini, Copilot), with the same rails bracketing both paths; a content rail re-checks the agent's search_web and read_page text and withholds indirect-injection hits (web discovery has its own verify gate); a deterministic output persona guard, keyed to the active model or CLI provider, replaces identity leaks before the reply reaches the browser. Every rail fails safe.">
 </p>
 
 Four layers, each covering the gap the previous one leaves:
@@ -231,7 +231,7 @@ not just the fixed 26-topic interest picker. The score feeds every surface;
 what those surfaces show shapes the next reaction.
 
 <p align="center">
-  <img src="docs/interest-learning.png" width="900" alt="Interest-learning feedback loop: a user's picks and one-tap reactions feed taste signals; reactions reweight open-vocabulary tag affinities; a per-event personal score (buzz backbone plus loves match, tag affinity, and this-event reaction, with avoids excluded) ranks every surface (map, list, your week, and the Sunday push), and what those surfaces show shapes the next tap. Ask Grapevine can propose interest changes for the user to confirm.">
+  <img src="docs/images/interest-learning.png" width="900" alt="Interest-learning feedback loop: a user's picks and one-tap reactions feed taste signals; reactions reweight open-vocabulary tag affinities; a per-event personal score (buzz backbone plus loves match, tag affinity, and this-event reaction, with avoids excluded) ranks every surface (map, list, your week, and the Sunday push), and what those surfaces show shapes the next tap. Ask Grapevine can propose interest changes for the user to confirm.">
 </p>
 
 - **Reactions are typed, not thumbs.** "Going" is intent (boost now, +3),
@@ -319,8 +319,13 @@ server/    Express 5 + tsx · supabase-js data layer (src/store.ts)
            guardrails: Prompt Guard 2 classifier + persona rail)
            MCP server (src/mcp.ts) · CLI chat providers (src/providers.ts)
            web discovery + verification + scheduler (src/discovery.ts)
+           eval runner + suites (src/evals/, scripts/evals.ts)
+shared/    one implementation of the logic both tiers need: recurrence,
+           opening hours, tag affinity, timezone-correct day math
 workers/   email-ingest Cloudflare Email Worker -> Supabase raw_emails
 supabase/  tracked SQL migrations
 openclaw/  installable OpenClaw skill for the external agent API
+docs/      setup.md (operations), mapbox-places.md, images/ (the diagrams
+           above), archive/ (superseded working notes, kept for provenance)
 .agents/   installed Mapbox agent skills
 ```

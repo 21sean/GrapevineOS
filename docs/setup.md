@@ -1,7 +1,7 @@
 # Grapevine setup and operations
 
 Setup, deployment, and infrastructure notes. For what Grapevine is and how it
-is built, see the [README](README.md).
+is built, see the [README](../README.md).
 
 ## Quick start
 
@@ -33,7 +33,7 @@ Requirements:
   `MAPBOX_SECRET_TOKEN` in `server/.env`. Tick **`places:read`** on the secret
   token to get the venue card (hours, photos, accessibility, busy times) in the
   event panel; without it everything else still works and the card is omitted.
-  See [docs/mapbox-places.md](docs/mapbox-places.md) for the preview quota
+  See [mapbox-places.md](mapbox-places.md) for the preview quota
 
 ## The email worker
 

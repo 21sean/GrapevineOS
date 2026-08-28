@@ -12,7 +12,7 @@ dist/
 *.jpeg
 *.png
 # …except committed documentation assets (README diagrams).
-!docs/*.png
+!docs/images/*.png
 
 # Local Claude Code skill mirror (source of truth: .agents/skills/ + skills-lock.json)
 .claude/skills/
