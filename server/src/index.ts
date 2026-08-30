@@ -491,6 +491,23 @@ app.post("/api/inbox/reprocess", async (req, res) => {
   }
 });
 
+// ---------- observability alerts (Langfuse webhook receiver) ----------
+
+/**
+ * Where the self-hosted Langfuse posts alert notifications (Alerts →
+ * webhook channel, observability/langfuse). Logged so an alert firing is
+ * visible in the server console next to the traffic that caused it; guarded
+ * by the shared ingest key so nothing else can write to it.
+ */
+app.post("/api/alerts/langfuse", (req, res) => {
+  if (req.query.key !== process.env.INGEST_SHARED_KEY) {
+    return res.status(401).json({ error: "bad key" });
+  }
+  const body = JSON.stringify(req.body ?? {});
+  console.warn(`[grapevine] langfuse alert: ${body.slice(0, 600)}`);
+  res.json({ ok: true });
+});
+
 const port = Number(process.env.PORT ?? 8787);
 app.listen(port, () => {
   console.log(`[grapevine] api listening on http://localhost:${port}`);

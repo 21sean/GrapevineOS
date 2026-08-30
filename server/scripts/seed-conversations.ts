@@ -23,6 +23,7 @@ import { judgeUnavailable } from "../src/evals/judge.js";
 import { recordConversationScores } from "../src/langfuse.js";
 import { store } from "../src/store.js";
 import type { ConversationEvalScore } from "../src/types.js";
+import { ensureTesters, testerForThread } from "./testers.js";
 
 const argv = process.argv.slice(2);
 const flag = (name: string) => argv.includes(`--${name}`);
@@ -179,26 +180,18 @@ async function clean(): Promise<void> {
 await clean();
 if (flag("clean")) process.exit(0);
 
-const { data: user } = await db
-  .from("users")
-  .select("id")
-  .order("created_at", { ascending: true })
-  .limit(1)
-  .maybeSingle()
-  .throwOnError();
-if (!user) {
-  console.error("no users in the database — sign in once, then re-run");
-  process.exit(1);
-}
+// Demo data belongs to synthetic testers, never to a real account.
+await ensureTesters();
 
 for (const t of THREADS) {
   const id = `demo-${t.slug}`;
+  const owner = testerForThread(id);
   const at = hoursAgo(t.agoHours);
   await db
     .from("chat_threads")
     .insert({
       id,
-      user_id: user.id,
+      user_id: owner.id,
       title: t.turns[0][0].replace(/\s+/g, " ").slice(0, 80),
       provider: t.provider,
       created_at: at,
@@ -233,7 +226,7 @@ for (const t of THREADS) {
         pattern: s.pattern ?? null,
         provider: t.provider,
         thread_id: id,
-        user_id: user.id,
+        user_id: owner.id,
       })),
     )
     .throwOnError();

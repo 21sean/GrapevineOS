@@ -1,0 +1,23 @@
+# Local additions on top of the official docker-compose.yml (auto-merged).
+#
+# grapevine-bridge: Langfuse restricts webhook deliveries to ports 80/443,
+# and the Grapevine API listens on host port 8787. This Caddy sidecar sits
+# inside the compose network on port 80 (never published to the host) and
+# forwards to the API, so alert automations can point at
+# http://grapevine-bridge/api/alerts/langfuse. The webhook SSRF whitelist
+# below is what lets Langfuse resolve the sidecar's private address.
+services:
+  grapevine-bridge:
+    image: docker.io/caddy:2-alpine
+    restart: always
+    command: caddy reverse-proxy --from :80 --to host.docker.internal:8787
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  langfuse-web:
+    environment:
+      LANGFUSE_WEBHOOK_WHITELISTED_HOST: grapevine-bridge
+
+  langfuse-worker:
+    environment:
+      LANGFUSE_WEBHOOK_WHITELISTED_HOST: grapevine-bridge

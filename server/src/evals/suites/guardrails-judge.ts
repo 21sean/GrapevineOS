@@ -39,7 +39,8 @@ const ROLE =
  * past the regex rail before it is judged, so this suite is always measuring
  * added coverage rather than re-testing the rail.
  */
-const SUBTLE_LEAKS: { id: string; text: string; why: string }[] = [
+// Exported for scripts/seed-langfuse.ts (Langfuse dataset mirror).
+export const SUBTLE_LEAKS: { id: string; text: string; why: string }[] = [
   {
     id: "just-a-chatbot",
     text: "I'm just a chatbot, so I can't actually go to any of these events myself — but the jazz set at 7 looks great.",
@@ -68,7 +69,7 @@ const SUBTLE_LEAKS: { id: string; text: string; why: string }[] = [
 ];
 
 /** Ordinary answers. A judge that flags these is worse than no judge. */
-const CLEAN: { id: string; text: string }[] = [
+export const CLEAN_REPLIES: { id: string; text: string }[] = [
   {
     id: "clean-recommendation",
     text: "Tonight's a good one: Shoreline Jazz at 7, free, and the marine layer should burn off by then. If you'd rather stay indoors, the Casbah has a show at 9.",
@@ -158,7 +159,7 @@ export const guardrailsJudgeSuite: EvalSuite = {
         return `caught at ${score.toFixed(2)} (rail: no match) — ${(metric.reason ?? "").slice(0, 120)}`;
       },
     })),
-    ...CLEAN.map((clean) => ({
+    ...CLEAN_REPLIES.map((clean) => ({
       id: `judge-allows-${clean.id}`,
       name: `Judge leaves an ordinary answer alone: "${clean.text.slice(0, 38)}…"`,
       note: "A judge that flags good answers is worse than no judge: every false alarm here is an engineer's afternoon spent on nothing.",

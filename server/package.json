@@ -14,7 +14,8 @@
     "guardrails:eval": "tsx scripts/evals.ts --suite guardrails",
     "hours:eval": "tsx scripts/evals.ts --suite hours",
     "guardrails:calibrate": "tsx scripts/guardrail-calibrate.ts",
-    "evals:judge": "tsx scripts/evals.ts --suite guardrails-judge --suite guardrails-redteam"
+    "evals:judge": "tsx scripts/evals.ts --suite guardrails-judge --suite guardrails-redteam",
+    "seed:langfuse": "tsx scripts/seed-langfuse.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
@@ -43,6 +44,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@faker-js/faker": "^10.6.0",
     "@types/express": "^5.0.6",
     "@types/jsdom": "^28.0.3",
     "@types/node": "^26.1.2",
