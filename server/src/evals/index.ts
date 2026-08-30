@@ -1,9 +1,11 @@
 /**
- * HTTP surface for the eval harness — the three routes behind Admin → Evals.
+ * HTTP surface for the eval harness — the eval half of Admin → Monitoring.
  *
- *   GET  /api/evals          the catalog: suites, personas, last run
- *   POST /api/evals/run      NDJSON, one frame per case as it finishes
- *   GET  /api/evals/history  recent runs, newest first
+ *   GET  /api/evals                the catalog: suites, personas, last run
+ *   POST /api/evals/run            NDJSON, one frame per case as it finishes
+ *   GET  /api/evals/history        recent runs, newest first
+ *   GET  /api/evals/conversations  past chat threads, with rails + evals
+ *   POST /api/evals/conversations/:id/evaluate  judge one thread now
  *
  * The run streams rather than returning at the end. A suite that takes two
  * minutes behind a silent request is indistinguishable from a hung server, and
@@ -17,8 +19,12 @@
  */
 import { Router } from "express";
 import { adminAllowed } from "../admin-gate.js";
+import { recordConversationScores } from "../langfuse.js";
+import { store } from "../store.js";
 import type { EvalCatalog, EvalFrame } from "../types.js";
+import { evaluateConversation } from "./conversation-judge.js";
 import { FIXTURE_EVENTS, FIXTURE_NOW } from "./fixtures.js";
+import { judgeUnavailable } from "./judge.js";
 import { personaCards } from "./personas.js";
 import { SUITES } from "./registry.js";
 import { EvalRunBusy, runEvals, runInProgress } from "./runner.js";
@@ -73,6 +79,45 @@ evals.get("/api/evals", async (req, res) => {
 evals.get("/api/evals/history", async (req, res) => {
   if (!(await adminAllowed(req))) return res.status(403).json({ error: "admin only" });
   res.json({ runs: history() });
+});
+
+/** The past-conversations table: threads with their rails and newest eval. */
+evals.get("/api/evals/conversations", async (req, res) => {
+  if (!(await adminAllowed(req))) return res.status(403).json({ error: "admin only" });
+  try {
+    const threads = await store.conversationMonitor(Number(req.query.limit) || 25);
+    res.json({ threads });
+  } catch (err) {
+    res.status(502).json({ error: safeDetail(String(err)) });
+  }
+});
+
+/**
+ * Judge one thread now, on the local Ollama judge. Synchronous on purpose:
+ * three graded metrics on a local model is tens of seconds, which a panel can
+ * spin through, and a job queue for that would be machinery without a payoff.
+ */
+evals.post("/api/evals/conversations/:id/evaluate", async (req, res) => {
+  if (!(await adminAllowed(req))) return res.status(403).json({ error: "admin only" });
+  try {
+    const unavailable = await judgeUnavailable();
+    if (unavailable) return res.status(503).json({ error: unavailable });
+
+    const messages = await store.adminChatMessages(req.params.id);
+    if (!messages) return res.status(404).json({ error: "unknown thread" });
+    if (!messages.some((m) => m.role === "assistant")) {
+      return res.status(422).json({ error: "thread has no assistant replies to judge" });
+    }
+
+    const judged = await evaluateConversation(messages);
+    const saved = await store.recordConversationEval(req.params.id, judged);
+    // Mirror the verdict into Langfuse as session scores when it is enabled.
+    // Fire-and-forget: Postgres is the source of truth, this is the copy.
+    void recordConversationScores(saved);
+    res.json(saved);
+  } catch (err) {
+    res.status(502).json({ error: safeDetail(String(err)) });
+  }
 });
 
 evals.post("/api/evals/run", async (req, res) => {

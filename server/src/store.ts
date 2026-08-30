@@ -18,6 +18,10 @@ import type {
   ChatMessage,
   ChatThreadMeta,
   CityEvent,
+  ConversationEval,
+  ConversationEvalScore,
+  ConversationMonitorRow,
+  ConversationVerdict,
   DiscoverySearch,
   GoogleCalendarGrant,
   GuardrailLabel,
@@ -1153,6 +1157,76 @@ export const store = {
       .select("id")
       .throwOnError();
     return data.length;
+  },
+
+  // ---------- conversation evals (Admin → Monitoring) ----------
+
+  /**
+   * The past-conversations table: latest threads with turn counts, guardrail
+   * decisions, and the newest eval, aggregated by the conversation_monitor
+   * Postgres function for the same reason guardrail_stats is one.
+   */
+  async conversationMonitor(limit = 25): Promise<ConversationMonitorRow[]> {
+    const { data } = await db
+      .rpc("conversation_monitor", { p_limit: limit })
+      .throwOnError();
+    return (data ?? []) as unknown as ConversationMonitorRow[];
+  },
+
+  /**
+   * Full transcript with no ownership check. The monitoring panel is
+   * admin-gated, and a judge that could only grade the admin's own threads
+   * would not be monitoring anything. Null for a thread that does not exist.
+   */
+  async adminChatMessages(threadId: string): Promise<ChatMessage[] | null> {
+    if (!(await this.chatThreadOwner(threadId))) return null;
+    const { data } = await db
+      .from("chat_messages")
+      .select("role, content, created_at")
+      .eq("thread_id", threadId)
+      .order("id", { ascending: true })
+      .limit(500)
+      .throwOnError();
+    return data.map((r) => ({
+      role: r.role as ChatMessage["role"],
+      content: r.content,
+      createdAt: r.created_at,
+    }));
+  },
+
+  /** Insert one judged pass. Re-judging appends; the dashboard reads latest. */
+  async recordConversationEval(
+    threadId: string,
+    e: {
+      model: string;
+      overall: number;
+      verdict: ConversationVerdict;
+      scores: ConversationEvalScore[];
+      ms: number;
+    },
+  ): Promise<ConversationEval> {
+    const { data } = await db
+      .from("conversation_evals")
+      .insert({
+        thread_id: threadId,
+        model: e.model,
+        overall: e.overall,
+        verdict: e.verdict,
+        scores: e.scores as unknown as Json,
+        ms: e.ms,
+      })
+      .select()
+      .single()
+      .throwOnError();
+    return {
+      threadId: data.thread_id,
+      at: data.at,
+      model: data.model,
+      overall: data.overall,
+      verdict: data.verdict as ConversationVerdict,
+      scores: (data.scores ?? []) as unknown as ConversationEvalScore[],
+      ms: data.ms,
+    };
   },
 
 };

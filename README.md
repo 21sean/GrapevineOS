@@ -175,8 +175,11 @@ the graph.
   leaving the GPU generating.
 - **One domain layer**, framework-free, powers the graph tools, the external
   REST API, and the MCP server alike.
-- **Observability**: optional LangSmith tracing (off by default; with it off
-  nothing leaves your machine).
+- **Observability**: optional LangSmith tracing and Langfuse (current scoped
+  v5 SDK: chat turns become traces grouped by thread, conversation-eval
+  verdicts land as session scores). Both off by default; with them off
+  nothing leaves your machine, and Langfuse can point at a self-hosted
+  instance to keep it that way even when on.
 
 ### Guardrails (prompt-injection and persona defense)
 

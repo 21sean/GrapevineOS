@@ -98,6 +98,75 @@ export type Database = {
           },
         ]
       }
+      chat_checkpoint_writes: {
+        Row: {
+          at: string
+          channel: string
+          checkpoint_id: string
+          checkpoint_ns: string
+          idx: number
+          task_id: string
+          thread_id: string
+          type: string
+          value: string
+        }
+        Insert: {
+          at?: string
+          channel: string
+          checkpoint_id: string
+          checkpoint_ns?: string
+          idx: number
+          task_id: string
+          thread_id: string
+          type: string
+          value: string
+        }
+        Update: {
+          at?: string
+          channel?: string
+          checkpoint_id?: string
+          checkpoint_ns?: string
+          idx?: number
+          task_id?: string
+          thread_id?: string
+          type?: string
+          value?: string
+        }
+        Relationships: []
+      }
+      chat_checkpoints: {
+        Row: {
+          at: string
+          checkpoint: string
+          checkpoint_id: string
+          checkpoint_ns: string
+          metadata: string
+          parent_id: string | null
+          thread_id: string
+          type: string
+        }
+        Insert: {
+          at?: string
+          checkpoint: string
+          checkpoint_id: string
+          checkpoint_ns?: string
+          metadata: string
+          parent_id?: string | null
+          thread_id: string
+          type: string
+        }
+        Update: {
+          at?: string
+          checkpoint?: string
+          checkpoint_id?: string
+          checkpoint_ns?: string
+          metadata?: string
+          parent_id?: string | null
+          thread_id?: string
+          type?: string
+        }
+        Relationships: []
+      }
       chat_messages: {
         Row: {
           content: string
@@ -161,6 +230,47 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      conversation_evals: {
+        Row: {
+          at: string
+          id: number
+          model: string
+          ms: number
+          overall: number
+          scores: Json
+          thread_id: string
+          verdict: string
+        }
+        Insert: {
+          at?: string
+          id?: never
+          model: string
+          ms?: number
+          overall: number
+          scores?: Json
+          thread_id: string
+          verdict: string
+        }
+        Update: {
+          at?: string
+          id?: never
+          model?: string
+          ms?: number
+          overall?: number
+          scores?: Json
+          thread_id?: string
+          verdict?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_evals_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "chat_threads"
             referencedColumns: ["id"]
           },
         ]
@@ -736,6 +846,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      conversation_monitor: {
+        Args: { p_limit?: number }
+        Returns: Json
+      }
       guardrail_stats: {
         Args: { p_buckets?: number; p_window_days?: number }
         Returns: Json

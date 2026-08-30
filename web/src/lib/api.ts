@@ -6,6 +6,8 @@ import type {
   ChatThreadMeta,
   CityEvent,
   CliProviderStatus,
+  ConversationEval,
+  ConversationMonitorRow,
   DiscoveryRunResult,
   DiscoverySearch,
   EvalCatalog,
@@ -530,6 +532,18 @@ export const api = {
       }
     }
   },
+
+  /** Past conversations, each with its rail decisions and newest eval. */
+  conversationMonitor: (limit = 25) =>
+    fetch(`/api/evals/conversations?limit=${limit}`).then((r) =>
+      json<{ threads: ConversationMonitorRow[] }>(r),
+    ),
+
+  /** Judge one thread on the local Ollama judge. Tens of seconds — spin. */
+  evaluateConversation: (threadId: string) =>
+    fetch(`/api/evals/conversations/${encodeURIComponent(threadId)}/evaluate`, {
+      method: "POST",
+    }).then((r) => json<ConversationEval>(r)),
 
   // ---------- guardrails ----------
 

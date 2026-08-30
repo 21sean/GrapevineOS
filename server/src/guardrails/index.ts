@@ -1,5 +1,6 @@
 /**
- * HTTP surface for guardrail observability — Admin → Guardrails.
+ * HTTP surface for guardrail observability — the rails half of
+ * Admin → Monitoring.
  *
  *   GET   /api/guardrails                 the dashboard, in one round trip
  *   GET   /api/guardrails/scans           the review queue

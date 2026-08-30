@@ -232,7 +232,7 @@ export interface VenuePhoto {
 }
 
 // ---------------------------------------------------------------------------
-// Evals — the quality gate behind Admin → Evals (server/src/evals)
+// Evals — the quality gate behind Admin → Monitoring (server/src/evals)
 // ---------------------------------------------------------------------------
 
 /**
@@ -355,7 +355,7 @@ export type EvalFrame =
   | { type: "error"; message: string };
 
 // ---------------------------------------------------------------------------
-// Guardrail telemetry — the observability behind Admin → Guardrails
+// Guardrail telemetry — the observability behind Admin → Monitoring
 // (server/src/guardrails, server/src/agent/telemetry.ts)
 // ---------------------------------------------------------------------------
 
@@ -524,7 +524,63 @@ export interface GuardrailTelemetryHealth {
   lastError: string | null;
 }
 
-/** Everything Admin → Guardrails renders, in one response. */
+// ---------------------------------------------------------------------------
+// Conversation evals — past Ask Grapevine threads graded by the local judge
+// (server/src/evals/conversation-judge.ts, Admin → Monitoring)
+// ---------------------------------------------------------------------------
+
+/**
+ * The three-way read of an overall score. Not two-way on purpose: a judge is
+ * a noisy instrument, and forcing its middle band into pass/fail would turn
+ * measurement noise into red rows people learn to ignore.
+ */
+export type ConversationVerdict = "pass" | "borderline" | "fail";
+
+/** One graded metric from the judge, with the reason it gave. */
+export interface ConversationEvalScore {
+  metric: string;
+  /** 0-1, from the DeepEval metric. */
+  score: number;
+  reason: string | null;
+}
+
+/** One judged pass over a whole persisted thread. */
+export interface ConversationEval {
+  threadId: string;
+  at: string; // ISO 8601
+  /** The Ollama judge that scored it — a score needs its instrument named. */
+  model: string;
+  /** Mean of the metric scores. */
+  overall: number;
+  verdict: ConversationVerdict;
+  scores: ConversationEvalScore[];
+  /** Judge wall time. */
+  ms: number;
+}
+
+/** Guardrail decisions recorded while one thread ran. */
+export interface ConversationRailSummary {
+  scans: number;
+  blocked: number;
+  /** Observe mode: over threshold, deliberately allowed through. */
+  wouldBlock: number;
+  maxScore: number | null;
+}
+
+/** One row of the past-conversations table on Admin → Monitoring. */
+export interface ConversationMonitorRow {
+  id: string;
+  title: string;
+  provider: string;
+  updatedAt: string; // ISO 8601
+  /** Persisted messages, user and assistant together. */
+  turns: number;
+  rails: ConversationRailSummary;
+  /** Newest eval, or null when nobody has judged this thread yet. */
+  eval: ConversationEval | null;
+}
+
+/** Everything the rails half of Admin → Monitoring renders, in one response. */
 export interface GuardrailDashboard {
   mode: GuardrailMode;
   threshold: number;

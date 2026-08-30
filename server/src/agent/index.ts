@@ -34,6 +34,7 @@ import {
   personaRefusalMessage,
   scanText,
 } from "./guardrails.js";
+import { langfuseHandler } from "../langfuse.js";
 import { modelSupportsTools, ollamaBase } from "../ollama.js";
 import {
   buildCliPrompt,
@@ -301,6 +302,9 @@ agent.post("/api/agent/chat", async (req, res) => {
       modelName: settings.model,
       telemetry: { surface: "chat", threadId, userId: user?.id, provider: settings.model },
     });
+    // With LANGFUSE_* keys set, the turn also lands in Langfuse, grouped into
+    // a session by thread id. Null when disabled — no keys, no callbacks.
+    const lf = langfuseHandler({ threadId, userId: user?.id, model: settings.model });
     const stream = await graph.stream(
       // The new turn goes in unvetted (`pending`); the input_rail node decides
       // whether it ever becomes a message. turnInput also resets the per-turn
@@ -315,6 +319,7 @@ agent.post("/api/agent/chat", async (req, res) => {
         // and grouped into conversations by thread_id (the Threads view).
         runName: "ask-grapevine",
         metadata: { thread_id: threadId, model: settings.model, tools: toolsOk },
+        ...(lf && { callbacks: [lf] }),
       },
     );
 

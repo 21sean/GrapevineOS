@@ -9,7 +9,7 @@
  * local GPU. Putting them in cost order is what makes "run everything" a
  * reasonable default instead of something people learn to avoid.
  *
- * One registry, two consumers — Admin → Evals and `npm run evals`. That is the
+ * One registry, two consumers — Admin → Monitoring and `npm run evals`. That is the
  * point of the file. A dashboard whose numbers come from a different code path
  * than the CI gate is a dashboard that eventually disagrees with the gate, and
  * the first time they disagree nobody can tell which one is lying.
