@@ -28,31 +28,15 @@ import {
   validQuery,
   wantsCommit,
 } from "../discovery.js";
-import {
-  inputRefusalMessage,
-  personaGuard,
-  personaRefusalMessage,
-  scanText,
-} from "./guardrails.js";
+import { personaGuard, personaRefusalMessage } from "./guardrails.js";
 import { langfuseHandler } from "../langfuse.js";
 import { modelSupportsTools, ollamaBase } from "../ollama.js";
-import {
-  buildCliPrompt,
-  cliChat,
-  cliSupportsTools,
-  cliTranscript,
-  detectProviders,
-  providerInfo,
-  pushCliTranscript,
-  seedCliTranscript,
-  type CliProviderId,
-} from "../providers.js";
+import { cliSupportsTools, detectProviders, providerInfo } from "../providers.js";
 import { store } from "../store.js";
-import { isChatEffort, type ChatEffort, type User } from "../types.js";
+import { isChatEffort, type User } from "../types.js";
 import {
   boundAgentUser,
   buildCtx,
-  buildSystemPrompt,
   coercePos,
   getEta,
   getEvent,
@@ -67,7 +51,7 @@ import {
   type ChatContext,
   type SearchParams,
 } from "./context.js";
-import { buildAgentGraph, hasCheckpoint, turnInput } from "./graph.js";
+import { buildAgentGraph, forgetThread, hasCheckpoint, turnInput } from "./graph.js";
 
 export const agent = Router();
 
@@ -181,87 +165,79 @@ agent.post("/api/agent/chat", async (req, res) => {
       return res.end();
     }
 
-    // The input rail lives in the graph now (graph.ts, `input_rail`), so the
-    // Ollama path is covered by routing rather than by an early return here.
-    // The CLI providers never enter the graph, so they carry their own copy
-    // of the rail below — the alternative is a chat surface with no rail at
-    // all, which is how a rail quietly stops covering half the traffic.
+    // Every provider goes through the same LangGraph now — the rails, the
+    // checkpointer, the persona guard, and the traces are identical whether
+    // the model is local Ollama or a subscription CLI (cli-model.ts). What
+    // differs per provider is only the pre-flight below.
+    const provider =
+      settings.chatProvider && settings.chatProvider !== "ollama"
+        ? settings.chatProvider
+        : null;
 
-    // Subscription-authed CLI providers (Claude Code / Codex / Gemini CLI)
-    // answer digest-only, outside the LangGraph agent.
-    if (settings.chatProvider && settings.chatProvider !== "ollama") {
-      const verdict = await scanText(message.slice(0, MAX_MESSAGE_CHARS), {
-        rail: "input",
-        surface: "chat-cli",
-        threadId,
-        userId: user?.id,
-        provider: settings.chatProvider,
-      });
-      if (verdict.blocked) {
-        send({
-          type: "guardrail",
-          rail: "input",
-          blocked: true,
-          score: Number(verdict.score.toFixed(4)),
-          threshold: verdict.threshold,
-        });
+    let baseUrl = "http://localhost:11434";
+    let toolsOk = false;
+    if (provider) {
+      const info = providerInfo(provider);
+      const status = (await detectProviders()).find((p) => p.id === provider);
+      if (!status?.installed) {
         send({
           type: "notice",
-          code: "guardrails",
-          message: `Blocked by the local safety classifier (score ${verdict.score.toFixed(2)}, threshold ${verdict.threshold.toFixed(2)}).`,
+          code: "cli-missing",
+          message: `${info.name} isn't installed on the server machine (${info.installHint}). Pick another provider in Admin → Providers.`,
         });
-        send({ type: "delta", text: inputRefusalMessage(settings.city) });
-        // Deliberately not persisted: a blocked turn stays out of the
-        // transcript so it cannot prime the next one.
         return done();
       }
-      const answer = await cliChatTurn({
-        provider: settings.chatProvider,
-        message: message.slice(0, MAX_MESSAGE_CHARS),
-        threadId,
-        chat: body.context ?? {},
-        city: settings.city,
-        send,
-        signal: ac.signal,
-        // Only an owned thread can be reloaded from storage; a stranger's id
-        // was already re-minted above, so this can't read someone else's chat.
-        user: ownsThread ? user : null,
-        model: typeof body.model === "string" ? body.model : undefined,
-        effort: isChatEffort(body.effort) ? body.effort : undefined,
-      });
-      if (answer) persist(answer);
-      return done();
-    }
-
-    if (!settings.model) {
-      send({
-        type: "notice",
-        code: "no-model",
-        message: "No model selected. Pick one in Admin → Models.",
-      });
-      return done();
-    }
-    const baseUrl = await ollamaBase();
-    const up = await fetch(`${baseUrl}/api/version`, { signal: AbortSignal.timeout(3000) })
-      .then((r) => r.ok)
-      .catch(() => false);
-    if (!up) {
-      send({
-        type: "notice",
-        code: "ollama-down",
-        message: `Ollama isn't answering at ${baseUrl}. Start it, then try again.`,
-      });
-      return done();
-    }
-
-    const toolsOk = await modelSupportsTools(settings.model);
-    if (!toolsOk) {
-      send({
-        type: "notice",
-        code: "no-tools",
-        message:
-          "This model can't use tools, so answers come from the event digest only. Pick a tools-capable model (e.g. qwen3) in Admin → Models for ETAs and calendar saves.",
-      });
+      if (!status.authed) {
+        send({
+          type: "notice",
+          code: "cli-auth",
+          message: `${info.name} isn't signed in. Run: ${info.loginHint} — ${info.loginNote}.`,
+        });
+        return done();
+      }
+      toolsOk = cliSupportsTools(provider);
+      // Once per conversation, not once per turn — repeated on every reply it
+      // was just noise stacked above the answer.
+      if (!(await hasCheckpoint(threadId))) {
+        send({
+          type: "notice",
+          code: "cli-mode",
+          message: toolsOk
+            ? `${info.name} answers with Grapevine's own MCP tools (event search, details, ETAs, web discovery, calendar saves on the linked account) — live map pinning still needs the local Ollama agent.`
+            : `${info.name} answers from the event digest only — map pinning, ETAs, and calendar saves need the local Ollama agent.`,
+        });
+      }
+      send({ type: "status", label: `Asking ${info.name}…` });
+    } else {
+      if (!settings.model) {
+        send({
+          type: "notice",
+          code: "no-model",
+          message: "No model selected. Pick one in Admin → Models.",
+        });
+        return done();
+      }
+      baseUrl = await ollamaBase();
+      const up = await fetch(`${baseUrl}/api/version`, { signal: AbortSignal.timeout(3000) })
+        .then((r) => r.ok)
+        .catch(() => false);
+      if (!up) {
+        send({
+          type: "notice",
+          code: "ollama-down",
+          message: `Ollama isn't answering at ${baseUrl}. Start it, then try again.`,
+        });
+        return done();
+      }
+      toolsOk = await modelSupportsTools(settings.model);
+      if (!toolsOk) {
+        send({
+          type: "notice",
+          code: "no-tools",
+          message:
+            "This model can't use tools, so answers come from the event digest only. Pick a tools-capable model (e.g. qwen3) in Admin → Models for ETAs and calendar saves.",
+        });
+      }
     }
 
     // sessionUser comes from the verified Supabase JWT, never from the wire —
@@ -275,13 +251,17 @@ agent.post("/api/agent/chat", async (req, res) => {
       model: settings.model,
       toolsOk,
       city: settings.city,
+      userText: message.slice(0, MAX_MESSAGE_CHARS),
+      ...(provider && { provider }),
+      ...(provider === "claude" && typeof body.model === "string" && { cliModel: body.model }),
+      ...(provider === "claude" && isChatEffort(body.effort) && { cliEffort: body.effort }),
       // Stamped onto every rail decision this turn records, so the panel can
       // slice the distribution by surface and by provider.
       telemetry: {
-        surface: "chat",
+        surface: provider ? "chat-cli" : "chat",
         threadId,
         userId: user?.id,
-        provider: settings.model,
+        provider: provider ?? settings.model,
       },
     });
 
@@ -297,28 +277,32 @@ agent.post("/api/agent/chat", async (req, res) => {
 
     const strip = thinkStripper();
     // Output rail: deterministic persona/identity-leak scrubber over the
-    // streamed answer, keyed to whichever model the admin has selected.
+    // streamed answer, keyed to whichever model or provider is answering.
     const guard = personaGuard({
-      modelName: settings.model,
-      telemetry: { surface: "chat", threadId, userId: user?.id, provider: settings.model },
+      modelName: provider ?? settings.model,
+      telemetry: {
+        surface: provider ? "chat-cli" : "chat",
+        threadId,
+        userId: user?.id,
+        provider: provider ?? settings.model,
+      },
     });
     // With LANGFUSE_* keys set, the turn also lands in Langfuse, grouped into
     // a session by thread id. Null when disabled — no keys, no callbacks.
-    const lf = langfuseHandler({ threadId, userId: user?.id, model: settings.model });
+    const lf = langfuseHandler({ threadId, userId: user?.id, model: providerLabel });
     const stream = await graph.stream(
-      // The new turn goes in unvetted (`pending`); the input_rail node decides
-      // whether it ever becomes a message. turnInput also resets the per-turn
-      // tool budget (Overwrite on toolRounds).
-      turnInput(message.slice(0, MAX_MESSAGE_CHARS), seed),
+      // The new user text is NOT in the input: it rides in GraphDeps.userText
+      // and only the input_rail node may promote it into state (that is what
+      // keeps a flagged message out of the durable checkpointer). turnInput
+      // carries any reseeded history and resets the per-turn tool budget.
+      turnInput(seed),
       {
         configurable: { thread_id: threadId },
         streamMode: ["messages", "custom"],
         signal: AbortSignal.any([ac.signal, AbortSignal.timeout(CHAT_DEADLINE_MS)]),
         recursionLimit: 50,
-        // With LANGSMITH_TRACING set, runs land in LangSmith named per turn
-        // and grouped into conversations by thread_id (the Threads view).
         runName: "ask-grapevine",
-        metadata: { thread_id: threadId, model: settings.model, tools: toolsOk },
+        metadata: { thread_id: threadId, model: providerLabel, tools: toolsOk },
         ...(lf && { callbacks: [lf] }),
       },
     );
@@ -408,167 +392,6 @@ agent.post("/api/agent/chat", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// CLI providers — one shot per turn through claude / codex / gemini, no tools.
-// ---------------------------------------------------------------------------
-
-/**
- * Rebuild a thread's CLI transcript from the rows persisted for its owner.
- * chat_messages is a flat role-tagged list; the CLI prompt wants user/assistant
- * pairs, so unpaired tails (a blocked turn, an aborted stream) are skipped.
- */
-async function savedExchanges(user: User, threadId: string) {
-  const rows = (await store.chatMessages(user.id, threadId).catch(() => null)) ?? [];
-  const pairs: { user: string; assistant: string }[] = [];
-  for (let i = 0; i < rows.length - 1; i++) {
-    if (rows[i].role !== "user" || rows[i + 1].role !== "assistant") continue;
-    pairs.push({ user: rows[i].content, assistant: rows[i + 1].content });
-    i++;
-  }
-  return pairs;
-}
-
-/** Returns the reply as shown to the user (for history), or null when the
- * turn never produced one (provider missing / not signed in). */
-async function cliChatTurn(opts: {
-  provider: CliProviderId;
-  message: string;
-  threadId: string;
-  chat: ChatContext;
-  city: string;
-  send: (frame: Frame) => void;
-  signal: AbortSignal;
-  /** Signed-in owner of this thread, when there is one — used to reload
-   *  conversation memory this process has lost. */
-  user: User | null;
-  /** Per-turn Claude Code overrides (ignored by the other CLIs). */
-  model?: string;
-  effort?: ChatEffort;
-}): Promise<string | null> {
-  const { provider, message, threadId, chat, city, send, signal, user, model, effort } = opts;
-  const info = providerInfo(provider);
-
-  const status = (await detectProviders()).find((p) => p.id === provider);
-  if (!status?.installed) {
-    send({
-      type: "notice",
-      code: "cli-missing",
-      message: `${info.name} isn't installed on the server machine (${info.installHint}). Pick another provider in Admin → Providers.`,
-    });
-    return null;
-  }
-  if (!status.authed) {
-    send({
-      type: "notice",
-      code: "cli-auth",
-      message: `${info.name} isn't signed in. Run: ${info.loginHint} — ${info.loginNote}.`,
-    });
-    return null;
-  }
-
-  // Memory first: a restart (or reopening a thread from the history panel)
-  // leaves this process with no record of the conversation, and a follow-up
-  // like "keep searching" then reaches the model with nothing to continue from.
-  if (user && !cliTranscript(threadId).length) {
-    seedCliTranscript(threadId, await savedExchanges(user, threadId));
-  }
-
-  const withTools = cliSupportsTools(provider);
-  // Once per conversation, not once per turn — repeated on every reply it was
-  // just noise stacked above the answer.
-  if (!cliTranscript(threadId).length) {
-    send({
-      type: "notice",
-      code: "cli-mode",
-      message: withTools
-        ? `${info.name} answers with Grapevine's own MCP tools (event search, details, ETAs, web discovery, calendar saves on the linked account) — live map pinning still needs the local Ollama agent.`
-        : `${info.name} answers from the event digest only — map pinning, ETAs, and calendar saves need the local Ollama agent.`,
-    });
-  }
-  send({ type: "status", label: `Asking ${info.name}…` });
-
-  const ctx = await buildCtx(coercePos(chat.userPos));
-  const prompt = buildCliPrompt(buildSystemPrompt(ctx, chat, withTools), threadId, message, {
-    tools: withTools,
-  });
-
-  // Same output rail as the Ollama path, applied to the stream so an identity
-  // leak is caught mid-reply rather than after the user has read it.
-  const guard = personaGuard({
-    modelName: provider,
-    telemetry: { surface: "chat-cli", threadId, userId: user?.id ?? undefined, provider },
-  });
-  let shown = "";
-  const { text: raw, usage } = await cliChat(
-    provider,
-    prompt,
-    AbortSignal.any([signal, AbortSignal.timeout(CHAT_DEADLINE_MS)]),
-    {
-      tools: withTools,
-      model,
-      effort,
-      events: {
-        onText: (chunk) => {
-          if (guard.tripped) return;
-          const out = guard.push(chunk);
-          if (guard.tripped || !out) return;
-          shown += out;
-          send({ type: "delta", text: out });
-        },
-        onThinking: () => {
-          if (!shown) send({ type: "status", label: "Thinking…" });
-        },
-        onTool: (run) =>
-          send({
-            type: "tool",
-            name: run.label,
-            label: run.label,
-            state: run.state,
-            ...(run.detail && { detail: run.detail }),
-          }),
-      },
-    },
-  );
-
-  let text = shown;
-  if (!text.trim() && raw.trim()) {
-    // Nothing streamed: the other CLIs answer in one shot, and a Claude turn
-    // can too when the reply arrives as a single final message.
-    const out = guard.push(raw) + guard.flush();
-    if (!guard.tripped && out) {
-      text = out;
-      send({ type: "delta", text: out });
-    }
-  } else if (!guard.tripped) {
-    const rest = guard.flush();
-    if (rest && !guard.tripped) {
-      text += rest;
-      send({ type: "delta", text: rest });
-    }
-  }
-
-  // Token/cost telemetry is about the call, not its content — surface it even
-  // when the persona rail swaps the reply.
-  if (usage) send({ type: "usage", usage });
-  if (guard.tripped) {
-    send({
-      type: "notice",
-      code: "guardrails",
-      message: "The reply broke character (model identity leak) — replaced by the persona rail.",
-    });
-    const refusal = personaRefusalMessage(city);
-    // "replace" rather than "delta": whatever streamed before the rail tripped
-    // is already on screen and has to go.
-    send({ type: "replace", text: refusal });
-    // Record the refusal, not the leak — otherwise the next turn is primed
-    // with exactly the text the rail exists to suppress.
-    pushCliTranscript(threadId, message, refusal);
-    return refusal;
-  }
-  pushCliTranscript(threadId, message, raw || text);
-  return text;
-}
-
-// ---------------------------------------------------------------------------
 // Chat history — signed-in users only; every route re-checks thread ownership
 // against the session, so ids never grant access on their own.
 // ---------------------------------------------------------------------------
@@ -601,6 +424,7 @@ agent.delete("/api/chat/threads/:id", async (req, res) => {
   try {
     const deleted = await store.deleteChatThread(user.id, req.params.id);
     if (!deleted) return res.status(404).json({ error: "unknown thread" });
+    await forgetThread(req.params.id).catch(() => {});
     res.json({ ok: true });
   } catch (err) {
     res.status(502).json({ error: String(err).slice(0, 200) });

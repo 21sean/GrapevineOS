@@ -684,47 +684,21 @@ export async function cliJSON(
 }
 
 // ---------------------------------------------------------------------------
-// Per-thread transcripts (CLI mode has no LangGraph checkpointer)
+// Prompt assembly (the CLIs take one flat prompt per turn)
 // ---------------------------------------------------------------------------
 
-interface Exchange {
+export interface Exchange {
   user: string;
   assistant: string;
 }
 
-const MAX_THREADS = 200;
-const MAX_EXCHANGES = 8;
-const transcripts = new Map<string, Exchange[]>();
-
-export function cliTranscript(threadId: string): Exchange[] {
-  return transcripts.get(threadId) ?? [];
-}
-
 /**
- * Prime a thread from persisted history. CLI providers have no server-side
- * checkpointer, so this map is their only memory — and it dies with the
- * process. Without a reseed, a server restart (or reopening a saved
- * conversation from the history panel) drops every earlier turn, and a
- * follow-up like "keep searching" reaches the model with nothing to continue
- * from. No-op once the thread has live turns.
+ * History clamp for the flat prompt. Conversation memory itself lives in the
+ * LangGraph checkpointer now (cli-model.ts routes CLI turns through the same
+ * graph as Ollama ones) — this only bounds how much of it one CLI invocation
+ * re-reads.
  */
-export function seedCliTranscript(threadId: string, history: Exchange[]): void {
-  if (transcripts.has(threadId) || !history.length) return;
-  transcripts.set(threadId, history.slice(-MAX_EXCHANGES));
-}
-
-export function pushCliTranscript(threadId: string, user: string, assistant: string): void {
-  const list = transcripts.get(threadId) ?? [];
-  list.push({ user, assistant });
-  while (list.length > MAX_EXCHANGES) list.shift();
-  transcripts.delete(threadId); // re-insert → Map keeps insertion order = LRU
-  transcripts.set(threadId, list);
-  while (transcripts.size > MAX_THREADS) {
-    const oldest = transcripts.keys().next().value;
-    if (oldest === undefined) break;
-    transcripts.delete(oldest);
-  }
-}
+const MAX_EXCHANGES = 8;
 
 /** Reality check for CLI sessions that get MCP tools: the in-app UI tools the
  * system prompt describes don't exist there — remap to the MCP toolbox. */
@@ -748,14 +722,15 @@ user confirms. Offer schedule_search when they want an ongoing watch. Writes
 (save_event, unsave_event, update_interests, committing discoveries) land on
 the linked Grapevine account, so only make them when the user asks.`;
 
-/** System prompt + rolling transcript + the new message, as one CLI prompt. */
+/** System prompt + recent exchanges + the new message, as one CLI prompt. */
 export function buildCliPrompt(
   system: string,
-  threadId: string,
+  exchanges: Exchange[],
   message: string,
   opts?: { tools?: boolean },
 ): string {
-  const history = cliTranscript(threadId)
+  const history = exchanges
+    .slice(-MAX_EXCHANGES)
     .map((x) => `User: ${x.user}\nGrapevine: ${x.assistant}`)
     .join("\n\n");
   return [

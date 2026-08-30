@@ -149,25 +149,29 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
   const city = FIXTURE_SETTINGS.city;
   const refusal = inputRefusalMessage(city);
 
-  const graph = buildAgentGraph({
-    ctx: fixtureCtx(),
-    chat: {},
-    baseUrl: opts.baseUrl,
-    model: opts.model,
-    // See the header: tools off on purpose.
-    toolsOk: false,
-    city,
-    // Simulated traffic must never enter the recorded distribution.
-    telemetry: { surface: "eval", record: false },
-  });
-
   const state = { blockedTurns: 0, personaTrips: 0 };
 
   async function turn(conversationId: string, history: TurnMessage[], message: string) {
     const seed = history.map((m) =>
       m.role === "assistant" ? new AIMessage(m.content) : new HumanMessage(m.content),
     );
-    const result = await graph.invoke(turnInput(message, seed), {
+    // Per turn, because the user text now rides in on the graph's deps (that
+    // is what keeps flagged input out of the durable checkpointer for real
+    // traffic), and `ephemeral` so these synthetic threads never reach it.
+    const graph = buildAgentGraph({
+      ctx: fixtureCtx(),
+      chat: {},
+      baseUrl: opts.baseUrl,
+      model: opts.model,
+      // See the header: tools off on purpose.
+      toolsOk: false,
+      city,
+      userText: message,
+      ephemeral: true,
+      // Simulated traffic must never enter the recorded distribution.
+      telemetry: { surface: "eval", record: false },
+    });
+    const result = await graph.invoke(turnInput(seed), {
       configurable: { thread_id: `${conversationId}-${history.length}` },
       recursionLimit: 20,
       signal: opts.signal,

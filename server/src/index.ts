@@ -15,6 +15,7 @@ import {
 } from "./discovery.js";
 import { backfillImages } from "./images.js";
 import { mcp, mcpAuthMode, startMcpServer } from "./mcp.js";
+import { startEvalSweep } from "./evals/auto-judge.js";
 import { evals } from "./evals/index.js";
 import { guardrails } from "./guardrails/index.js";
 import { detectProviders } from "./providers.js";
@@ -497,6 +498,7 @@ app.listen(port, () => {
   startPushScheduler();
   startDiscoveryScheduler();
   startRetentionSweep();
+  startEvalSweep();
   warmupGuardrails();
   startMcpServer().catch((err) =>
     console.error("[grapevine] mcp failed to start:", String(err).slice(0, 300)),

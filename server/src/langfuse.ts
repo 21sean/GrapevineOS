@@ -34,12 +34,34 @@ function warnOnce(err: unknown): void {
   console.warn(`[langfuse] disabled after error: ${String(err).slice(0, 200)}`);
 }
 
+/**
+ * PII scrub applied to every exported observation (LANGFUSE_MASK=off skips
+ * it). Chat text is the payload here, so this is deliberately narrow: strip
+ * the identifiers people paste (emails, phone numbers) and leave the
+ * conversation readable — a mask that redacts the transcript would defeat
+ * the reason for exporting it.
+ */
+function scrubPII(text: string): string {
+  return text
+    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+\w/g, "[email]")
+    .replace(/(?:\+?\d{1,2}[\s.-])?(?:\(\d{3}\)|\d{3})[\s.-]\d{3}[\s.-]?\d{4}\b/g, "[phone]");
+}
+
 /** Register the span processor once, lazily, and only when keys are set. */
 function start(): boolean {
   if (!langfuseEnabled()) return false;
   if (sdk) return true;
   try {
-    sdk = new NodeSDK({ spanProcessors: [new LangfuseSpanProcessor()] });
+    sdk = new NodeSDK({
+      spanProcessors: [
+        new LangfuseSpanProcessor({
+          ...(process.env.LANGFUSE_MASK !== "off" && {
+            mask: ({ data }: { data: unknown }) =>
+              typeof data === "string" ? scrubPII(data) : data,
+          }),
+        }),
+      ],
+    });
     sdk.start();
     return true;
   } catch (err) {
@@ -69,6 +91,41 @@ export function langfuseHandler(opts: {
   } catch (err) {
     warnOnce(err);
     return null;
+  }
+}
+
+/**
+ * Mirror one guardrail decision as a session score, so a blocked turn's
+ * trace sits next to the number that blocked it. Only scored rails ship
+ * (input/content — the output rail is regex and has no measurement), and
+ * only decisions that belong to a thread. Fire-and-forget like everything
+ * else here; Postgres (guardrail_scans) stays the source of truth.
+ */
+export function recordRailScore(scan: {
+  rail: string;
+  surface?: string;
+  score?: number;
+  blocked: boolean;
+  wouldBlock?: boolean;
+  threadId?: string;
+}): void {
+  if (!start() || scan.score === undefined || !scan.threadId) return;
+  try {
+    client ??= new LangfuseClient();
+    const outcome = scan.blocked ? "blocked" : scan.wouldBlock ? "would block" : "pass";
+    void Promise.resolve(
+      client.score.create({
+        sessionId: scan.threadId,
+        name: `rail.${scan.rail}`,
+        value: scan.score,
+        dataType: "NUMERIC",
+        comment: `${scan.surface ?? "unknown"} · ${outcome}`,
+      }),
+    )
+      .then(() => client!.flush())
+      .catch(warnOnce);
+  } catch (err) {
+    warnOnce(err);
   }
 }
 

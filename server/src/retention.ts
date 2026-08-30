@@ -23,6 +23,7 @@
  * cascade into those tables, and reactions feed the taste model, so pruning
  * them would erase user history.
  */
+import { pruneChatCheckpoints } from "./checkpointer.js";
 import { db } from "./db.js";
 import { nextOccurrence } from "./recurrence.js";
 import { store } from "./store.js";
@@ -113,9 +114,30 @@ export async function pruneGuardrailScans(): Promise<number> {
 }
 
 /**
+ * LangGraph checkpoints are runtime state, not the record (chat_messages is);
+ * the saver already prunes each thread to its newest dozen, so this only has
+ * to catch threads nobody ever revisits.
+ */
+function checkpointRetentionDays(): number {
+  const raw = Number(process.env.CHAT_CHECKPOINT_RETENTION_DAYS ?? 30);
+  return Number.isFinite(raw) && raw >= 0 ? raw : 30;
+}
+
+/** One pass over the checkpoint tables. Returns how many checkpoints went. */
+export async function pruneOldCheckpoints(): Promise<number> {
+  const days = checkpointRetentionDays();
+  if (days === 0) return 0;
+  const removed = await pruneChatCheckpoints(new Date(Date.now() - days * 86_400_000));
+  if (removed) {
+    console.log(`[grapevine] retention: pruned ${removed} chat checkpoint${removed === 1 ? "" : "s"} older than ${days}d`);
+  }
+  return removed;
+}
+
+/**
  * Boot pass + a slow interval; failures log and retry next cycle.
  *
- * The two sweeps are independent: EVENT_RETENTION_DAYS=0 disables event
+ * The sweeps are independent: EVENT_RETENTION_DAYS=0 disables event
  * pruning, and guardrail telemetry still has to be bounded, because a table
  * of everything anyone typed is not something to leave running because an
  * unrelated switch was flipped.
@@ -123,9 +145,11 @@ export async function pruneGuardrailScans(): Promise<number> {
 export function startRetentionSweep(): void {
   const events = retentionDays() > 0;
   const scans = guardrailRetentionDays() > 0;
+  const checkpoints = checkpointRetentionDays() > 0;
   if (!events) console.log("[grapevine] retention: events disabled (EVENT_RETENTION_DAYS=0)");
   if (!scans) console.log("[grapevine] retention: guardrail scans disabled (GUARDRAIL_RETENTION_DAYS=0)");
-  if (!events && !scans) return;
+  if (!checkpoints) console.log("[grapevine] retention: chat checkpoints disabled (CHAT_CHECKPOINT_RETENTION_DAYS=0)");
+  if (!events && !scans && !checkpoints) return;
 
   const run = async () => {
     if (events) {
@@ -136,6 +160,11 @@ export function startRetentionSweep(): void {
     if (scans) {
       await pruneGuardrailScans().catch((err) =>
         console.log(`[grapevine] guardrail retention error: ${String(err).slice(0, 200)}`),
+      );
+    }
+    if (checkpoints) {
+      await pruneOldCheckpoints().catch((err) =>
+        console.log(`[grapevine] checkpoint retention error: ${String(err).slice(0, 200)}`),
       );
     }
   };

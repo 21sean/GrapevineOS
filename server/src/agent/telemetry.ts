@@ -28,6 +28,7 @@
 import { createHash } from "node:crypto";
 import { db } from "../db.js";
 import type { TablesInsert } from "../db-types.js";
+import { recordRailScore } from "../langfuse.js";
 import type { GuardrailRail, GuardrailSurface } from "../types.js";
 
 /** Enough of the text to judge a decision by; a page is far longer than this. */
@@ -116,6 +117,9 @@ function toRow(r: ScanRecord): Row {
  */
 export function recordScan(r: ScanRecord): void {
   if (!r.text.trim()) return;
+  // Mirror the decision into Langfuse as a session score (no-op without
+  // keys). Same posture as the queue below: never in the request path.
+  recordRailScore(r);
   if (queue.length >= QUEUE_LIMIT) {
     // Oldest first: during a burst the rows worth keeping are the new ones.
     queue.shift();

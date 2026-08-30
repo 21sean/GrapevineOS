@@ -1,10 +1,12 @@
 /**
  * The concierge as a LangGraph StateGraph, with the guardrails as nodes in it:
  *
- *   START → input_rail ─ blocked ──────────────────────────────→ END
+ *   START → input_rail ─ blocked ───────────────────────────────→ END
  *              │ clean
- *              ▼          ┌──────── tool_calls ────────┐
- *            agent ───────┴─ no tool_calls ────────────┴──────→ END
+ *              ▼          ┌───────── tool_calls ───────┐
+ *           recall        │                            │
+ *              ▼          │                            │
+ *            agent ───────┴─ no tool_calls ────────────┴───────→ END
  *              ▲                                       │
  *              │                                       ▼
  *              └── toolRounds < MAX ── content_rail ── tools
@@ -14,8 +16,8 @@
  *
  * The rails used to be `if` statements in the HTTP handler and inside two
  * tools. Moving them into the graph buys three things: they show up in
- * LangSmith traces as nodes with inputs and outputs, a blocked turn is a
- * routing decision rather than an early `return`, and — most of the value —
+ * traces as nodes with inputs and outputs, a blocked turn is a routing
+ * decision rather than an early `return`, and — most of the value —
  * every web-facing tool is covered by one rail instead of each tool
  * remembering to call the classifier itself. The next tool that fetches
  * something is protected by existing, not by someone noticing.
@@ -23,10 +25,12 @@
  * The two rails keep untrusted text out of state in deliberately different
  * ways, because they are defending different things:
  *
- *  - `input_rail` reads the turn from a `pending` channel and only promotes
- *    it into `messages` once it is clean. A flagged message therefore never
- *    enters the checkpointer at all, so it cannot poison the history that
- *    later turns replay. That property is the whole reason the channel exists.
+ *  - `input_rail` reads the turn from `deps.userText` — a closure, not a
+ *    state channel — and only promotes it into `messages` once it is clean.
+ *    A flagged message therefore never enters the checkpointer at all, so it
+ *    cannot poison the history later turns replay. The closure matters more
+ *    now that the checkpointer is durable: a `pending` channel would land the
+ *    unvetted text in Postgres for one superstep before the rail cleared it.
  *  - `content_rail` rewrites the tool results in place (same message id, which
  *    the messages reducer treats as a replacement). Tool output does reach
  *    `messages` for one superstep before the rail sees it, which is fine: the
@@ -39,13 +43,21 @@
  * - `toolRounds` — a `ReducedValue` counter the tools node increments; each
  *   user turn resets it via `Overwrite` (see `turnInput`), so routing reads a
  *   typed channel instead of re-scanning message history every step.
- * - `pending` — the unvetted user turn, cleared by the input rail.
+ * - `summary` / `summarized` — the running summary of turns that have scrolled
+ *   out of the history window, and how many messages it covers.
  *
  * Nodes:
  * - `input_rail` classifies the user's turn (see guardrails.ts) and routes.
- * - `agent` calls ChatOllama with the toolbox bound; the system prompt is
+ * - `recall` folds turns that outgrew HISTORY_WINDOW into a running summary
+ *   (a small extra generation, at most once per SUMMARY_STRIDE turns), so a
+ *   long conversation loses its wording but not its facts. Best-effort: any
+ *   failure skips the fold and the turn proceeds.
+ * - `agent` calls the model with the toolbox bound; the system prompt is
  *   rebuilt every request so the event digest and clock stay fresh, and is
- *   never persisted into thread state.
+ *   never persisted into thread state. The model is ChatOllama, or — when a
+ *   CLI provider is selected — CliChatModel, which shells out to Claude Code /
+ *   Codex / Gemini / Copilot but streams through the same graph, so every
+ *   provider gets the same rails, memory, and traces.
  * - `tools` executes the model's tool calls, streaming start/done frames to
  *   the browser via the custom-stream writer (UI tools additionally emit
  *   "action" frames from inside the tool, see tools.ts).
@@ -56,19 +68,21 @@
  * Node policies (model nodes only):
  * - `timeout.idleTimeout` — token callbacks refresh the idle timer, so long
  *   answers stream freely while a stalled Ollama generation fails in ~45s
- *   instead of eating the whole 120s HTTP deadline.
+ *   instead of eating the whole 120s HTTP deadline. CLI turns get a longer
+ *   leash: their tool phases (MCP calls inside the CLI process) are silent.
  * - `retryPolicy.retryOn` — retries connection-establishment failures only.
  *   Those happen before the first token, so a retry can't duplicate streamed
  *   text; mid-stream failures (ECONNRESET, idle timeout) are deliberately not
- *   retried for the same reason. The tools node has no retry at all: re-running
- *   it would re-emit UI action frames (duplicate confirm cards). The rail
- *   nodes have none either — a retried scan would record the same decision
- *   twice and quietly double-count it in the distribution.
+ *   retried for the same reason. CLI models have no retry at all (a re-run
+ *   spends real subscription tokens), and neither do the tools node (a re-run
+ *   would re-emit UI action frames) or the rails — a retried scan would
+ *   record the same decision twice and double-count it in the distribution.
  *
  * Conversation memory is a LangGraph checkpointer keyed by thread_id: the
  * client sends only the new user message and the graph replays the rest.
- * MemorySaver is deliberate — chats are ephemeral by design; restart the
- * server and threads reset while calendars/interests persist in Postgres.
+ * The checkpointer is durable (SupabaseSaver — see checkpointer.ts), so a
+ * server restart keeps every thread's memory; the reseed in index.ts remains
+ * as a fallback for threads that predate the checkpoint table.
  */
 import {
   AIMessage,
@@ -96,6 +110,9 @@ import {
 import { ChatOllama } from "@langchain/ollama";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import { z } from "zod";
+import { SupabaseSaver } from "../checkpointer.js";
+import type { ChatEffort, CliProviderId } from "../types.js";
+import { CliChatModel } from "./cli-model.js";
 import { buildSystemPrompt, type AgentCtx, type ChatContext } from "./context.js";
 import { inputRefusalMessage, scanText, type ScanOptions } from "./guardrails.js";
 import { makeTools, toolDetail, toolLabel } from "./tools.js";
@@ -104,6 +121,19 @@ export const MAX_TOOL_ROUNDS = 6;
 
 /** A stalled generation fails here; a healthy stream refreshes the timer per token. */
 const MODEL_IDLE_TIMEOUT_MS = 45_000;
+
+/** CLI turns: silent while the CLI runs its own MCP tool calls, so the idle
+ *  leash must outlast cliChat's own 110s timeout rather than trip first. */
+const CLI_IDLE_TIMEOUT_MS = 115_000;
+
+/** How many out-of-window messages accumulate before the recall node folds
+ *  them into the running summary. Bounds the extra generation to at most one
+ *  per few turns instead of one per turn. */
+const SUMMARY_STRIDE = 8;
+
+/** The fold itself is bounded: a summary that takes half the turn budget is
+ *  worse than a lost detail. On abort the fold is skipped, never the turn. */
+const SUMMARY_TIMEOUT_MS = 25_000;
 
 /**
  * Connection-establishment failures only (Ollama restarting, socket refused).
@@ -119,8 +149,8 @@ const modelRetry: RetryPolicy = {
 /** How much thread history the model sees; older turns stay checkpointed. */
 const HISTORY_WINDOW = 24;
 
-/** Threads live for the process lifetime — ephemeral chat is a feature. */
-const checkpointer = new MemorySaver();
+/** Durable: threads survive restarts. Fails soft to per-process memory. */
+const checkpointer = new SupabaseSaver();
 
 /**
  * Whether the in-memory checkpointer still holds this thread. False after a
@@ -132,35 +162,41 @@ export async function hasCheckpoint(threadId: string): Promise<boolean> {
   return !!tuple;
 }
 
+/** Deleting a thread deletes its graph state too, not just its transcript. */
+export async function forgetThread(threadId: string): Promise<void> {
+  await checkpointer.deleteThread(threadId);
+}
+
 const AgentState = new StateSchema({
   messages: MessagesValue,
   /** Tool rounds spent on the current turn; summed by the tools node. */
   toolRounds: new ReducedValue(z.number().default(0), {
     reducer: (total, next) => total + next,
   }),
-  /**
-   * The user's turn before the input rail has looked at it. Last write wins:
-   * this is a per-turn hand-off between exactly two writers (the caller sets
-   * it, the rail clears it), never something to accumulate.
-   */
-  pending: new ReducedValue(z.string().default(""), {
+  /** Running summary of turns that scrolled out of HISTORY_WINDOW. */
+  summary: new ReducedValue(z.string().default(""), {
     reducer: (_prev: string, next: string) => next,
+  }),
+  /** How many leading messages `summary` covers. */
+  summarized: new ReducedValue(z.number().default(0), {
+    reducer: (_prev: number, next: number) => next,
   }),
 });
 
 type State = typeof AgentState.State;
 
 /**
- * The per-turn graph input: any replayed history, the new user text held
- * unvetted in `pending`, plus an `Overwrite` that bypasses the sum reducer to
- * zero the tool budget — a new user turn starts with a full budget without
- * replaying history.
+ * The per-turn graph input: any replayed history plus an `Overwrite` that
+ * bypasses the sum reducer to zero the tool budget — a new user turn starts
+ * with a full budget without replaying history.
  *
- * `text` goes into `pending` rather than into `messages` on purpose. See the
- * header: it is what keeps a flagged message out of the checkpointer.
+ * The user's text is deliberately NOT part of the input: it rides in on
+ * `GraphDeps.userText` and only the input rail may write it into `messages`.
+ * See the header — that is what keeps a flagged message out of the (now
+ * durable) checkpointer.
  */
-export function turnInput(text: string, seed: BaseMessage[] = []): typeof AgentState.Update {
-  return { messages: seed, pending: text, toolRounds: new Overwrite(0) };
+export function turnInput(seed: BaseMessage[] = []): typeof AgentState.Update {
+  return { messages: seed, toolRounds: new Overwrite(0) };
 }
 
 export interface GraphDeps {
@@ -171,6 +207,19 @@ export interface GraphDeps {
   toolsOk: boolean;
   /** Named in the input rail's refusal. */
   city: string;
+  /** The new user turn, unvetted. Only the input rail promotes it to state. */
+  userText: string;
+  /**
+   * Compile with a throwaway in-memory checkpointer instead of the durable
+   * one. The red-team bridge sets this: synthetic conversations must never
+   * land in the same Postgres table as real ones.
+   */
+  ephemeral?: boolean;
+  /** Set to route the turn through a subscription CLI instead of Ollama. */
+  provider?: CliProviderId;
+  /** Per-turn Claude Code overrides (ignored by the other CLIs). */
+  cliModel?: string;
+  cliEffort?: ChatEffort;
   /**
    * Stamped onto every telemetry row this turn writes. `record: false` opts
    * the whole turn out, which the red-team simulation uses so its synthetic
@@ -283,19 +332,30 @@ export function buildAgentGraph(deps: GraphDeps) {
     tools.map((t) => [t.name, t as StructuredToolInterface]),
   );
 
+  // A CLI provider replaces the model, not the graph: rails, memory, and
+  // traces stay identical. Its in-CLI tool calls surface as frames via
+  // `frames`, pointed at the current run's writer inside invokeModel.
+  const cli = deps.provider
+    ? new CliChatModel({ provider: deps.provider, model: deps.cliModel, effort: deps.cliEffort })
+    : null;
+
   const opts = { baseUrl, model, temperature: 0.3, numCtx: 16384 };
   // Same dance as ollama.ts chatJSON: ask for no thinking, but fall back for
   // models that reject the flag outright.
   const llm = new ChatOllama({ ...opts, think: false });
   const llmNoFlag = new ChatOllama(opts);
-  const agentLlm = toolsOk ? llm.bindTools(tools) : llm;
-  const agentLlmNoFlag = toolsOk ? llmNoFlag.bindTools(tools) : llmNoFlag;
+  const agentLlm = toolsOk && !cli ? llm.bindTools(tools) : llm;
+  const agentLlmNoFlag = toolsOk && !cli ? llmNoFlag.bindTools(tools) : llmNoFlag;
 
   async function invokeModel(
     messages: BaseMessage[],
     config: LangGraphRunnableConfig,
     withTools: boolean,
   ) {
+    if (cli) {
+      cli.frames = (frame) => config.writer?.(frame);
+      return await cli.invoke(messages, config);
+    }
     const [primary, fallback] = withTools ? [agentLlm, agentLlmNoFlag] : [llm, llmNoFlag];
     try {
       return await primary.invoke(messages, config);
@@ -306,14 +366,14 @@ export function buildAgentGraph(deps: GraphDeps) {
   }
 
   /**
-   * Input rail. Promotes a clean turn into `messages` and routes to the agent;
+   * Input rail. Promotes a clean turn into `messages` and routes onward;
    * on a flagged turn it writes the refusal straight to the client and ends
    * the run without the text ever reaching the transcript.
    */
-  async function inputRailNode(state: State, config: LangGraphRunnableConfig) {
-    const text = state.pending?.trim();
-    // A resumed or replayed run with nothing pending: nothing to vet.
-    if (!text) return new Command({ goto: "agent", update: { pending: "" } });
+  async function inputRailNode(_state: State, config: LangGraphRunnableConfig) {
+    const text = deps.userText.trim();
+    // A replayed run with nothing new to vet.
+    if (!text) return new Command({ goto: "recall" });
 
     const verdict = await scanText(text, { rail: "input", ...telemetry });
 
@@ -337,8 +397,8 @@ export function buildAgentGraph(deps: GraphDeps) {
 
     if (!verdict.blocked) {
       return new Command({
-        goto: "agent",
-        update: { messages: [new HumanMessage(text)], pending: "" },
+        goto: "recall",
+        update: { messages: [new HumanMessage(text)] },
       });
     }
 
@@ -363,11 +423,65 @@ export function buildAgentGraph(deps: GraphDeps) {
     config.writer?.({ type: "delta", text: refusal });
     // The refusal is the assistant's turn as far as the transcript is
     // concerned; the message that provoked it is deliberately not recorded.
-    return new Command({ goto: END, update: { messages: [new AIMessage(refusal)], pending: "" } });
+    return new Command({ goto: END, update: { messages: [new AIMessage(refusal)] } });
+  }
+
+  /**
+   * Recall. When more than SUMMARY_STRIDE messages have scrolled out of the
+   * history window since the last fold, compress them into the running
+   * summary so windowed() stops meaning "forgotten". Skipped for CLI
+   * providers — a hidden generation there spends real subscription tokens —
+   * and skipped on any failure: memory compression is a nicety, the turn is
+   * not.
+   */
+  async function recallNode(state: State, config: LangGraphRunnableConfig) {
+    if (cli) return {};
+    const overflow = state.messages.length - HISTORY_WINDOW;
+    if (overflow - state.summarized < SUMMARY_STRIDE) return {};
+    const fold = state.messages
+      .slice(state.summarized, overflow)
+      .map((m) => {
+        const role =
+          m.getType() === "human" ? "Visitor" : m.getType() === "ai" ? "Grapevine" : "tool";
+        const text = typeof m.content === "string" ? m.content : JSON.stringify(m.content);
+        return `${role}: ${text.slice(0, 600)}`;
+      })
+      .join("\n");
+    try {
+      const signals = [AbortSignal.timeout(SUMMARY_TIMEOUT_MS)];
+      if (config.signal) signals.push(config.signal);
+      const res = await llm.invoke(
+        [
+          new SystemMessage(
+            "You maintain the running memory of a long conversation between a visitor and Grapevine, a local events concierge. Fold the new exchanges below into the existing summary. Keep every durable fact: names of events, venues, dates, times, prices, the visitor's stated tastes, constraints, and decisions. Drop pleasantries and wording. Answer with the updated summary only, 200 words or fewer.",
+          ),
+          new HumanMessage(
+            `Existing summary:\n${state.summary || "(none yet)"}\n\nNew exchanges to fold in:\n${fold}`,
+          ),
+        ],
+        { signal: AbortSignal.any(signals) },
+      );
+      const summary = typeof res.content === "string" ? res.content.trim() : "";
+      if (!summary) return {};
+      return { summary: summary.slice(0, 2_000), summarized: overflow };
+    } catch {
+      return {}; // next turn's overflow will be bigger; it retries naturally
+    }
+  }
+
+  /** The out-of-window memory, when there is any, injected after the system prompt. */
+  function recallMessages(state: State): SystemMessage[] {
+    return state.summary
+      ? [new SystemMessage(`Earlier in this conversation (running summary): ${state.summary}`)]
+      : [];
   }
 
   async function agentNode(state: State, config: LangGraphRunnableConfig) {
-    const res = await invokeModel([system, ...windowed(state.messages)], config, true);
+    const res = await invokeModel(
+      [system, ...recallMessages(state), ...windowed(state.messages)],
+      config,
+      true,
+    );
     return { messages: [res] };
   }
 
@@ -377,7 +491,7 @@ export function buildAgentGraph(deps: GraphDeps) {
       "Tool limit reached — answer the user now using only what you've already gathered.",
     );
     const res = await invokeModel(
-      [system, ...windowed(state.messages), nudge],
+      [system, ...recallMessages(state), ...windowed(state.messages), nudge],
       config,
       false,
     );
@@ -508,16 +622,19 @@ export function buildAgentGraph(deps: GraphDeps) {
     return state.toolRounds >= MAX_TOOL_ROUNDS ? "finalize" : "agent";
   }
 
-  const modelNodePolicy = {
-    retryPolicy: modelRetry,
-    timeout: { idleTimeout: MODEL_IDLE_TIMEOUT_MS },
-  };
+  // CLI models: longer idle leash (their tool phases stream nothing) and no
+  // retry (a re-run spends real subscription tokens on a duplicate turn).
+  const modelNodePolicy = cli
+    ? { timeout: { idleTimeout: CLI_IDLE_TIMEOUT_MS } }
+    : { retryPolicy: modelRetry, timeout: { idleTimeout: MODEL_IDLE_TIMEOUT_MS } };
 
   return new StateGraph(AgentState)
     // No retry on the rails: a retried scan records the same decision twice,
     // and a distribution that double-counts its retries is worse than one
     // that misses them.
-    .addNode("input_rail", inputRailNode, { ends: ["agent", END] })
+    .addNode("input_rail", inputRailNode, { ends: ["recall", END] })
+    // Best-effort by construction (it catches everything), so no policies.
+    .addNode("recall", recallNode)
     .addNode("agent", agentNode, modelNodePolicy)
     // No retry/timeout here: tools stream UI frames as they run, so a re-run
     // would duplicate them, and each call already catches its own failures.
@@ -525,9 +642,10 @@ export function buildAgentGraph(deps: GraphDeps) {
     .addNode("content_rail", contentRailNode)
     .addNode("finalize", finalizeNode, modelNodePolicy)
     .addEdge(START, "input_rail")
+    .addEdge("recall", "agent")
     .addConditionalEdges("agent", routeAfterAgent, ["tools", END])
     .addEdge("tools", "content_rail")
     .addConditionalEdges("content_rail", routeAfterRail, ["agent", "finalize"])
     .addEdge("finalize", END)
-    .compile({ checkpointer });
+    .compile({ checkpointer: deps.ephemeral ? new MemorySaver() : checkpointer });
 }

@@ -157,9 +157,17 @@ the graph.
   can't duplicate output) and fail fast on stalled generations via an idle
   timeout that healthy token streams keep refreshing. The tools node never
   retries; re-running it would re-emit UI action frames.
-- **Conversation memory is a LangGraph checkpointer** (`MemorySaver`, keyed by
-  `thread_id`): the browser sends only the new message and the graph replays
-  the rest. Threads are ephemeral; calendars and interests persist in Postgres.
+- **Conversation memory is a durable LangGraph checkpointer** (a custom
+  Supabase-backed saver, keyed by `thread_id`): the browser sends only the new
+  message and the graph replays the rest, and threads survive server restarts.
+  The unvetted user turn never enters the checkpointer; the input rail holds
+  it outside graph state until it passes. A `recall` node folds turns that
+  outgrow the history window into a running summary, so long conversations
+  lose wording, not facts.
+- **One graph, every provider**: the subscription CLIs (Claude Code, Codex,
+  Gemini, Copilot) run as a LangChain chat model inside the same graph, so
+  they get the same rails, the same memory, and the same traces as Ollama.
+  Claude Code still brings Grapevine's own MCP toolbox along.
 - **Zod-validated tools** in two kinds: data tools execute server-side; UI
   tools emit action frames the browser renders as map pins and confirm-cards.
   Human-in-the-loop for anything that writes.
@@ -175,11 +183,18 @@ the graph.
   leaving the GPU generating.
 - **One domain layer**, framework-free, powers the graph tools, the external
   REST API, and the MCP server alike.
-- **Observability**: optional LangSmith tracing and Langfuse (current scoped
-  v5 SDK: chat turns become traces grouped by thread, conversation-eval
-  verdicts land as session scores). Both off by default; with them off
-  nothing leaves your machine, and Langfuse can point at a self-hosted
-  instance to keep it that way even when on.
+- **Observability**: Langfuse (scoped v5 SDK over OTEL) with a self-hosted
+  v4 stack in `observability/langfuse` (`docker compose up -d`; UI on
+  localhost:3000). Chat turns become traces grouped by thread, the rail nodes
+  show up as spans (a blocked turn is visibly a routing decision), and
+  guardrail decisions plus conversation-eval verdicts land as session scores.
+  Exported text passes a PII scrub (emails, phone numbers). Env-gated:
+  without keys nothing initializes and nothing leaves the machine; with the
+  bundled stack, "leaves the machine" still means localhost.
+- **Conversations judge themselves**: a background sweep grades idle chat
+  threads (helpfulness, groundedness, persona) on the local judge model, one
+  thread per tick so chat keeps the GPU. Verdicts land in Admin -> Monitoring
+  and mirror into Langfuse.
 
 ### Guardrails (prompt-injection and persona defense)
 
