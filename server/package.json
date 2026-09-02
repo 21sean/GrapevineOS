@@ -8,6 +8,7 @@
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "postinstall": "node scripts/patch-deepeval.mjs",
+    "db:types": "node scripts/db-types.mjs",
     "seed:supabase": "tsx scripts/seed-supabase.ts",
     "seed:convos": "tsx scripts/seed-conversations.ts",
     "evals": "tsx scripts/evals.ts",
@@ -15,7 +16,14 @@
     "hours:eval": "tsx scripts/evals.ts --suite hours",
     "guardrails:calibrate": "tsx scripts/guardrail-calibrate.ts",
     "evals:judge": "tsx scripts/evals.ts --suite guardrails-judge --suite guardrails-redteam",
-    "seed:langfuse": "tsx scripts/seed-langfuse.ts"
+    "lf:foundation": "tsx scripts/langfuse/foundation.ts",
+    "lf:datasets": "tsx scripts/langfuse/import-datasets.ts",
+    "lf:evaluators": "tsx scripts/langfuse/evaluators.ts",
+    "lf:dashboards": "tsx scripts/langfuse/dashboards.ts",
+    "lf:alerts": "tsx scripts/langfuse/alerts.ts",
+    "lf:traffic": "tsx scripts/langfuse/simulate-traffic.ts",
+    "lf:experiments": "tsx scripts/langfuse/experiments.ts",
+    "lf:annotation": "tsx scripts/langfuse/annotation.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",

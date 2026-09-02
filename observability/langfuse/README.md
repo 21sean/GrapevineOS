@@ -25,6 +25,67 @@ The API server picks the stack up through `LANGFUSE_PUBLIC_KEY`,
 those out and the integration is fully inert: nothing initializes, nothing
 is exported.
 
+## Filling it
+
+A fresh stack is empty, and an empty Langfuse teaches nothing about what the
+product's observability actually looks like in use. `server/scripts/langfuse/`
+populates every tab. Each script is independent, documents its own flags in its
+header, and says whether it is re-runnable. Run them in this order the first
+time, from `server/`:
+
+```bash
+npm run lf:foundation    # model prices, score configs, the prompt library
+npm run lf:datasets      # public eval corpora, imported keylessly
+npm run lf:evaluators    # Langfuse's official managed judge library
+npm run lf:dashboards    # four dashboards of widgets
+npm run lf:alerts        # monitors and the webhook automation
+npm run lf:traffic       # ~8 weeks of simulated concierge traffic
+npm run lf:experiments   # dataset runs over the imported corpora
+npm run lf:annotation    # human-review queues drawn from real traces
+```
+
+Order matters in three places: traffic needs foundation's prompts and model
+prices for its generations to link and cost anything, experiments need the
+imported datasets, and annotation needs the traces traffic wrote.
+
+Two standing rules the scripts enforce:
+
+- **Simulated identities only.** Every visitor in Langfuse is a faker persona on
+  `example.com` (`scripts/testers.ts`). The operator's real address appears in
+  no trace, score, comment or dataset item. OTEL resource auto-detection is off
+  everywhere for the same reason: left on, it stamps the host name and OS
+  username of the machine onto every span's metadata.
+- **No evaluation rule is ACTIVE.** Rules fire at ingest time, on every matching
+  observation, against the local Ollama. They are all created disabled so the
+  Evaluators tab is furnished without a rule quietly judging traffic on the GPU.
+  Enable one deliberately, in the UI, when you want it.
+
+`simulate-traffic.ts` takes `--dry-run`, `--turns N`, `--from` and `--to`, so a
+small sample is cheap to look at before writing thousands of spans. It and
+`experiments.ts` also take `--reset`, which deletes the spans and scores their
+previous run wrote before emitting new ones. Spans get random OTEL ids, so
+without `--reset` a second run adds a second copy rather than replacing the
+first. Deleting traffic orphans the annotation queues that point at it, so
+re-run `lf:annotation` after any `lf:traffic --reset`; its `--reset` finds items
+whose trace no longer exists and replaces them.
+
+Two earlier scripts are retired to `server/scripts/archive/`. The first-pass
+`seed-langfuse.ts` is where the prompt library, the score configs and the two
+fixture datasets started; `lf:foundation` and `lf:datasets` own those now, and
+its trace backfill only ever described one machine's chat history.
+`normalise-otel-resource.ts` was a one-off repair for traces ingested before
+resource auto-detection was turned off. New runs need neither.
+
+### Code evaluators
+
+`docker-compose.override.yml` sets `LANGFUSE_CODE_EVAL_DISPATCHER=insecure-local`,
+which is what makes the three CODE templates in Langfuse's managed library
+(all-caps, exact-match, keyword-match) creatable at all. That dispatcher runs an
+evaluator's TypeScript inside the worker process with no sandbox. It is
+acceptable here only because this stack is single-user and bound to localhost.
+Drop those two lines on any stack that accepts evaluator definitions from
+someone else.
+
 ## Teardown
 
 ```bash

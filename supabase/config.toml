@@ -2,7 +2,7 @@
 # https://supabase.com/docs/guides/local-development/cli/config
 # A string used to distinguish different Supabase projects on the same host. Defaults to the
 # working directory name when running `supabase init`.
-project_id = "fable_site"
+project_id = "grapevine"
 
 [api]
 enabled = true
@@ -64,11 +64,11 @@ enabled = true
 schema_paths = []
 
 [db.seed]
-# If enabled, seeds the database after migrations during a db reset.
-enabled = true
-# Specifies an ordered list of seed files to load during db reset.
-# Supports glob patterns relative to supabase directory: "./seeds/*.sql"
-sql_paths = ["./seed.sql"]
+# Grapevine has no SQL seed. Demo data goes in through the API server's seeding
+# scripts (`npm run seed:supabase`, `npm run seed:convos` in server/), which use
+# the same code paths the app does.
+enabled = false
+sql_paths = []
 
 [db.network_restrictions]
 # Enable management of network restrictions.

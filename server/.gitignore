@@ -1,1 +1,3 @@
-scripts/seed-langfuse.out.json
+# Run manifests written by the Langfuse seeding scripts: they record what one
+# machine's run produced (ids, counts), so they are output, not source.
+scripts/**/*.out.json

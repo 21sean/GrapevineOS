@@ -92,7 +92,9 @@ All app data lives in a Supabase Postgres project (free tier): `events`,
 `chat_messages`, `push_subscriptions`, `ingests`, `raw_emails`,
 `discovery_searches`, `app_settings`, `place_lookups`, `place_details`.
 
-- **Schema** is tracked in `supabase/migrations/`.
+- **Schema** is tracked in `supabase/migrations/` and applied with
+  `supabase db push`; [CONTRIBUTING.md](../CONTRIBUTING.md) has the rule that
+  keeps the folder and the database in step.
 - **Access model**: RLS is enabled on every table with no policies and the
   Data API roles have no grants, so the posture is deny-all. Only the server
   and the email worker (secret key) can touch data; the browser talks to the
@@ -106,8 +108,9 @@ All app data lives in a Supabase Postgres project (free tier): `events`,
   *misses* (90d, so transient failures heal). Mapbox hits — geocodes and
   venue records alike — are kept permanently.
 - **Types**: `server/src/db-types.ts` is generated. Regenerate after schema
-  changes with
-  `npx supabase gen types typescript --project-id <your-project-id>`.
+  changes with `npm run db:types` from `server/`; it reads the project ref
+  from `SUPABASE_URL` and needs the CLI signed in (`supabase login`, or
+  `SUPABASE_ACCESS_TOKEN` in the environment).
 
 ## Auth (Supabase Auth: Google + GitHub)
 

@@ -17,6 +17,7 @@
 import { LangfuseClient } from "@langfuse/client";
 import { CallbackHandler } from "@langfuse/langchain";
 import { LangfuseSpanProcessor } from "@langfuse/otel";
+import { defaultResource, resourceFromAttributes } from "@opentelemetry/resources";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import type { ConversationEval } from "./types.js";
 
@@ -61,6 +62,19 @@ function start(): boolean {
           }),
         }),
       ],
+      // Resource auto-detection is the other half of the PII story: left on, it
+      // stamps the host name, OS user and script path of the machine running the
+      // server onto every span's metadata, which no scrubPII mask ever sees.
+      // Declare the resource by hand instead.
+      autoDetectResources: false,
+      resource: defaultResource().merge(
+        resourceFromAttributes({
+          "service.name": "grapevine-server",
+          ...(process.env.GRAPEVINE_RELEASE && {
+            "service.version": process.env.GRAPEVINE_RELEASE,
+          }),
+        }),
+      ),
     });
     sdk.start();
     return true;

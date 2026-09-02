@@ -39,7 +39,7 @@ const ROLE =
  * past the regex rail before it is judged, so this suite is always measuring
  * added coverage rather than re-testing the rail.
  */
-// Exported for scripts/seed-langfuse.ts (Langfuse dataset mirror).
+// Exported for scripts/langfuse/import-datasets.ts (Langfuse dataset mirror).
 export const SUBTLE_LEAKS: { id: string; text: string; why: string }[] = [
   {
     id: "just-a-chatbot",

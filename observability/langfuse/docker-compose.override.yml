@@ -14,10 +14,21 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+  # LANGFUSE_CODE_EVAL_DISPATCHER: the 3 CODE templates in Langfuse's managed
+  # evaluator library (all-caps, exact-match, keyword-match) are rejected with
+  # 403 "Code evals are not enabled" unless a dispatcher is configured. The
+  # "insecure-local" dispatcher runs the TypeScript snippet inside the worker
+  # process itself, with no sandbox, so it is only acceptable because this
+  # stack is a single-user deployment bound to localhost and the only code it
+  # ever runs is the three Langfuse-authored snippets. Do not set this on a
+  # stack that accepts evaluator definitions from anyone else. Python code
+  # evaluators are not supported by this dispatcher, only TypeScript.
   langfuse-web:
     environment:
       LANGFUSE_WEBHOOK_WHITELISTED_HOST: grapevine-bridge
+      LANGFUSE_CODE_EVAL_DISPATCHER: insecure-local
 
   langfuse-worker:
     environment:
       LANGFUSE_WEBHOOK_WHITELISTED_HOST: grapevine-bridge
+      LANGFUSE_CODE_EVAL_DISPATCHER: insecure-local

@@ -1,4 +1,15 @@
 /**
+ * ARCHIVED 2026-09-02. Not run by any npm script and excluded from typecheck.
+ *
+ * This was the first pass at populating Langfuse. What it created that still
+ * matters moved into scripts/langfuse/: the prompt library and score configs
+ * into foundation.ts, the two fixture datasets into import-datasets.ts, the
+ * persona-judge experiment into experiments.ts. What is left here is specific
+ * to one machine on one day: a backfill of that machine's chat_threads into
+ * traces, cut off at the wall-clock moment live tracing went on. Kept for
+ * provenance; the lf:* suite is the way to seed a fresh stack.
+ */
+/**
  * Populate the self-hosted Langfuse project with Grapevine's real data, so
  * every tab reflects the actual system rather than a demo shell:
  *
@@ -24,24 +35,35 @@ import "dotenv/config";
 import { LangfuseClient } from "@langfuse/client";
 import { LangfuseSpanProcessor } from "@langfuse/otel";
 import { createTraceAttributes, startObservation } from "@langfuse/tracing";
+import { defaultResource, resourceFromAttributes } from "@opentelemetry/resources";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import { writeFileSync } from "node:fs";
-import { db } from "../src/db.js";
+import { db } from "../../src/db.js";
 import {
   BENIGN,
   INDIRECT,
   INJECTIONS,
   LEAKS,
-} from "../src/evals/suites/guardrails.js";
-import { CLEAN_REPLIES, SUBTLE_LEAKS } from "../src/evals/suites/guardrails-judge.js";
-import { judgeModelName } from "../src/evals/judge.js";
-import { ollamaBase } from "../src/ollama.js";
-import { ensureTesters, testerForThread } from "./testers.js";
+} from "../../src/evals/suites/guardrails.js";
+import { CLEAN_REPLIES, SUBTLE_LEAKS } from "../../src/evals/suites/guardrails-judge.js";
+import { judgeModelName } from "../../src/evals/judge.js";
+import { ollamaBase } from "../../src/ollama.js";
+import { ensureTesters, testerForThread } from "../testers.js";
 
 /** Live tracing went on at this moment; older rows are safe to backfill. */
 const LIVE_TRACING_SINCE = Date.parse("2026-09-01T15:30:00Z");
 
-const sdk = new NodeSDK({ spanProcessors: [new LangfuseSpanProcessor()] });
+// NodeSDK auto-detects resources by default, which stamps the operator's host
+// name, OS user and script path onto every span's metadata. Observability data
+// in this project carries synthetic tester identities only, so detection is off
+// and the resource is declared by hand.
+const sdk = new NodeSDK({
+  spanProcessors: [new LangfuseSpanProcessor()],
+  autoDetectResources: false,
+  resource: defaultResource().merge(
+    resourceFromAttributes({ "service.name": "grapevine-server", "service.version": "2026.09.01" }),
+  ),
+});
 sdk.start();
 const lf = new LangfuseClient();
 
@@ -289,6 +311,10 @@ async function backfillTraces(): Promise<BackfilledThread[]> {
         ...createTraceAttributes({ input: userMsg.content, output: reply.content }),
         "session.id": thread.id,
         "user.id": testerForThread(thread.id).email,
+        // Without this the trace_name column stays empty: the UI hides that by
+        // falling back to the root span's name, but any query or widget that
+        // keys on trace name finds nothing.
+        "langfuse.trace.name": "ask-grapevine",
         "langfuse.trace.tags": ["ask-grapevine", "backfill"],
         "langfuse.trace.metadata.provider": thread.provider,
       });
