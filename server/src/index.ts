@@ -3,7 +3,8 @@ import express from "express";
 import { Readable } from "node:stream";
 import { agent } from "./agent/index.js";
 import { invalidateGuardConfig, warmupGuardrails } from "./agent/guardrails.js";
-import { auth, sessionUser } from "./auth.js";
+import { logAdminPosture } from "./admin-gate.js";
+import { auth, requireAdmin, sessionUser } from "./auth.js";
 import { calendar } from "./calendar.js";
 import {
   clampCadence,
@@ -28,9 +29,15 @@ import { systemInfo } from "./system.js";
 import { eta, isochrone } from "./mapbox.js";
 import { PlacesQuotaError, PlacesScopeError, venueDetails } from "./places.js";
 import { extractEvents, rateEvent } from "./ingest.js";
-import { kickInbox, listInbox, reprocessInbox, startInboxPoll } from "./inbox.js";
+import { inboxDomain, kickInbox, listInbox, reprocessInbox, startInboxPoll } from "./inbox.js";
 import { commitIngest } from "./pipeline.js";
+import { rateLimit } from "./rate-limit.js";
+import { safeEqual, validateSecrets } from "./secrets.js";
 import { LLM_PROVIDERS, REACTIONS, type CityEvent, type Reaction } from "./types.js";
+
+// Before anything listens: an example secret left in place is a
+// misconfiguration worth a crash, not a warning scrolled past.
+validateSecrets();
 
 const app = express();
 // Behind a tunnel/reverse proxy (the MCP connector path), X-Forwarded-Proto
@@ -79,8 +86,8 @@ app.get("/api/events", async (_req, res) => {
   }
 });
 
-app.post("/api/events/:id/rate", async (req, res) => {
-  const event = await store.eventById(req.params.id);
+app.post("/api/events/:id/rate", requireAdmin, async (req, res) => {
+  const event = await store.eventById(String(req.params.id));
   if (!event) return res.status(404).json({ error: "unknown event" });
   try {
     const r = await rateEvent(event);
@@ -129,13 +136,15 @@ app.put("/api/events/:id/reaction", async (req, res) => {
 
 app.get("/api/settings", async (_req, res) => {
   try {
-    res.json(await store.settings());
+    // inboxDomain is deployment config (INBOX_DOMAIN), not a stored setting;
+    // the client reads it here so the admin panels can show real addresses.
+    res.json({ ...(await store.settings()), inboxDomain: inboxDomain() });
   } catch (err) {
     res.status(502).json({ error: String(err) });
   }
 });
 
-app.put("/api/settings", async (req, res) => {
+app.put("/api/settings", requireAdmin, async (req, res) => {
   const { city, center, tz, model, ollamaUrl, chatProvider, extractProvider } =
     req.body ?? {};
   if (chatProvider !== undefined && !LLM_PROVIDERS.includes(chatProvider)) {
@@ -158,7 +167,7 @@ app.put("/api/settings", async (req, res) => {
     // settings surface has to drop that cache or the retune appears to have
     // been ignored. (Admin -> Guardrails does this for its own writes too.)
     invalidateGuardConfig();
-    res.json(saved);
+    res.json({ ...saved, inboxDomain: inboxDomain() });
   } catch (err) {
     res.status(502).json({ error: String(err) });
   }
@@ -174,7 +183,7 @@ app.get("/api/sources", async (_req, res) => {
 
 // ---------- chat providers (subscription CLIs) + MCP status ----------
 
-app.get("/api/providers", async (req, res) => {
+app.get("/api/providers", requireAdmin, async (req, res) => {
   try {
     const force = req.query.refresh === "1";
     res.json({ providers: await detectProviders(force) });
@@ -183,7 +192,7 @@ app.get("/api/providers", async (req, res) => {
   }
 });
 
-app.get("/api/mcp/info", (_req, res) => {
+app.get("/api/mcp/info", requireAdmin, (_req, res) => {
   // /mcp is served by this express app directly (not proxied through the web
   // origin), so an MCP client connects to the server port. MCP_PUBLIC_URL
   // overrides it when the server sits behind a public reverse proxy.
@@ -201,7 +210,13 @@ app.get("/api/mcp/info", (_req, res) => {
 
 // ---------- mapbox (secret token stays here) ----------
 
-app.get("/api/eta", async (req, res) => {
+// Per-address limits on the routes that spend Mapbox quota: generous for a
+// person, tight for a loop. The Places preview quota is 1,000 records a month.
+const etaLimit = rateLimit({ name: "eta", windowMs: 60_000, max: 60 });
+const isochroneLimit = rateLimit({ name: "isochrone", windowMs: 60_000, max: 20 });
+const venueLimit = rateLimit({ name: "venue", windowMs: 60_000, max: 30 });
+
+app.get("/api/eta", etaLimit, async (req, res) => {
   const parse = (s: unknown): [number, number] | null => {
     const parts = String(s ?? "").split(",").map(Number);
     return parts.length === 2 && parts.every(Number.isFinite)
@@ -223,7 +238,7 @@ app.get("/api/eta", async (req, res) => {
  * the point-in-polygon test happens client-side so one cached contour serves
  * the whole list.
  */
-app.get("/api/isochrone", async (req, res) => {
+app.get("/api/isochrone", isochroneLimit, async (req, res) => {
   const parse = (s: unknown): [number, number] | null => {
     const parts = String(s ?? "").split(",").map(Number);
     return parts.length === 2 && parts.every(Number.isFinite)
@@ -252,8 +267,8 @@ app.get("/api/isochrone", async (req, res) => {
  * about, and the answer comes from the Postgres venue cache when it's warm
  * (see places.ts).
  */
-app.get("/api/events/:id/venue", async (req, res) => {
-  const event = await store.eventById(req.params.id);
+app.get("/api/events/:id/venue", venueLimit, async (req, res) => {
+  const event = await store.eventById(String(req.params.id));
   if (!event) return res.status(404).json({ error: "unknown event" });
   try {
     res.json({ venue: await venueDetails(event.venue, [event.lng, event.lat]) });
@@ -269,7 +284,7 @@ app.get("/api/events/:id/venue", async (req, res) => {
 
 // ---------- ollama ----------
 
-app.get("/api/ollama/health", async (_req, res) => {
+app.get("/api/ollama/health", requireAdmin, async (_req, res) => {
   const base = await ollamaBase().catch(() => "http://localhost:11434");
   try {
     const r = await fetch(`${base}/api/version`, {
@@ -282,7 +297,7 @@ app.get("/api/ollama/health", async (_req, res) => {
   }
 });
 
-app.get("/api/ollama/models", async (_req, res) => {
+app.get("/api/ollama/models", requireAdmin, async (_req, res) => {
   try {
     res.json(await listInstalled());
   } catch (err) {
@@ -291,7 +306,7 @@ app.get("/api/ollama/models", async (_req, res) => {
 });
 
 /** Streams Ollama's NDJSON pull progress straight through to the client. */
-app.post("/api/ollama/pull", async (req, res) => {
+app.post("/api/ollama/pull", requireAdmin, async (req, res) => {
   const model = String(req.body?.model ?? "");
   if (!model) return res.status(400).json({ error: "model required" });
   try {
@@ -311,12 +326,12 @@ app.post("/api/ollama/pull", async (req, res) => {
 
 // ---------- model catalog (models.dev) ----------
 
-app.get("/api/catalog", async (_req, res) => {
+app.get("/api/catalog", requireAdmin, async (_req, res) => {
   res.json(await catalog());
 });
 
 /** Local hardware (VRAM/RAM) so the catalog can say what fits. */
-app.get("/api/system", async (_req, res) => {
+app.get("/api/system", requireAdmin, async (_req, res) => {
   res.json(await systemInfo());
 });
 
@@ -329,7 +344,7 @@ app.get("/api/logo/:id", async (req, res) => {
 // ---------- ingestion ----------
 
 /** Clear shared/generic banners, then scrape og:images for events without art. */
-app.post("/api/ingest/backfill-images", async (_req, res) => {
+app.post("/api/ingest/backfill-images", requireAdmin, async (_req, res) => {
   try {
     res.json(await backfillImages());
   } catch (err) {
@@ -338,7 +353,7 @@ app.post("/api/ingest/backfill-images", async (_req, res) => {
 });
 
 /** Newest-first log of every email/paste that went through the pipeline. */
-app.get("/api/ingest/history", async (_req, res) => {
+app.get("/api/ingest/history", requireAdmin, async (_req, res) => {
   try {
     res.json(await store.ingests());
   } catch (err) {
@@ -347,7 +362,7 @@ app.get("/api/ingest/history", async (_req, res) => {
 });
 
 /** Extract events from pasted/forwarded email text. dryRun previews only. */
-app.post("/api/ingest/email", async (req, res) => {
+app.post("/api/ingest/email", requireAdmin, async (req, res) => {
   const { text, source = "manual" } = req.body ?? {};
   const dry = req.body?.dryRun === true || req.body?.dry_run === true;
   if (!text) return res.status(400).json({ error: "text required" });
@@ -364,7 +379,7 @@ app.post("/api/ingest/email", async (req, res) => {
 });
 
 /** Commit previously previewed events (email pastes and discovery dry runs). */
-app.post("/api/ingest/commit", async (req, res) => {
+app.post("/api/ingest/commit", requireAdmin, async (req, res) => {
   const events: CityEvent[] = req.body?.events ?? [];
   if (!Array.isArray(events) || !events.length) {
     return res.status(400).json({ error: "events[] required" });
@@ -390,7 +405,7 @@ app.post("/api/ingest/commit", async (req, res) => {
  * state owns durability. Guarded by a shared key.
  */
 app.post("/api/ingest/inbound", (req, res) => {
-  if (req.get("X-Ingest-Key") !== process.env.INGEST_SHARED_KEY) {
+  if (!safeEqual(req.get("X-Ingest-Key"), process.env.INGEST_SHARED_KEY)) {
     return res.status(401).json({ error: "bad ingest key" });
   }
   kickInbox();
@@ -404,7 +419,7 @@ app.post("/api/ingest/inbound", (req, res) => {
  * API and MCP surfaces — committing requires an explicit dry_run:false
  * (dryRun:false also accepted), so an omitted flag can never write.
  */
-app.post("/api/discovery/run", async (req, res) => {
+app.post("/api/discovery/run", requireAdmin, async (req, res) => {
   const query = validQuery(req.body?.query);
   if (!query) return res.status(400).json({ error: "query must be 3-200 chars" });
   try {
@@ -414,7 +429,7 @@ app.post("/api/discovery/run", async (req, res) => {
   }
 });
 
-app.get("/api/discovery/searches", async (_req, res) => {
+app.get("/api/discovery/searches", requireAdmin, async (_req, res) => {
   try {
     res.json({ searches: await store.discoverySearches() });
   } catch (err) {
@@ -423,7 +438,7 @@ app.get("/api/discovery/searches", async (_req, res) => {
 });
 
 /** Save (or update, keyed on the query) a scheduled search. */
-app.post("/api/discovery/searches", async (req, res) => {
+app.post("/api/discovery/searches", requireAdmin, async (req, res) => {
   const query = validQuery(req.body?.query);
   if (!query) return res.status(400).json({ error: "query must be 3-200 chars" });
   try {
@@ -433,7 +448,7 @@ app.post("/api/discovery/searches", async (req, res) => {
   }
 });
 
-app.patch("/api/discovery/searches/:id", async (req, res) => {
+app.patch("/api/discovery/searches/:id", requireAdmin, async (req, res) => {
   const patch: { active?: boolean; cadenceHours?: number } = {};
   if (req.body?.active !== undefined) patch.active = Boolean(req.body.active);
   if (req.body?.cadenceHours !== undefined)
@@ -442,7 +457,7 @@ app.patch("/api/discovery/searches/:id", async (req, res) => {
     return res.status(400).json({ error: "nothing to update (active, cadenceHours)" });
   }
   try {
-    const updated = await store.updateDiscoverySearch(req.params.id, patch);
+    const updated = await store.updateDiscoverySearch(String(req.params.id), patch);
     if (!updated) return res.status(404).json({ error: "unknown search" });
     res.json(updated);
   } catch (err) {
@@ -450,9 +465,9 @@ app.patch("/api/discovery/searches/:id", async (req, res) => {
   }
 });
 
-app.delete("/api/discovery/searches/:id", async (req, res) => {
+app.delete("/api/discovery/searches/:id", requireAdmin, async (req, res) => {
   try {
-    const deleted = await store.deleteDiscoverySearch(req.params.id);
+    const deleted = await store.deleteDiscoverySearch(String(req.params.id));
     if (!deleted) return res.status(404).json({ error: "unknown search" });
     res.json({ ok: true });
   } catch (err) {
@@ -461,9 +476,9 @@ app.delete("/api/discovery/searches/:id", async (req, res) => {
 });
 
 /** Run one saved search immediately (also stamps last_run/status). */
-app.post("/api/discovery/searches/:id/run", async (req, res) => {
+app.post("/api/discovery/searches/:id/run", requireAdmin, async (req, res) => {
   try {
-    const search = await store.discoverySearchById(req.params.id);
+    const search = await store.discoverySearchById(String(req.params.id));
     if (!search) return res.status(404).json({ error: "unknown search" });
     res.json(await runSavedSearch(search));
   } catch (err) {
@@ -473,7 +488,7 @@ app.post("/api/discovery/searches/:id/run", async (req, res) => {
 
 // ---------- inbox (raw emails in Postgres, written by the email worker) ----------
 
-app.get("/api/inbox", async (_req, res) => {
+app.get("/api/inbox", requireAdmin, async (_req, res) => {
   try {
     res.json(await listInbox());
   } catch (err) {
@@ -481,7 +496,7 @@ app.get("/api/inbox", async (_req, res) => {
   }
 });
 
-app.post("/api/inbox/reprocess", async (req, res) => {
+app.post("/api/inbox/reprocess", requireAdmin, async (req, res) => {
   const key = String(req.body?.key ?? "");
   if (!key) return res.status(400).json({ error: "key required" });
   try {
@@ -500,7 +515,9 @@ app.post("/api/inbox/reprocess", async (req, res) => {
  * by the shared ingest key so nothing else can write to it.
  */
 app.post("/api/alerts/langfuse", (req, res) => {
-  if (req.query.key !== process.env.INGEST_SHARED_KEY) {
+  // The key rides in a header rather than the query string: query strings
+  // land in access logs and in the caddy bridge's output, headers do not.
+  if (!safeEqual(req.get("X-Ingest-Key"), process.env.INGEST_SHARED_KEY)) {
     return res.status(401).json({ error: "bad key" });
   }
   const body = JSON.stringify(req.body ?? {});
@@ -511,6 +528,12 @@ app.post("/api/alerts/langfuse", (req, res) => {
 const port = Number(process.env.PORT ?? 8787);
 app.listen(port, () => {
   console.log(`[grapevine] api listening on http://localhost:${port}`);
+  logAdminPosture();
+  if (mcpAuthMode() === "open") {
+    console.warn(
+      "[grapevine] MCP_OPEN=1: /mcp accepts unauthenticated callers, and their writes act on AGENT_USER_EMAIL",
+    );
+  }
   startInboxPoll();
   startPushScheduler();
   startDiscoveryScheduler();

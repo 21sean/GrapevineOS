@@ -23,7 +23,7 @@ import {
 } from "../agent/guardrails.js";
 import { flush, telemetryHealth } from "../agent/telemetry.js";
 import { safeDetail } from "../evals/harness.js";
-import { adminAllowed } from "../admin-gate.js";
+import { adminAllowed } from "../auth.js";
 import { store } from "../store.js";
 import {
   isGuardrailLabel,

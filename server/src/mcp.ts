@@ -59,6 +59,7 @@ import {
   type SearchParams,
 } from "./agent/context.js";
 import { INTERNAL_MCP_KEY, ISSUER, userFromClaims, verifySupabaseToken } from "./auth.js";
+import { safeEqual } from "./secrets.js";
 import { removeEventForUser, saveEventForUser } from "./calendar.js";
 import { clampCadence, runDiscovery, validQuery, wantsCommit } from "./discovery.js";
 import { store } from "./store.js";
@@ -417,7 +418,7 @@ async function authenticate(req: http.IncomingMessage): Promise<McpAuth | undefi
   const agentKey = req.headers["x-agent-key"];
   const given = (Array.isArray(agentKey) ? agentKey[0] : agentKey) ?? bearer;
   const key = process.env.AGENT_API_KEY;
-  if (given && ((key && given === key) || given === INTERNAL_MCP_KEY)) {
+  if (safeEqual(given, key) || safeEqual(given, INTERNAL_MCP_KEY)) {
     return { user: null, via: "key" };
   }
   if (mcpAuthMode() === "open") return { user: null, via: "open" }; // explicit MCP_OPEN=1 opt-in

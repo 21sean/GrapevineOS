@@ -38,6 +38,7 @@ export function TopBar() {
   const setWeekOpen = useGrapevine((s) => s.setWeekOpen)
   const setSignInOpen = useGrapevine((s) => s.setSignInOpen)
   const user = useGrapevine((s) => s.user)
+  const isAdmin = useGrapevine((s) => s.isAdmin)
   const [accountOpen, setAccountOpen] = useState(false)
   // Latch so the dialog stays mounted after closing — otherwise the close
   // animation would be cut off. Render-phase state adjustment, per the React
@@ -136,20 +137,22 @@ export function TopBar() {
           </TooltipTrigger>
           <TooltipContent>Your Google Calendar, right here</TooltipContent>
         </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="rounded-full"
-              aria-label="Admin"
-              onClick={() => setAdminOpen(true)}
-            >
-              <Settings2Icon />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Admin: models, ingestion, sources</TooltipContent>
-        </Tooltip>
+        {isAdmin && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="rounded-full"
+                aria-label="Admin"
+                onClick={() => setAdminOpen(true)}
+              >
+                <Settings2Icon />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Admin: models, ingestion, sources</TooltipContent>
+          </Tooltip>
+        )}
         <Separator orientation="vertical" className="!h-4" />
         {user ? (
           <Tooltip>

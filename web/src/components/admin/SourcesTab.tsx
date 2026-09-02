@@ -7,6 +7,7 @@ import { useGrapevine } from "@/lib/store"
 
 export function SourcesTab() {
   const sources = useGrapevine((s) => s.sources)
+  const inboxDomain = useGrapevine((s) => s.settings?.inboxDomain ?? "example.com")
 
   function copy(address: string) {
     navigator.clipboard
@@ -24,7 +25,7 @@ export function SourcesTab() {
       <p className="text-sm leading-relaxed text-muted-foreground">
         Every address below works automatically. Cloudflare Email Routing's
         catch-all accepts anything at{" "}
-        <span className="font-mono text-foreground">@sean.ventures</span>.
+        <span className="font-mono text-foreground">@{inboxDomain}</span>.
         Subscribe to each newsletter with its own address and the{" "}
         <span className="font-mono">To:</span> field tells the pipeline exactly
         where an event came from. No API fees, ever.

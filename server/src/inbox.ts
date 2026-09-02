@@ -313,3 +313,12 @@ export function startInboxPoll(): void {
   console.log(`[grapevine] inbox: also polling raw_emails every ${intervalMs / 1000}s (safety net)`);
   setInterval(() => void tick(), intervalMs);
 }
+
+/**
+ * The domain Cloudflare Email Routing's catch-all delivers from. Deployment
+ * config rather than a stored setting, and defaulted to the RFC 2606 example
+ * domain so a fresh clone never shows anyone else's addresses.
+ */
+export function inboxDomain(): string {
+  return (process.env.INBOX_DOMAIN ?? "").trim().toLowerCase() || "example.com";
+}

@@ -1,0 +1,10 @@
+# One line ending everywhere. Without this, a Windows checkout with
+# core.autocrlf=true turns every text file CRLF in the working tree while the
+# index stays LF, and the first formatter check in CI fails on every file.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.woff binary
+*.woff2 binary

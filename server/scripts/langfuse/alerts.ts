@@ -48,9 +48,14 @@ const PROJECT_ID = "grapevine-local";
 const BASE_URL = (process.env.LANGFUSE_BASE_URL ?? "http://localhost:3000").replace(/\/$/, "");
 
 /** The caddy sidecar inside the compose network; see docker-compose.override.yml. */
-const BRIDGE_URL = `http://grapevine-bridge/api/alerts/langfuse?key=${
-  process.env.INGEST_SHARED_KEY ?? ""
-}`;
+const BRIDGE_URL = "http://grapevine-bridge/api/alerts/langfuse";
+/**
+ * The receiver checks this header against INGEST_SHARED_KEY. A header rather
+ * than a query string, so the key never lands in caddy's or the server's
+ * access log. An automation created before this change still carries the key
+ * in its URL: delete it in Langfuse (Automations) and re-run this script.
+ */
+const BRIDGE_HEADERS = { "X-Ingest-Key": process.env.INGEST_SHARED_KEY ?? "" };
 
 // ---------------------------------------------------------------------------
 // Stack credentials. The Langfuse UI login lives with the stack, not with the
@@ -174,7 +179,7 @@ async function ensureAutomation(name: string): Promise<string> {
       type: "WEBHOOK",
       url: BRIDGE_URL,
       apiVersion: { monitor: "v1" },
-      requestHeaders: {},
+      requestHeaders: BRIDGE_HEADERS,
     },
   });
   console.log(`[alerts] created automation ${name} (trigger ${created.trigger.id})`);

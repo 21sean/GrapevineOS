@@ -345,5 +345,5 @@ supabase/  tracked SQL migrations
 openclaw/  installable OpenClaw skill for the external agent API
 docs/      setup.md (operations), mapbox-places.md, images/ (the diagrams
            above), archive/ (superseded working notes, kept for provenance)
-.agents/   installed Mapbox agent skills
+.agents/   the Mapbox and Supabase agent skills the code actually uses
 ```

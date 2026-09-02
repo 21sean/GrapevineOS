@@ -31,7 +31,14 @@ function readJson<T>(file: string, fallback: T): T {
   }
 }
 
-const sources = readJson<Source[]>("sources.json", []);
+// sources.json ships with example.com addresses; INBOX_DOMAIN (the domain the
+// email worker really routes) swaps them in at seed time so no operator's
+// domain has to live in the repo.
+const INBOX_DOMAIN = (process.env.INBOX_DOMAIN ?? "").trim().toLowerCase();
+const sources = readJson<Source[]>("sources.json", []).map((s) => ({
+  ...s,
+  address: INBOX_DOMAIN ? s.address.replace(/@example.com$/i, `@${INBOX_DOMAIN}`) : s.address,
+}));
 const events = readJson<CityEvent[]>("events.json", []);
 const settings = readJson<Settings | null>("settings.json", null);
 const calendarEntries = readJson<CalendarEntry[]>("calendar.json", []);

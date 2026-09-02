@@ -1,39 +1,43 @@
 # Grapevine email ingestion worker
 #
-# Every newsletter sent to *@sean.ventures lands here via Email Routing's
+# Every newsletter sent to *@<your inbox domain> lands here via Email Routing's
 # catch-all. The worker parses the email and inserts it into the Supabase
 # raw_emails table, then (when INGEST_URL is set) pings the server so the new
-# row is processed immediately — the pipeline is event-driven; the server only
+# row is processed immediately: the pipeline is event-driven; the server only
 # polls if INBOX_POLL_SECONDS is set as a safety net. The RAW_EMAILS KV
-# namespace stays bound as a dead letter — used only if the Supabase insert
+# namespace stays bound as a dead letter, used only if the Supabase insert
 # fails, so an outage never drops an email.
 #
 # One-time setup:
-#   1. Dashboard > Email > Email Routing > enable (adds MX/SPF records)   [done]
-#   2. npx wrangler secret put SUPABASE_SECRET_KEY                        [done]
+#   1. Dashboard > Email > Email Routing > enable (adds MX/SPF records)
+#   2. npx wrangler kv namespace create RAW_EMAILS
+#        -> paste the id it prints into [[kv_namespaces]] below
+#   3. Set SUPABASE_URL below to your project's URL
+#   4. npx wrangler secret put SUPABASE_SECRET_KEY
 #        -> the secret API key from Supabase dashboard > Settings > API
-#   3. npm run deploy                                                     [done]
-#   4. Dashboard > Email > Email Routing > Routing rules > Catch-all
-#        -> action "Send to Worker" -> grapevine-email-ingest             [done]
+#   5. npm run deploy
+#   6. Dashboard > Email > Email Routing > Routing rules > Catch-all
+#        -> action "Send to Worker" -> grapevine-email-ingest
+#   7. Set INBOX_DOMAIN in server/.env to the domain you routed, so the admin
+#      panels show the right addresses
 #
 # Local testing: `npm test` (vitest edge-case suite), or full e2e with
-# `npx wrangler dev --port 8790` (secret in .dev.vars) and a raw email POSTed
-# to http://127.0.0.1:8790/cdn-cgi/handler/email?from=...&to=...
+# `npx wrangler dev --port 8790` (secret in .dev.vars, see .dev.vars.example)
+# and a raw email POSTed to http://127.0.0.1:8790/cdn-cgi/handler/email?from=...&to=...
 #   Not 8788: the API server's MCP listener binds 127.0.0.1:8788, and workerd
 #   answers that clash by aborting with a bare "std::terminate() called with
 #   no exception" rather than an address-in-use error.
 #
-# Wrangler auth: create an API token (template "Edit Cloudflare Workers"),
-# then `export CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=...`, or run
-# `npx wrangler login`.
+# Wrangler auth: `npx wrangler login`, or create an API token (template "Edit
+# Cloudflare Workers") and export CLOUDFLARE_API_TOKEN. The account is inferred
+# from the login; set CLOUDFLARE_ACCOUNT_ID only if you belong to several.
 
 name = "grapevine-email-ingest"
 main = "src/index.ts"
 compatibility_date = "2025-06-01"
-account_id = "97e28655beae5913f3adbe7cbea20514"
 
 [vars]
-SUPABASE_URL = "https://hgkjlyggzrziylwazadc.supabase.co"
+SUPABASE_URL = "https://your-project.supabase.co"
 # --- Optional PUSH mode (tunnel/deploy) -------------------------------------
 # To ALSO push each email straight to the API for instant processing,
 # uncomment and point INGEST_URL at a cloudflared tunnel or your deployed API,
@@ -41,19 +45,21 @@ SUPABASE_URL = "https://hgkjlyggzrziylwazadc.supabase.co"
 # INGEST_URL = "https://<your-tunnel>.trycloudflare.com/api/ingest/inbound"
 
 # Dead-letter store (only written when the Supabase insert fails).
+# Create it once with `npx wrangler kv namespace create RAW_EMAILS` and paste
+# the id here; wrangler refuses to deploy while this placeholder is in place.
 [[kv_namespaces]]
 binding = "RAW_EMAILS"
-id = "697e0cae62bf4a179aa94e010baa4e5b"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
 
 # Hourly retry of anything sitting in the dead letter. One KV list op per run
-# (24/day) — negligible against the free tier, and it means a Supabase outage
+# (24/day), negligible against the free tier, and it means a Supabase outage
 # costs latency instead of the email.
 [triggers]
 crons = ["17 * * * *"]
 
 # Without this the worker has no retrievable logs at all: a delivery that
 # failed was invisible after the fact, which made "did the email arrive?"
-# unanswerable. Sampling stays at 100% — this is a handful of emails a day.
+# unanswerable. Sampling stays at 100%; this is a handful of emails a day.
 [observability]
 enabled = true
 head_sampling_rate = 1

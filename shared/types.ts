@@ -101,6 +101,11 @@ export interface Settings {
   guardMode: GuardrailMode;
   /** MALICIOUS probability at which the rails act, 0-1. */
   guardThreshold: number;
+  /**
+   * Domain the email worker's catch-all accepts (INBOX_DOMAIN on the server).
+   * Read-only: reported by GET /api/settings, ignored on PUT.
+   */
+  inboxDomain?: string;
 }
 
 export interface Source {

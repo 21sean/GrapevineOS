@@ -11,7 +11,8 @@
  */
 import { randomBytes } from "node:crypto";
 import { createRemoteJWKSet, jwtVerify } from "jose";
-import { Router, type Request } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
+import { isAdminUser } from "./admin-gate.js";
 import { store } from "./store.js";
 import type { User } from "./types.js";
 
@@ -93,13 +94,26 @@ export async function sessionUser(req: Request): Promise<User | null> {
   return userFromClaims(await verifySupabaseToken(header.slice(7)));
 }
 
+/** May the caller use the admin surface. The policy lives in admin-gate.ts. */
+export async function adminAllowed(req: Request): Promise<boolean> {
+  return isAdminUser(await sessionUser(req).catch(() => null));
+}
+
+/** The same check as middleware, so a whole route is gated in one word. */
+export async function requireAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
+  if (await adminAllowed(req)) return next();
+  res.status(403).json({ error: "admin only" });
+}
+
 // ---------- routes ----------
 
 export const auth = Router();
 
 auth.get("/api/me", async (req, res) => {
   const user = await sessionUser(req);
-  res.json({ user: user ? publicUser(user) : null });
+  // isAdmin decides whether the Admin button renders at all. The routes behind
+  // it check again, so this is a courtesy to the UI, not the gate.
+  res.json({ user: user ? publicUser(user) : null, isAdmin: isAdminUser(user) });
 });
 
 auth.put("/api/me/prefs", async (req, res) => {

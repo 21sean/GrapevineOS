@@ -1,0 +1,5 @@
+# Copy to .dev.vars (gitignored) for `wrangler dev`. Deployed workers get this
+# through `npx wrangler secret put SUPABASE_SECRET_KEY` instead.
+SUPABASE_SECRET_KEY=sb_secret_your_key
+# Only when INGEST_URL is set in wrangler.toml: must equal INGEST_SHARED_KEY in server/.env.
+# INGEST_KEY=

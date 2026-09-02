@@ -12,8 +12,11 @@ import type { ReactNode } from "react"
  * changes, update the matching section and bump the "Last updated" date.
  */
 
-// One place to change the contact address and effective date.
-const CONTACT_EMAIL = "privacy@sean.ventures"
+// One place to change the contact address and effective date. The address
+// comes from VITE_CONTACT_EMAIL (web/.env.local); the fallback keeps an unset
+// deployment visibly unset rather than pointing at someone else's inbox.
+const CONTACT_EMAIL =
+  (import.meta.env.VITE_CONTACT_EMAIL as string | undefined) || "privacy@example.com"
 const LAST_UPDATED = "July 22, 2026"
 
 function Shell({ title, children }: { title: string; children: ReactNode }) {

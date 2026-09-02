@@ -59,7 +59,8 @@ async function fetch(input: string, init?: RequestInit): Promise<Response> {
 export const api = {
   events: () => fetch("/api/events").then((r) => json<CityEvent[]>(r)),
 
-  me: () => fetch("/api/me").then((r) => json<{ user: User | null }>(r)),
+  me: () =>
+    fetch("/api/me").then((r) => json<{ user: User | null; isAdmin: boolean }>(r)),
 
   savePrefs: (prefs: {
     filters?: Filters

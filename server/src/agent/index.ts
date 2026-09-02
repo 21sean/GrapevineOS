@@ -32,6 +32,8 @@ import { personaGuard, personaRefusalMessage } from "./guardrails.js";
 import { langfuseHandler } from "../langfuse.js";
 import { modelSupportsTools, ollamaBase } from "../ollama.js";
 import { cliSupportsTools, detectProviders, providerInfo } from "../providers.js";
+import { rateLimit, singleFlight } from "../rate-limit.js";
+import { safeEqual } from "../secrets.js";
 import { store } from "../store.js";
 import { isChatEffort, type User } from "../types.js";
 import {
@@ -106,7 +108,18 @@ function thinkStripper(): (chunk: string) => string {
   };
 }
 
-agent.post("/api/agent/chat", async (req, res) => {
+// A chat turn is the most expensive request the server takes: one turn holds
+// the local GPU for its whole duration. So two limits, not one: a per-address
+// budget over a minute, and one stream at a time per account (per address when
+// signed out). The second is what stops a stuck tab from queueing a second job
+// behind its own.
+const chatLimit = rateLimit({ name: "chat", windowMs: 60_000, max: 20 });
+const chatFlight = singleFlight({
+  name: "conversation",
+  key: async (req) => (await sessionUser(req).catch(() => null))?.id ?? `ip:${req.ip}`,
+});
+
+agent.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
   res.setHeader("Content-Type", "application/x-ndjson");
   res.setHeader("Cache-Control", "no-cache");
   const send = (frame: Frame) => res.write(JSON.stringify(frame) + "\n");
@@ -443,7 +456,7 @@ function extAuth(req: Request, res: Response, next: () => void) {
     return res
       .status(503)
       .json({ error: "external agent API disabled: set AGENT_API_KEY in server/.env" });
-  if (req.get("X-Agent-Key") !== key) return res.status(401).json({ error: "bad agent key" });
+  if (!safeEqual(req.get("X-Agent-Key"), key)) return res.status(401).json({ error: "bad agent key" });
   next();
 }
 

@@ -22,7 +22,7 @@ import {
 
 const PLAIN_EMAIL = [
   "From: SD Today <news@sdtoday.com>",
-  "To: sdtoday@sean.ventures",
+  "To: sdtoday@example.com",
   "Subject: Weekend events",
   "Message-ID: <abc123@mail.sdtoday.com>",
   "Content-Type: text/plain; charset=utf-8",
@@ -32,7 +32,7 @@ const PLAIN_EMAIL = [
 
 const HTML_EMAIL = [
   "From: news@example.com",
-  "To: dostuff@sean.ventures",
+  "To: dostuff@example.com",
   "Subject: Jazz night",
   "Content-Type: text/html; charset=utf-8",
   "",
@@ -52,7 +52,7 @@ function makeMessage(init: FakeMessageInit = {}) {
   const raw = init.raw ?? PLAIN_EMAIL;
   return {
     from: init.from === undefined ? "news@sdtoday.com" : init.from,
-    to: init.to === undefined ? "sdtoday@sean.ventures" : init.to,
+    to: init.to === undefined ? "sdtoday@example.com" : init.to,
     raw,
     rawSize:
       init.rawSize ?? (typeof raw === "string" ? new TextEncoder().encode(raw).length : 1024),
@@ -76,7 +76,7 @@ function makeEnv(overrides: Partial<Env> & { kvPut?: ReturnType<typeof vi.fn> } 
 
 const PARKED: Record<string, string> = {
   sdtoday_parked1: JSON.stringify({
-    to: "sdtoday@sean.ventures",
+    to: "sdtoday@example.com",
     from: "news@sdtoday.com",
     subject: "Parked one",
     text: "body",
@@ -160,9 +160,9 @@ describe("sourceSlug", () => {
   const VALID = /^[a-z0-9][a-z0-9_-]*$/;
 
   it.each([
-    ["sdtoday@sean.ventures", "sdtoday"],
-    ["SDToday+promo@Sean.Ventures", "sdtoday"],
-    ["John.Doe@sean.ventures", "john-doe"],
+    ["sdtoday@example.com", "sdtoday"],
+    ["SDToday+promo@Example.Com", "sdtoday"],
+    ["John.Doe@example.com", "john-doe"],
     ["weird!!local@x", "weird-local"],
     [".leading@x", "leading"],
     ["___@x", "inbound"],
@@ -259,7 +259,7 @@ describe("email() ingestion", () => {
     const row = insertedRow(calls);
     expect(row.email_key).toBe("sdtoday_abc123@mail.sdtoday.com");
     expect(row.source).toBe("sdtoday");
-    expect(row.to_addr).toBe("sdtoday@sean.ventures");
+    expect(row.to_addr).toBe("sdtoday@example.com");
     expect(row.from_addr).toBe("news@sdtoday.com");
     expect(row.subject).toBe("Weekend events");
     expect(row.body_text).toBe("Farmers market Saturday 9am at Little Italy.");
@@ -284,7 +284,7 @@ describe("email() ingestion", () => {
     const { calls } = mockFetch();
     const { env } = makeEnv();
 
-    await runEmail(makeMessage({ raw: HTML_EMAIL, to: "dostuff@sean.ventures" }), env);
+    await runEmail(makeMessage({ raw: HTML_EMAIL, to: "dostuff@example.com" }), env);
 
     const row = insertedRow(calls);
     expect(row.source).toBe("dostuff");
@@ -299,18 +299,18 @@ describe("email() ingestion", () => {
     const { calls } = mockFetch();
     const { env } = makeEnv();
 
-    await runEmail(makeMessage({ to: "John.Doe+news@Sean.Ventures" }), env);
+    await runEmail(makeMessage({ to: "John.Doe+news@Example.Com" }), env);
 
     const row = insertedRow(calls);
     expect(row.source).toBe("john-doe");
-    expect(row.to_addr).toBe("john.doe+news@sean.ventures");
+    expect(row.to_addr).toBe("john.doe+news@example.com");
     expect(row.email_key.startsWith("john-doe_")).toBe(true);
   });
 
   it("stores an empty body when the email has neither text nor html", async () => {
     const raw = [
       "From: a@b.com",
-      "To: x@sean.ventures",
+      "To: x@example.com",
       "Subject: empty",
       "Message-ID: <empty@b.com>",
       "",
@@ -319,7 +319,7 @@ describe("email() ingestion", () => {
     const { calls } = mockFetch();
     const { env } = makeEnv();
 
-    await runEmail(makeMessage({ raw, to: "x@sean.ventures" }), env);
+    await runEmail(makeMessage({ raw, to: "x@example.com" }), env);
 
     expect(insertedRow(calls).body_text).toBe("");
   });
@@ -328,7 +328,7 @@ describe("email() ingestion", () => {
     const big = "a".repeat(MAX_BODY_CHARS + 5000);
     const raw = [
       "From: a@b.com",
-      "To: x@sean.ventures",
+      "To: x@example.com",
       "Subject: big",
       "Message-ID: <big@b.com>",
       "Content-Type: text/plain",
@@ -338,7 +338,7 @@ describe("email() ingestion", () => {
     const { calls } = mockFetch();
     const { env } = makeEnv();
 
-    await runEmail(makeMessage({ raw, to: "x@sean.ventures" }), env);
+    await runEmail(makeMessage({ raw, to: "x@example.com" }), env);
 
     const row = insertedRow(calls);
     expect(row.body_text.length).toBeLessThan(MAX_BODY_CHARS + 100);

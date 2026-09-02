@@ -1,7 +1,7 @@
 /**
  * Cloudflare Email Worker: the inbox IS the pipeline.
  *
- * Catch-all routing means dostuff@sean.ventures, sdtoday@sean.ventures, etc.
+ * Catch-all routing means dostuff@example.com, sdtoday@example.com, and so on (whatever domain Email Routing is on)
  * all arrive here without being created first — the To: address carries the
  * source attribution for free.
  *

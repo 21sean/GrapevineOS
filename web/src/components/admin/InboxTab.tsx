@@ -16,6 +16,7 @@ import type { InboxEmail } from "@/lib/types"
  */
 export function InboxTab() {
   const refreshEvents = useGrapevine((s) => s.refreshEvents)
+  const inboxDomain = useGrapevine((s) => s.settings?.inboxDomain ?? "example.com")
 
   const [emails, setEmails] = useState<InboxEmail[] | null>(null)
   const [configured, setConfigured] = useState(true)
@@ -120,7 +121,7 @@ export function InboxTab() {
       {emails && emails.length === 0 && !error && (
         <p className="py-4 text-sm text-muted-foreground">
           Nothing in KV yet. Once newsletters start landing at your{" "}
-          <span className="font-mono">@sean.ventures</span> addresses they'll
+          <span className="font-mono">@{inboxDomain}</span> addresses they'll
           show up here.
         </p>
       )}

@@ -18,7 +18,7 @@
  * is not a gate.
  */
 import { Router } from "express";
-import { adminAllowed } from "../admin-gate.js";
+import { adminAllowed } from "../auth.js";
 import { recordConversationScores } from "../langfuse.js";
 import { store } from "../store.js";
 import type { EvalCatalog, EvalFrame } from "../types.js";

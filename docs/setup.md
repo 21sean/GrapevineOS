@@ -11,7 +11,7 @@ npm --prefix web install
 npm --prefix server install
 
 npm run dev          # api  -> http://localhost:8787
-                     # web  -> http://localhost:5173
+                     # web  -> http://localhost:5174
 ```
 
 Requirements:

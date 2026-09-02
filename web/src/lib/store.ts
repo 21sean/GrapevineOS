@@ -35,6 +35,8 @@ export interface GrapevineState {
   settings: Settings | null
   sources: Source[]
   user: User | null
+  /** May this browser open Admin. The server re-checks every admin route. */
+  isAdmin: boolean
   calendar: CalendarStatus | null
   loaded: boolean
 
@@ -170,6 +172,7 @@ export const useGrapevine = create<GrapevineState>()(
       settings: null,
       sources: [],
       user: null,
+      isAdmin: false,
       calendar: null,
       loaded: false,
 
@@ -213,7 +216,7 @@ export const useGrapevine = create<GrapevineState>()(
           api.events(),
           api.settings(),
           api.sources(),
-          api.me().catch(() => ({ user: null })),
+          api.me().catch(() => ({ user: null, isAdmin: false })),
           api.calendarStatus().catch(() => null),
         ])
         // Signed in: account prefs win over what this browser had locally,
@@ -233,6 +236,7 @@ export const useGrapevine = create<GrapevineState>()(
           settings,
           sources,
           user: me.user,
+          isAdmin: me.isAdmin,
           calendar,
           loaded: true,
           ...(prefs?.filters && { filters: normalizeFilters(prefs.filters) }),
@@ -413,6 +417,9 @@ export const useGrapevine = create<GrapevineState>()(
         // signed in.
         await supabase?.auth.signOut({ scope: "local" }).catch(() => {})
         set({ user: null, calendar: null })
+        // Whether Admin stays visible depends on who is signed in now, so ask
+        // the server again rather than guess.
+        api.me().then((me) => set({ isAdmin: me.isAdmin })).catch(() => set({ isAdmin: false }))
       },
 
       upsertEvent(e) {
