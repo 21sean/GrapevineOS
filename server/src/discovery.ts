@@ -21,6 +21,7 @@
  */
 import { scanText } from "./agent/guardrails.js";
 import { readPage, webSearch } from "./agent/websearch.js";
+import { startLoop } from "./lifecycle.js";
 import {
   BUZZ_RUBRIC,
   BUZZ_WHY_RUBRIC,
@@ -29,7 +30,7 @@ import {
   extractEvents,
   slugId,
 } from "./ingest.js";
-import { type JsonLdCandidate, extractJsonLdEvents } from "./jsonld.js";
+import { type JsonLdCandidate, eventsFromJsonLdBlocks } from "./jsonld.js";
 import { generateJSON } from "./llm.js";
 import { geocode } from "./mapbox.js";
 import { commitIngest } from "./pipeline.js";
@@ -45,6 +46,9 @@ import {
   type DiscoveryRunResult,
   type DiscoverySearch,
 } from "./types.js";
+import { logger } from "./log.js";
+
+const log = logger("discovery");
 
 const MAX_RESULTS = 8; // search hits considered
 const MAX_PAGES = 4; // pages actually read per run
@@ -361,7 +365,7 @@ async function materializeJsonLd(
   try {
     labels = await enrichCandidates(candidates, settings.city);
   } catch (err) {
-    console.log(`[grapevine] discovery: enrichment failed, keeping raw markup — ${String(err).slice(0, 120)}`);
+    log.info(`discovery: enrichment failed, keeping raw markup — ${String(err).slice(0, 120)}`);
   }
 
   const out: CityEvent[] = [];
@@ -437,7 +441,7 @@ export async function runDiscovery(opts: {
   const pages: { url: string; title: string; text: string; structured: JsonLdCandidate[] }[] = [];
   for (const hit of search.results) {
     if (pages.length >= maxPages) break;
-    const page = await readPage(hit.url, { maxChars: PAGE_CHARS, withHtml: true });
+    const page = await readPage(hit.url, { maxChars: PAGE_CHARS, withMarkup: true });
     if ("error" in page) {
       result.pagesSkipped.push({ url: hit.url, error: page.error });
       continue;
@@ -445,7 +449,7 @@ export async function runDiscovery(opts: {
     // Harvest schema.org markup before judging the page on its prose: a
     // JS-rendered calendar often distills to nothing readable while carrying a
     // complete, exact event list in its JSON-LD.
-    const found = page.html ? extractJsonLdEvents(page.html, page.url) : [];
+    const found = page.jsonLd?.length ? eventsFromJsonLdBlocks(page.jsonLd, page.url) : [];
     // Structured only wins when it is actually more exact. Listing pages on the
     // big ticketing sites publish a bare date with no hour and no price, and
     // the prose beside it says "7:30 PM" - so markup that is mostly imprecise
@@ -453,8 +457,8 @@ export async function runDiscovery(opts: {
     const precise = found.filter((c) => c.precise).length;
     const structured = found.length && precise * 2 >= found.length ? found : [];
     if (found.length && !structured.length) {
-      console.log(
-        `[grapevine] discovery: ${page.url} has schema.org markup but only ` +
+      log.info(
+        `discovery: ${page.url} has schema.org markup but only ` +
           `${precise}/${found.length} events carry a time — reading the prose instead`,
       );
     }
@@ -463,7 +467,7 @@ export async function runDiscovery(opts: {
       // for different fixes: a genuinely thin page is not worth revisiting,
       // while a big HTML payload that distills to nothing is client-rendered
       // and would need a real browser.
-      const jsRendered = (page.html?.length ?? 0) > 50_000;
+      const jsRendered = (page.htmlChars ?? 0) > 50_000;
       result.pagesSkipped.push({
         url: hit.url,
         error: jsRendered
@@ -506,8 +510,8 @@ export async function runDiscovery(opts: {
         const events = await materializeJsonLd(page.structured, settings);
         perPage.push({ page, events, structured: true });
         result.extracted += events.length;
-        console.log(
-          `[grapevine] discovery: ${page.url} → ${events.length} events from schema.org markup (no extraction call)`,
+        log.info(
+          `discovery: ${page.url} → ${events.length} events from schema.org markup (no extraction call)`,
         );
         continue;
       }
@@ -732,7 +736,7 @@ const DEFAULT_TICK_SECONDS = 300;
 export async function runSavedSearch(s: DiscoverySearch): Promise<DiscoveryRunResult> {
   const result = await runDiscovery({ query: s.query, commit: true });
   await store.markDiscoveryRun(s.id, summarizeRun(result));
-  console.log(`[grapevine] discovery: “${s.query}” → ${summarizeRun(result)}`);
+  log.info(`discovery: “${s.query}” → ${summarizeRun(result)}`);
   return result;
 }
 
@@ -755,12 +759,12 @@ async function tick(): Promise<void> {
         await runSavedSearch(s);
       } catch (err) {
         const message = `error: ${String(err).slice(0, 200)}`;
-        console.log(`[grapevine] discovery: “${s.query}” failed — ${message}`);
+        log.info(`discovery: “${s.query}” failed — ${message}`);
         await store.markDiscoveryRun(s.id, message).catch(() => {});
       }
     }
   } catch (err) {
-    console.log(`[grapevine] discovery tick error: ${String(err).slice(0, 200)}`);
+    log.info(`discovery tick error: ${String(err).slice(0, 200)}`);
   } finally {
     running = false;
   }
@@ -768,15 +772,18 @@ async function tick(): Promise<void> {
 
 /** Starts the cadence loop unless DISCOVERY_SCHEDULE=0. */
 export function startDiscoveryScheduler(): void {
-  if (/^(0|false|no)$/i.test(process.env.DISCOVERY_SCHEDULE ?? "")) {
-    console.log("[grapevine] discovery: scheduler disabled (DISCOVERY_SCHEDULE=0)");
-    return;
-  }
+  const off = /^(0|false|no)$/i.test(process.env.DISCOVERY_SCHEDULE ?? "");
   const seconds = Math.max(
     60,
     Number(process.env.DISCOVERY_TICK_SECONDS ?? DEFAULT_TICK_SECONDS) || DEFAULT_TICK_SECONDS,
   );
-  console.log(`[grapevine] discovery: checking saved searches every ${seconds}s`);
-  void tick();
-  setInterval(() => void tick(), seconds * 1000);
+  if (!off) log.info(`checking saved searches every ${seconds}s`);
+  startLoop({
+    name: "discovery",
+    enabled: !off,
+    disabledReason: "DISCOVERY_SCHEDULE=0",
+    intervalMs: seconds * 1000,
+    immediate: true,
+    run: tick,
+  });
 }

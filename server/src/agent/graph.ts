@@ -1,5 +1,5 @@
 /**
- * The concierge as a LangGraph StateGraph, with the guardrails as nodes in it:
+ * The concierge as a LangGraph StateGraph, with the guardrails inside it:
  *
  *   START → input_rail ─ blocked ───────────────────────────────→ END
  *              │ clean
@@ -21,6 +21,14 @@
  * every web-facing tool is covered by one rail instead of each tool
  * remembering to call the classifier itself. The next tool that fetches
  * something is protected by existing, not by someone noticing.
+ *
+ * The third rail, the deterministic persona scrubber on the answer, is not a
+ * node but lives inside `invokeModel`: every model call the graph makes is
+ * streamed through it, a trip aborts the model mid-stream, and the refusal
+ * that replaces the answer is what the graph records. So every consumer of
+ * the graph (the chat bridge, the red-team bridge, a test) gets the same
+ * output rail without applying it by hand, and the HTTP layer reads a
+ * `guardrail` frame like any other instead of sniffing the stream.
  *
  * The two rails keep untrusted text out of state in deliberately different
  * ways, because they are defending different things:
@@ -81,11 +89,13 @@
  * Conversation memory is a LangGraph checkpointer keyed by thread_id: the
  * client sends only the new user message and the graph replays the rest.
  * The checkpointer is durable (SupabaseSaver — see checkpointer.ts), so a
- * server restart keeps every thread's memory; the reseed in index.ts remains
- * as a fallback for threads that predate the checkpoint table.
+ * server restart keeps every thread's memory. There is no second copy to
+ * reseed from: chat_messages is the transcript a person reads, the
+ * checkpointer is the memory the graph uses.
  */
 import {
   AIMessage,
+  AIMessageChunk,
   HumanMessage,
   isAIMessage,
   SystemMessage,
@@ -94,6 +104,9 @@ import {
 } from "@langchain/core/messages";
 import type { ToolCall } from "@langchain/core/messages/tool";
 import { dispatchCustomEvent } from "@langchain/core/callbacks/dispatch";
+import type { BaseLanguageModelInput } from "@langchain/core/language_models/base";
+import type { Runnable } from "@langchain/core/runnables";
+import { concat } from "@langchain/core/utils/stream";
 import {
   Command,
   END,
@@ -110,22 +123,23 @@ import {
 import { ChatOllama } from "@langchain/ollama";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import { z } from "zod";
+import { llmPolicy } from "../budget.js";
 import { SupabaseSaver } from "../checkpointer.js";
+import { thinkFlagRejected } from "../ollama.js";
 import type { ChatEffort, CliProviderId } from "../types.js";
 import { CliChatModel } from "./cli-model.js";
 import { buildSystemPrompt, type AgentCtx, type ChatContext } from "./context.js";
 import { toolDetail, toolLabel } from "./contracts.js";
-import { inputRefusalMessage, scanText, type ScanOptions } from "./guardrails.js";
+import {
+  inputRefusalMessage,
+  personaGuard,
+  personaRefusalMessage,
+  scanText,
+  type ScanOptions,
+} from "./guardrails.js";
 import { emit, makeTools } from "./tools.js";
 
 const MAX_TOOL_ROUNDS = 6;
-
-/** A stalled generation fails here; a healthy stream refreshes the timer per token. */
-const MODEL_IDLE_TIMEOUT_MS = 45_000;
-
-/** CLI turns: silent while the CLI runs its own MCP tool calls, so the idle
- *  leash must outlast cliChat's own 110s timeout rather than trip first. */
-const CLI_IDLE_TIMEOUT_MS = 115_000;
 
 /** How many out-of-window messages accumulate before the recall node folds
  *  them into the running summary. Bounds the extra generation to at most one
@@ -139,13 +153,60 @@ const SUMMARY_TIMEOUT_MS = 25_000;
 /**
  * Connection-establishment failures only (Ollama restarting, socket refused).
  * These surface before any token streams, so retrying is invisible to the
- * browser. Mid-stream errors must not match — see the header comment.
+ * browser. Mid-stream errors must not match — see the header comment. How
+ * many attempts comes from the one LLM policy in budget.ts.
  */
 const modelRetry: RetryPolicy = {
-  maxAttempts: 2,
-  initialInterval: 500,
+  maxAttempts: 1 + llmPolicy("ollama").retries,
+  initialInterval: llmPolicy("ollama").retryDelayMs,
   retryOn: (err) => /fetch failed|ECONNREFUSED|EAI_AGAIN/i.test(String(err)),
 };
+
+/**
+ * Strips <think>…</think> spans from streamed text, holding back partial tags
+ * that split across chunk boundaries. Some models emit these even with the
+ * thinking flag off.
+ */
+function thinkStripper(): (chunk: string) => string {
+  let inThink = false;
+  let pending = "";
+  const partialSuffix = (s: string, tag: string): string => {
+    for (let n = Math.min(s.length, tag.length - 1); n > 0; n--) {
+      if (s.endsWith(tag.slice(0, n))) return tag.slice(0, n);
+    }
+    return "";
+  };
+  return (chunk) => {
+    let text = pending + chunk;
+    pending = "";
+    let out = "";
+    while (text) {
+      if (inThink) {
+        const close = text.indexOf("</think>");
+        if (close >= 0) {
+          text = text.slice(close + 8);
+          inThink = false;
+          continue;
+        }
+        pending = partialSuffix(text, "</think>");
+        text = "";
+      } else {
+        const open = text.indexOf("<think>");
+        if (open >= 0) {
+          out += text.slice(0, open);
+          text = text.slice(open + 7);
+          inThink = true;
+          continue;
+        }
+        const tail = partialSuffix(text, "<think>");
+        out += text.slice(0, text.length - tail.length);
+        pending = tail;
+        text = "";
+      }
+    }
+    return out;
+  };
+}
 
 /** How much thread history the model sees; older turns stay checkpointed. */
 const HISTORY_WINDOW = 24;
@@ -153,11 +214,7 @@ const HISTORY_WINDOW = 24;
 /** Durable: threads survive restarts. Fails soft to per-process memory. */
 const checkpointer = new SupabaseSaver();
 
-/**
- * Whether the in-memory checkpointer still holds this thread. False after a
- * server restart — the caller then reseeds the graph from the persisted chat
- * history so a resumed conversation keeps its memory.
- */
+/** Whether the durable checkpointer holds this thread, i.e. it has had a turn before. */
 export async function hasCheckpoint(threadId: string): Promise<boolean> {
   const tuple = await checkpointer.getTuple({ configurable: { thread_id: threadId } });
   return !!tuple;
@@ -182,22 +239,37 @@ const AgentState = new StateSchema({
   summarized: new ReducedValue(z.number().default(0), {
     reducer: (_prev: number, next: number) => next,
   }),
+  /** The input rail refused this turn. Reset per turn; read by the bridges. */
+  inputBlocked: new ReducedValue(z.boolean().default(false), {
+    reducer: (_prev: boolean, next: boolean) => next,
+  }),
+  /** The persona rail replaced this turn's answer. Reset per turn. */
+  outputTripped: new ReducedValue(z.boolean().default(false), {
+    reducer: (_prev: boolean, next: boolean) => next,
+  }),
 });
 
 type State = typeof AgentState.State;
 
 /**
- * The per-turn graph input: any replayed history plus an `Overwrite` that
- * bypasses the sum reducer to zero the tool budget — a new user turn starts
- * with a full budget without replaying history.
+ * The per-turn graph input: `Overwrite`s that bypass the reducers to zero the
+ * tool budget and clear the rail flags, so a new user turn starts clean
+ * without replaying history. `seed` exists for the red-team bridge, which
+ * hands each synthetic turn its own history; the chat bridge passes nothing
+ * because the checkpointer already holds the thread.
  *
  * The user's text is deliberately NOT part of the input: it rides in on
  * `GraphDeps.userText` and only the input rail may write it into `messages`.
- * See the header — that is what keeps a flagged message out of the (now
- * durable) checkpointer.
+ * See the header — that is what keeps a flagged message out of the durable
+ * checkpointer.
  */
 export function turnInput(seed: BaseMessage[] = []): typeof AgentState.Update {
-  return { messages: seed, toolRounds: new Overwrite(0) };
+  return {
+    messages: seed,
+    toolRounds: new Overwrite(0),
+    inputBlocked: new Overwrite(false),
+    outputTripped: new Overwrite(false),
+  };
 }
 
 export interface GraphDeps {
@@ -328,11 +400,6 @@ export function buildAgentGraph(deps: GraphDeps) {
   const { ctx, chat, baseUrl, model, toolsOk, city, telemetry } = deps;
   const system = new SystemMessage(buildSystemPrompt(ctx, chat, toolsOk));
 
-  const tools = makeTools(ctx, chat);
-  const toolsByName = new Map<string, StructuredToolInterface>(
-    tools.map((t) => [t.name, t as StructuredToolInterface]),
-  );
-
   // A CLI provider replaces the model, not the graph: rails, memory, and
   // traces stay identical. Its in-CLI tool calls surface as frames via
   // `frames`, pointed at the current run's writer inside invokeModel.
@@ -340,30 +407,117 @@ export function buildAgentGraph(deps: GraphDeps) {
     ? new CliChatModel({ provider: deps.provider, model: deps.cliModel, effort: deps.cliEffort })
     : null;
 
+  // Built only for Ollama turns. A CLI turn never binds these tools (the CLI
+  // brings its own through MCP) and never calls ChatOllama, so constructing
+  // twelve LangChain tools and two model clients for it was pure overhead.
+  const tools = cli ? [] : makeTools(ctx, chat);
+  const toolsByName = new Map<string, StructuredToolInterface>(
+    tools.map((t) => [t.name, t as StructuredToolInterface]),
+  );
   const opts = { baseUrl, model, temperature: 0.3, numCtx: 16384 };
   // Same dance as ollama.ts chatJSON: ask for no thinking, but fall back for
-  // models that reject the flag outright.
-  const llm = new ChatOllama({ ...opts, think: false });
-  const llmNoFlag = new ChatOllama(opts);
-  const agentLlm = toolsOk && !cli ? llm.bindTools(tools) : llm;
-  const agentLlmNoFlag = toolsOk && !cli ? llmNoFlag.bindTools(tools) : llmNoFlag;
+  // models that reject the flag outright (thinkFlagRejected is the one test).
+  const llm = cli ? null : new ChatOllama({ ...opts, think: false });
+  const llmNoFlag = cli ? null : new ChatOllama(opts);
+  const agentLlm = llm && toolsOk ? llm.bindTools(tools) : llm;
+  const agentLlmNoFlag = llmNoFlag && toolsOk ? llmNoFlag.bindTools(tools) : llmNoFlag;
 
+  type Model = Runnable<BaseLanguageModelInput, AIMessageChunk>;
+  const modelName = deps.provider ?? model;
+
+  /**
+   * One model call, streamed through the output rail. Tokens reach the
+   * browser (and the transcript) only after the persona guard has cleared
+   * them; a trip aborts the model mid-stream, tells the client with a
+   * guardrail frame, a notice and a replace, and hands back the refusal as the
+   * message the graph records. The think-flag fallback lives here too: the
+   * flag is rejected before any token streams, so the retry cannot duplicate
+   * output, and nothing after the first token is ever retried.
+   */
   async function invokeModel(
     messages: BaseMessage[],
     config: LangGraphRunnableConfig,
     withTools: boolean,
-  ) {
+  ): Promise<{ message: AIMessage; tripped: boolean }> {
+    let primary: Model;
+    let fallback: Model | null;
     if (cli) {
       cli.frames = (frame) => emit(config, frame);
-      return await cli.invoke(messages, config);
+      primary = cli;
+      fallback = null;
+    } else {
+      primary = (withTools ? agentLlm : llm) as Model;
+      fallback = (withTools ? agentLlmNoFlag : llmNoFlag) as Model;
     }
-    const [primary, fallback] = withTools ? [agentLlm, agentLlmNoFlag] : [llm, llmNoFlag];
+    const guard = personaGuard({ modelName, telemetry });
+    const strip = thinkStripper();
+    const ac = new AbortController();
+    const signal = config.signal ? AbortSignal.any([config.signal, ac.signal]) : ac.signal;
+
+    let text = "";
+    let final: AIMessageChunk | null = null;
+    /** Stream one runnable through the guard; returns the accumulated chunk. */
+    const consume = async (runnable: Model): Promise<AIMessageChunk | null> => {
+      let acc: AIMessageChunk | null = null;
+      const stream = await runnable.stream(messages, { ...config, signal });
+      for await (const chunk of stream) {
+        acc = acc ? concat(acc, chunk) : chunk;
+        const raw = typeof chunk.content === "string" ? chunk.content : "";
+        if (!raw) continue;
+        const safe = guard.push(strip(raw));
+        if (guard.tripped) {
+          ac.abort(); // stop the local GPU: the rest of this answer is never shown
+          return acc;
+        }
+        if (safe) {
+          text += safe;
+          emit(config, { type: "delta", text: safe });
+        }
+      }
+      return acc;
+    };
     try {
-      return await primary.invoke(messages, config);
+      final = await consume(primary);
     } catch (err) {
-      if (!/think/i.test(String(err))) throw err;
-      return await fallback.invoke(messages, config);
+      if (guard.tripped) {
+        // The abort above surfaces here as an error; the trip is the answer.
+      } else if (fallback && !text && thinkFlagRejected(err)) {
+        final = await consume(fallback);
+      } else {
+        throw err;
+      }
     }
+    if (!guard.tripped) {
+      const rest = guard.flush();
+      if (rest && !guard.tripped) {
+        text += rest;
+        emit(config, { type: "delta", text: rest });
+      }
+    }
+    if (guard.tripped) {
+      emit(config, {
+        type: "guardrail",
+        rail: "output",
+        blocked: true,
+        ...(guard.pattern && { pattern: guard.pattern }),
+      });
+      emit(config, {
+        type: "notice",
+        code: "guardrails",
+        message: "The reply broke character (model identity leak) and was replaced by the persona rail.",
+      });
+      const refusal = personaRefusalMessage(city);
+      emit(config, { type: "replace", text: refusal });
+      return { message: new AIMessage(refusal), tripped: true };
+    }
+    return {
+      message: new AIMessage({
+        content: text,
+        tool_calls: final?.tool_calls ?? [],
+        ...(final?.id && { id: final.id }),
+      }),
+      tripped: false,
+    };
   }
 
   /**
@@ -424,7 +578,10 @@ export function buildAgentGraph(deps: GraphDeps) {
     emit(config, { type: "delta", text: refusal });
     // The refusal is the assistant's turn as far as the transcript is
     // concerned; the message that provoked it is deliberately not recorded.
-    return new Command({ goto: END, update: { messages: [new AIMessage(refusal)] } });
+    return new Command({
+      goto: END,
+      update: { messages: [new AIMessage(refusal)], inputBlocked: true },
+    });
   }
 
   /**
@@ -436,7 +593,7 @@ export function buildAgentGraph(deps: GraphDeps) {
    * not.
    */
   async function recallNode(state: State, config: LangGraphRunnableConfig) {
-    if (cli) return {};
+    if (!llm) return {};
     const overflow = state.messages.length - HISTORY_WINDOW;
     if (overflow - state.summarized < SUMMARY_STRIDE) return {};
     const fold = state.messages
@@ -478,12 +635,12 @@ export function buildAgentGraph(deps: GraphDeps) {
   }
 
   async function agentNode(state: State, config: LangGraphRunnableConfig) {
-    const res = await invokeModel(
+    const { message, tripped } = await invokeModel(
       [system, ...recallMessages(state), ...windowed(state.messages)],
       config,
       true,
     );
-    return { messages: [res] };
+    return { messages: [message], ...(tripped && { outputTripped: true }) };
   }
 
   /** No tools, budget-spent nudge appended — the model must answer now. */
@@ -491,12 +648,12 @@ export function buildAgentGraph(deps: GraphDeps) {
     const nudge = new SystemMessage(
       "Tool limit reached — answer the user now using only what you've already gathered.",
     );
-    const res = await invokeModel(
+    const { message, tripped } = await invokeModel(
       [system, ...recallMessages(state), ...windowed(state.messages), nudge],
       config,
       false,
     );
-    return { messages: [res] };
+    return { messages: [message], ...(tripped && { outputTripped: true }) };
   }
 
   async function toolsNode(state: State, config: LangGraphRunnableConfig) {
@@ -623,11 +780,13 @@ export function buildAgentGraph(deps: GraphDeps) {
     return state.toolRounds >= MAX_TOOL_ROUNDS ? "finalize" : "agent";
   }
 
-  // CLI models: longer idle leash (their tool phases stream nothing) and no
-  // retry (a re-run spends real subscription tokens on a duplicate turn).
+  // One policy per provider (budget.ts): CLI models get a longer idle leash
+  // (their tool phases stream nothing) and no retry (a re-run spends real
+  // subscription tokens on a duplicate turn).
+  const policy = llmPolicy(deps.provider ?? "ollama");
   const modelNodePolicy = cli
-    ? { timeout: { idleTimeout: CLI_IDLE_TIMEOUT_MS } }
-    : { retryPolicy: modelRetry, timeout: { idleTimeout: MODEL_IDLE_TIMEOUT_MS } };
+    ? { timeout: { idleTimeout: policy.idleTimeoutMs } }
+    : { retryPolicy: modelRetry, timeout: { idleTimeout: policy.idleTimeoutMs } };
 
   return new StateGraph(AgentState)
     // No retry on the rails: a retried scan records the same decision twice,

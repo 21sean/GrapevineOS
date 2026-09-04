@@ -4,83 +4,48 @@
  * routes below it let a signed-in user resume or delete a conversation.
  *
  * The client sends { threadId, message, context }; conversation history
- * lives server-side in the graph's checkpointer, keyed by threadId.
+ * lives server-side in the graph's durable checkpointer, keyed by threadId.
+ * There is no second copy to replay from: chat_messages is the human-readable
+ * transcript, the checkpointer is the memory.
  *
- * The frame protocol is the AgentFrame union in shared/types.ts: one JSON
- * object per line, typed on both ends. In outline:
+ * Everything a person sees comes out of the graph as a frame on its custom
+ * stream: the model's tokens (already through the persona rail, see
+ * graph.ts invokeModel), tool starts and finishes, actions, notices and rail
+ * verdicts. This layer adds the pre-flight (which provider, is it up), the
+ * limits, the request id, and the persistence of what was read.
+ *
+ * The frame protocol is the AgentFrame union in shared/types.ts, typed on
+ * both ends. In outline:
  *   status     a short label while nothing streams yet ("Thinking…")
- *   delta      streamed answer tokens
+ *   delta      streamed answer tokens, cleared by the output rail
  *   replace    the persona rail swapped the partial answer for a refusal
  *   tool       a tool call started or finished
  *   action     a map highlight, filter change, proposal, or refresh
  *   notice     a degraded-mode explanation the person should read
  *   guardrail  a rail acted on this turn (machine-readable)
  *   usage      token and cost telemetry, when the provider reports it
- *   done       the thread id to continue with; error, when it went wrong
+ *   done       the thread id to continue with, and this request's id
  */
-import { AIMessage, HumanMessage, type BaseMessage } from "@langchain/core/messages";
 import { Router } from "express";
 import { sessionUser } from "../auth.js";
 import { langfuseHandler } from "../langfuse.js";
+import { trackChat } from "../lifecycle.js";
+import { logger } from "../log.js";
 import { modelSupportsTools, ollamaBase } from "../ollama.js";
 import { cliSupportsTools, detectProviders, providerInfo } from "../providers.js";
 import { rateLimit, singleFlight } from "../rate-limit.js";
+import { currentRequestId } from "../request-id.js";
 import { store } from "../store.js";
 import { isChatEffort, type AgentFrame } from "../types.js";
 import { buildCtx, coercePos, type ChatContext } from "./context.js";
 import { buildAgentGraph, forgetThread, hasCheckpoint, turnInput } from "./graph.js";
-import { personaGuard, personaRefusalMessage } from "./guardrails.js";
+
+const log = logger("chat");
 
 export const chat = Router();
 
 const CHAT_DEADLINE_MS = 120_000;
 const MAX_MESSAGE_CHARS = 2_000;
-
-/**
- * Strips <think>…</think> spans from streamed text, holding back partial tags
- * that split across chunk boundaries. Some models emit these even with the
- * thinking flag off.
- */
-function thinkStripper(): (chunk: string) => string {
-  let inThink = false;
-  let pending = "";
-  const partialSuffix = (s: string, tag: string): string => {
-    for (let n = Math.min(s.length, tag.length - 1); n > 0; n--) {
-      if (s.endsWith(tag.slice(0, n))) return tag.slice(0, n);
-    }
-    return "";
-  };
-  return (chunk) => {
-    let text = pending + chunk;
-    pending = "";
-    let out = "";
-    while (text) {
-      if (inThink) {
-        const close = text.indexOf("</think>");
-        if (close >= 0) {
-          text = text.slice(close + 8);
-          inThink = false;
-          continue;
-        }
-        pending = partialSuffix(text, "</think>");
-        text = "";
-      } else {
-        const open = text.indexOf("<think>");
-        if (open >= 0) {
-          out += text.slice(0, open);
-          text = text.slice(open + 7);
-          inThink = true;
-          continue;
-        }
-        const tail = partialSuffix(text, "<think>");
-        out += text.slice(0, text.length - tail.length);
-        pending = tail;
-        text = "";
-      }
-    }
-    return out;
-  };
-}
 
 // A chat turn is the most expensive request the server takes: one turn holds
 // the local GPU for its whole duration. So two limits, not one: a per-address
@@ -96,12 +61,23 @@ const chatFlight = singleFlight({
 chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
   res.setHeader("Content-Type", "application/x-ndjson");
   res.setHeader("Cache-Control", "no-cache");
+  const requestId = currentRequestId(res);
   const send = (frame: AgentFrame) => res.write(JSON.stringify(frame) + "\n");
   // A closed tab must not leave the local GPU generating.
   const ac = new AbortController();
   res.on("close", () => {
     if (!res.writableEnded) ac.abort();
   });
+  // A restart tells the tab why the answer stopped, then aborts the run.
+  const untrack = trackChat(() => {
+    send({
+      type: "notice",
+      code: "shutdown",
+      message: "The server is restarting. Send that again in a moment.",
+    });
+    ac.abort();
+  });
+  res.on("close", untrack);
 
   const body = (req.body ?? {}) as {
     threadId?: string;
@@ -116,7 +92,7 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
       ? body.threadId
       : crypto.randomUUID();
   const done = () => {
-    send({ type: "done", threadId });
+    send({ type: "done", threadId, requestId });
     res.end();
   };
 
@@ -143,7 +119,7 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
           userText: message.slice(0, MAX_MESSAGE_CHARS),
           assistantText: assistantText.trim(),
         })
-        .catch((err) => console.error("[chat] persist:", String(err).slice(0, 160)));
+        .catch((err) => log.error({ requestId, err: String(err).slice(0, 160) }, "persist failed"));
     };
 
     const message = typeof body.message === "string" ? body.message.trim() : "";
@@ -252,109 +228,40 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
       },
     });
 
-    // Threads that predate the durable checkpoint table have no graph state;
-    // replay their persisted transcript once so they keep their memory.
-    const seed: BaseMessage[] = [];
-    if (ownsThread && user && !(await hasCheckpoint(threadId))) {
-      for (const m of (await store.chatMessages(user.id, threadId).catch(() => null)) ?? []) {
-        seed.push(m.role === "user" ? new HumanMessage(m.content) : new AIMessage(m.content));
-      }
-    }
-
-    const strip = thinkStripper();
-    // Output rail: deterministic persona/identity-leak scrubber over the
-    // streamed answer, keyed to whichever model or provider is answering.
-    const guard = personaGuard({
-      modelName: provider ?? settings.model,
-      telemetry: {
-        surface: provider ? "chat-cli" : "chat",
-        threadId,
-        userId: user?.id,
-        provider: provider ?? settings.model,
-      },
-    });
     // With LANGFUSE_* keys set, the turn also lands in Langfuse, grouped into
-    // a session by thread id. Null when disabled: no keys, no callbacks.
-    const lf = langfuseHandler({ threadId, userId: user?.id, model: providerLabel });
+    // a session by thread id and carrying this request's id in its metadata.
+    // Null when disabled: no keys, no callbacks.
+    const lf = langfuseHandler({ threadId, userId: user?.id, model: providerLabel, requestId });
     const stream = await graph.stream(
       // The new user text is NOT in the input: it rides in GraphDeps.userText
       // and only the input_rail node may promote it into state (that is what
       // keeps a flagged message out of the durable checkpointer). turnInput
-      // carries any reseeded history and resets the per-turn tool budget.
-      turnInput(seed),
+      // resets the per-turn tool budget and rail flags.
+      turnInput(),
       {
         configurable: { thread_id: threadId },
-        streamMode: ["messages", "custom"],
+        streamMode: "custom",
         signal: AbortSignal.any([ac.signal, AbortSignal.timeout(CHAT_DEADLINE_MS)]),
         recursionLimit: 50,
         runName: "ask-grapevine",
-        metadata: { thread_id: threadId, model: providerLabel, tools: toolsOk },
+        metadata: { thread_id: threadId, model: providerLabel, tools: toolsOk, request_id: requestId },
         ...(lf && { callbacks: [lf] }),
       },
     );
 
-    // What the user actually saw, assembled for the persisted history.
+    // What the user actually saw, assembled for the persisted history. The
+    // graph has already run every token through the output rail, so a delta
+    // here is safe by construction and a replace is the rail's refusal.
     let answer = "";
-    // Set when the input rail refuses the turn: its refusal is written by the
-    // graph node rather than streamed from the model, and a blocked turn is
-    // deliberately kept out of the persisted transcript.
+    // Set when the input rail refuses the turn: a blocked turn is deliberately
+    // kept out of the persisted transcript so it cannot prime the next one.
     let railBlocked = false;
-    for await (const [mode, chunk] of stream as AsyncIterable<[string, unknown]>) {
-      if (mode === "custom") {
-        const frame = chunk as AgentFrame;
-        if (frame.type === "guardrail" && frame.rail === "input" && frame.blocked) {
-          railBlocked = true;
-        }
-        // The rail nodes emit their refusal as a custom frame, so it has to
-        // join `answer` the way a streamed token would; otherwise the reply
-        // the user read is not the reply anything downstream sees.
-        if (frame.type === "delta") answer += frame.text;
-        send(frame);
-        continue;
-      }
-      // mode === "messages": [chunk, metadata] tuples from LLM calls inside nodes
-      const [msg, meta] = chunk as [
-        { content?: unknown },
-        { langgraph_node?: string } | undefined,
-      ];
-      const node = meta?.langgraph_node;
-      if (node !== "agent" && node !== "finalize") continue;
-      const raw = typeof msg.content === "string" ? msg.content : "";
-      if (!raw) continue;
-      const text = guard.push(strip(raw));
-      if (guard.tripped) break;
-      if (text) {
-        answer += text;
-        send({ type: "delta", text });
-      }
+    for await (const frame of stream as AsyncIterable<AgentFrame>) {
+      if (frame.type === "guardrail" && frame.rail === "input" && frame.blocked) railBlocked = true;
+      if (frame.type === "delta") answer += frame.text;
+      if (frame.type === "replace") answer = frame.text;
+      send(frame);
     }
-    if (!guard.tripped) {
-      const rest = guard.flush();
-      if (rest && !guard.tripped) {
-        answer += rest;
-        send({ type: "delta", text: rest });
-      }
-    }
-    if (guard.tripped) {
-      // Stop the local GPU, close out the abandoned stream, and swap the
-      // partial reply for an in-character refusal ("replace" frame).
-      ac.abort();
-      try {
-        await (stream as unknown as AsyncGenerator).return?.(undefined);
-      } catch {
-        /* abort raced the stream teardown */
-      }
-      send({
-        type: "notice",
-        code: "guardrails",
-        message: "The reply broke character (model identity leak) and was replaced by the persona rail.",
-      });
-      const refusal = personaRefusalMessage(settings.city);
-      send({ type: "replace", text: refusal });
-      answer = refusal; // history records what the user actually saw
-    }
-    // A turn the input rail refused stays out of the transcript entirely, so
-    // it cannot prime the next one. Everything else is persisted as read.
     if (!railBlocked) persist(answer);
     done();
   } catch (err) {
@@ -367,6 +274,7 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
       return;
     }
     const timedOut = /timeout|abort/i.test(String(err));
+    log.warn({ requestId, threadId, err: String(err).slice(0, 300) }, "chat turn failed");
     send({
       type: "error",
       message: timedOut
@@ -374,6 +282,8 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
         : String(err).slice(0, 300),
     });
     res.end();
+  } finally {
+    untrack();
   }
 });
 
@@ -385,36 +295,24 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
 chat.get("/api/chat/threads", async (req, res) => {
   const user = await sessionUser(req);
   if (!user) return res.status(401).json({ error: "not signed in" });
-  try {
-    res.json({ threads: await store.chatThreads(user.id) });
-  } catch (err) {
-    res.status(502).json({ error: String(err).slice(0, 200) });
-  }
+  res.json({ threads: await store.chatThreads(user.id) });
 });
 
 chat.get("/api/chat/threads/:id", async (req, res) => {
   const user = await sessionUser(req);
   if (!user) return res.status(401).json({ error: "not signed in" });
-  try {
-    const id = String(req.params.id);
-    const messages = await store.chatMessages(user.id, id);
-    if (!messages) return res.status(404).json({ error: "unknown thread" });
-    res.json({ id, messages });
-  } catch (err) {
-    res.status(502).json({ error: String(err).slice(0, 200) });
-  }
+  const id = String(req.params.id);
+  const messages = await store.chatMessages(user.id, id);
+  if (!messages) return res.status(404).json({ error: "unknown thread" });
+  res.json({ id, messages });
 });
 
 chat.delete("/api/chat/threads/:id", async (req, res) => {
   const user = await sessionUser(req);
   if (!user) return res.status(401).json({ error: "not signed in" });
-  try {
-    const id = String(req.params.id);
-    const deleted = await store.deleteChatThread(user.id, id);
-    if (!deleted) return res.status(404).json({ error: "unknown thread" });
-    await forgetThread(id).catch(() => {});
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(502).json({ error: String(err).slice(0, 200) });
-  }
+  const id = String(req.params.id);
+  const deleted = await store.deleteChatThread(user.id, id);
+  if (!deleted) return res.status(404).json({ error: "unknown thread" });
+  await forgetThread(id).catch(() => {});
+  res.json({ ok: true });
 });

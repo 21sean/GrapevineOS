@@ -937,9 +937,17 @@ export type AgentFrame =
   /** A degraded-mode explanation the person should read (rail blocked, CLI missing, ...). */
   | { type: "notice"; code: string; message: string }
   /** A rail acted on this turn, machine-readable; the notice carries the sentence. */
-  | { type: "guardrail"; rail: GuardrailRail; blocked: boolean; score?: number; threshold?: number }
+  | {
+      type: "guardrail";
+      rail: GuardrailRail;
+      blocked: boolean;
+      score?: number;
+      threshold?: number;
+      /** Output rail: which persona pattern fired. */
+      pattern?: string;
+    }
   /** Token and cost telemetry, when the provider reports it (Claude Code). */
   | { type: "usage"; usage: ChatUsage }
-  /** The turn finished; continue the conversation with this thread id. */
-  | { type: "done"; threadId?: string }
+  /** The turn finished; continue with this thread id. requestId names the server-side trace. */
+  | { type: "done"; threadId?: string; requestId?: string }
   | { type: "error"; message: string };

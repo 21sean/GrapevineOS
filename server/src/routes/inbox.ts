@@ -10,19 +10,11 @@ import { listInbox, reprocessInbox } from "../inbox.js";
 export const inbox = Router();
 
 inbox.get("/api/inbox", requireAdmin, async (_req, res) => {
-  try {
-    res.json(await listInbox());
-  } catch (err) {
-    res.status(502).json({ error: String(err) });
-  }
+  res.json(await listInbox());
 });
 
 inbox.post("/api/inbox/reprocess", requireAdmin, async (req, res) => {
   const key = String(req.body?.key ?? "");
   if (!key) return res.status(400).json({ error: "key required" });
-  try {
-    res.json(await reprocessInbox(key));
-  } catch (err) {
-    res.status(502).json({ error: String(err) });
-  }
+  res.json(await reprocessInbox(key));
 });

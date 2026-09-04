@@ -5,6 +5,9 @@
  */
 import { Router } from "express";
 import { safeEqual } from "../secrets.js";
+import { logger } from "../log.js";
+
+const log = logger("alerts");
 
 export const alerts = Router();
 
@@ -15,6 +18,6 @@ alerts.post("/api/alerts/langfuse", (req, res) => {
     return res.status(401).json({ error: "bad key" });
   }
   const body = JSON.stringify(req.body ?? {});
-  console.warn(`[grapevine] langfuse alert: ${body.slice(0, 600)}`);
+  log.warn(`langfuse alert: ${body.slice(0, 600)}`);
   res.json({ ok: true });
 });

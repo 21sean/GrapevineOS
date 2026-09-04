@@ -15,7 +15,8 @@ import {
 import { BOOKED_COLOR, CATEGORY_META, type Category, type CityEvent } from "@/lib/types"
 import { BASEMAP_LAYERS } from "@/lib/mapLayers"
 
-mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN as string
+const MAPBOX_TOKEN = (import.meta.env.VITE_MAPBOX_TOKEN as string | undefined) ?? ""
+mapboxgl.accessToken = MAPBOX_TOKEN
 
 const TRAFFIC_SOURCE = "gv-traffic"
 const TRAFFIC_LAYER = "gv-traffic-line"
@@ -112,7 +113,7 @@ function setText(el: HTMLElement, value: string) {
   if (el.textContent !== value) el.textContent = value
 }
 
-export function EventMap() {
+function LiveMap() {
   const mapRef = useRef<mapboxgl.Map | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const stacksRef = useRef(new Map<string, Stack>())
@@ -598,4 +599,27 @@ function decorateStack(
   setText(stack.labelSubEl, bookedLine ?? "")
   setText(stack.countEl, stack.events.length > 1 ? String(stack.events.length) : "")
   setText(stack.numEl, `${stack.idx + 1}/${stack.events.length}`)
+}
+
+/**
+ * Without a token Mapbox GL throws at map construction and the whole app
+ * white-screens. Say what is missing instead, the way the Supabase client
+ * does, so a fresh clone fails in words.
+ */
+export function EventMap() {
+  if (!MAPBOX_TOKEN) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-background p-8 text-center">
+        <div className="max-w-md space-y-2">
+          <p className="font-heading text-lg font-semibold">The map needs a Mapbox token</p>
+          <p className="text-sm text-muted-foreground">
+            Set <span className="font-mono">VITE_MAPBOX_TOKEN</span> in{" "}
+            <span className="font-mono">web/.env.local</span> (a public token scoped to styles and
+            tiles) and reload. See web/.env.example.
+          </p>
+        </div>
+      </div>
+    )
+  }
+  return <LiveMap />
 }

@@ -12,6 +12,9 @@
  * assumed, because a gate nobody knows the shape of is not a gate.
  */
 import type { User } from "./types.js";
+import { logger } from "./log.js";
+
+const log = logger("admin-gate");
 
 export function adminAllowlist(): string[] {
   return (process.env.ADMIN_EMAILS ?? "")
@@ -49,16 +52,16 @@ export function isAdminUser(user: User | null | undefined): boolean {
 export function logAdminPosture(): void {
   switch (adminPosture()) {
     case "allowlist":
-      console.log("[grapevine] admin surface: " + adminAllowlist().length + " allowlisted account(s)");
+      log.info("admin surface: " + adminAllowlist().length + " allowlisted account(s)");
       return;
     case "open":
-      console.warn(
-        "[grapevine] ADMIN_EMAILS is not set: the admin surface (settings, model pulls, ingest, discovery, monitoring) is open to anyone who can reach this port. Fine on a laptop; set it before exposing the server.",
+      log.warn(
+        "ADMIN_EMAILS is not set: the admin surface (settings, model pulls, ingest, discovery, monitoring) is open to anyone who can reach this port. Fine on a laptop; set it before exposing the server.",
       );
       return;
     case "closed":
-      console.warn(
-        "[grapevine] ADMIN_EMAILS is not set and NODE_ENV=production: the admin surface is closed to everyone until it is.",
+      log.warn(
+        "ADMIN_EMAILS is not set and NODE_ENV=production: the admin surface is closed to everyone until it is.",
       );
       return;
   }

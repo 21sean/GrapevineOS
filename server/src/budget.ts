@@ -85,6 +85,41 @@ export const LLM_RETRIES = envInt("EXTRACT_LLM_RETRIES", 1);
 export const LLM_RETRY_DELAY_MS = envInt("EXTRACT_LLM_RETRY_DELAY_MS", 2_000);
 
 /**
+ * The one policy for "a model call took too long", per provider. The Ollama
+ * JSON client, the CLI spawn and the graph's node policies all read this;
+ * four unrelated timeout-and-retry rules used to describe the same event.
+ *
+ * `timeoutMs` caps one whole call. `idleTimeoutMs` is the streaming leash: a
+ * healthy stream refreshes it per token, a stalled one fails there instead of
+ * eating the whole HTTP deadline. Subscription CLIs never retry (a re-run
+ * spends real tokens on a duplicate turn) and get a longer idle leash because
+ * their tool phases stream nothing.
+ */
+export interface LlmPolicy {
+  timeoutMs: number;
+  idleTimeoutMs: number;
+  retries: number;
+  retryDelayMs: number;
+}
+
+export function llmPolicy(provider: string): LlmPolicy {
+  if (provider === "ollama") {
+    return {
+      timeoutMs: LLM_TIMEOUT_MS,
+      idleTimeoutMs: envInt("LLM_IDLE_TIMEOUT_MS", 45_000),
+      retries: LLM_RETRIES,
+      retryDelayMs: LLM_RETRY_DELAY_MS,
+    };
+  }
+  return {
+    timeoutMs: envInt("CLI_TIMEOUT_MS", 110_000),
+    idleTimeoutMs: envInt("CLI_IDLE_TIMEOUT_MS", 115_000),
+    retries: 0,
+    retryDelayMs: 0,
+  };
+}
+
+/**
  * How many times a single email may fail extraction before the pipeline stops
  * picking it up. Without this a poison row (one the model reliably chokes on)
  * is re-selected by every kick forever, burning a full model pass each time

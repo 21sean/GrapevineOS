@@ -20,7 +20,7 @@
  */
 import {
   GUARD_MODEL_LABEL,
-  guardrailsEnabled,
+  guardConfig,
   personaGuard,
   scanText,
 } from "../../agent/guardrails.js";
@@ -65,7 +65,7 @@ export const guardrailsSuite: EvalSuite = {
   // comfortably under this, but a cold first load downloads 280 MB.
   timeoutMs: 120_000,
   available: async () => {
-    if (!guardrailsEnabled()) return "GUARDRAILS=off — the input rail is disabled in this environment";
+    if ((await guardConfig()).mode === "off") return "GUARDRAILS=off — the input rail is disabled in this environment";
     // Once the weights are in memory they stay there, so a successful probe is
     // remembered: the catalog endpoint is polled while a run is in flight, and
     // paying for an inference per poll would have this check competing for CPU

@@ -6,12 +6,11 @@
  * that in the HTTP handler, which is exactly how a rail quietly stops
  * covering half the traffic.
  *
- * Streaming: cliChat reports text via events.onText (Claude Code only —
- * the other CLIs answer in one shot). Each chunk is forwarded through
- * runManager.handleLLMNewToken, which is what LangGraph's "messages" stream
- * mode taps; runs that streamed tokens are deduped by LangGraph at
- * handleLLMEnd, and runs that didn't emit their final message once. Either
- * way the browser sees each token exactly once.
+ * Streaming: cliChat reports text via events.onText (Claude Code only; the
+ * other CLIs answer in one shot). _streamResponseChunks turns those callbacks
+ * into chunks, so the graph's invokeModel can run every token through the
+ * output rail as it arrives, the same way it does for Ollama. A CLI that
+ * does not stream yields its whole answer as one chunk at the end.
  *
  * Tool calls: none are bound here. Claude Code brings its own toolbox (this
  * server's MCP endpoint) and runs those calls inside the CLI process; their
@@ -24,8 +23,8 @@ import {
   type BaseChatModelCallOptions,
   type BaseChatModelParams,
 } from "@langchain/core/language_models/chat_models";
-import { AIMessage, type BaseMessage } from "@langchain/core/messages";
-import type { ChatResult } from "@langchain/core/outputs";
+import { AIMessage, AIMessageChunk, type BaseMessage } from "@langchain/core/messages";
+import { ChatGenerationChunk, type ChatResult } from "@langchain/core/outputs";
 import {
   buildCliPrompt,
   cliChat,
@@ -101,21 +100,22 @@ export class CliChatModel extends BaseChatModel<BaseChatModelCallOptions> {
     return `cli-${this.provider}`;
   }
 
-  async _generate(
+  /** The CLI turn, with its progress events pointed at the graph's writer. */
+  private run(
     messages: BaseMessage[],
-    options: this["ParsedCallOptions"],
-    runManager?: CallbackManagerForLLMRun,
-  ): Promise<ChatResult> {
+    signal: AbortSignal | undefined,
+    onText?: (chunk: string) => void,
+  ) {
     const { system, history, user } = splitTranscript(messages);
     if (!user) throw new Error("cli model: no user message in the transcript");
     const tools = cliSupportsTools(this.provider);
     const prompt = buildCliPrompt(system, history, user, { tools });
-    const { text: answer, usage } = await cliChat(this.provider, prompt, options.signal, {
+    return cliChat(this.provider, prompt, signal, {
       tools,
       model: this.model,
       effort: this.effort,
       events: {
-        onText: (chunk) => void runManager?.handleLLMNewToken(chunk),
+        onText,
         onThinking: () => this.frames?.({ type: "status", label: "Thinking…" }),
         onTool: (run) =>
           this.frames?.({
@@ -127,7 +127,77 @@ export class CliChatModel extends BaseChatModel<BaseChatModelCallOptions> {
           }),
       },
     });
+  }
+
+  async _generate(
+    messages: BaseMessage[],
+    options: this["ParsedCallOptions"],
+    runManager?: CallbackManagerForLLMRun,
+  ): Promise<ChatResult> {
+    const { text: answer, usage } = await this.run(messages, options.signal, (chunk) =>
+      void runManager?.handleLLMNewToken(chunk),
+    );
     if (usage) this.frames?.({ type: "usage", usage });
     return { generations: [{ text: answer, message: new AIMessage(answer) }] };
+  }
+
+  /**
+   * Chunks as the CLI produces them. The callback-to-generator bridge is a
+   * queue and a wake-up: text arrives on onText, the loop below drains it, and
+   * a CLI that never streams (Codex, Gemini, Copilot) yields its answer once
+   * when the call settles.
+   */
+  async *_streamResponseChunks(
+    messages: BaseMessage[],
+    options: this["ParsedCallOptions"],
+    runManager?: CallbackManagerForLLMRun,
+  ): AsyncGenerator<ChatGenerationChunk> {
+    const queue: string[] = [];
+    let settled = false;
+    let failure: unknown;
+    let result: Awaited<ReturnType<typeof cliChat>> | null = null;
+    let wake: (() => void) | null = null;
+    const notify = () => {
+      wake?.();
+      wake = null;
+    };
+    void this.run(messages, options.signal, (chunk) => {
+      queue.push(chunk);
+      notify();
+    }).then(
+      (r) => {
+        result = r;
+        settled = true;
+        notify();
+      },
+      (err) => {
+        failure = err;
+        settled = true;
+        notify();
+      },
+    );
+
+    let streamed = false;
+    const chunkOf = (text: string) =>
+      new ChatGenerationChunk({ text, message: new AIMessageChunk({ content: text }) });
+    for (;;) {
+      while (queue.length) {
+        const text = queue.shift()!;
+        streamed = true;
+        yield chunkOf(text);
+        await runManager?.handleLLMNewToken(text);
+      }
+      if (settled) break;
+      await new Promise<void>((resolve) => {
+        wake = resolve;
+      });
+    }
+    if (failure) throw failure;
+    const done = result as Awaited<ReturnType<typeof cliChat>> | null;
+    if (!streamed && done?.text) {
+      yield chunkOf(done.text);
+      await runManager?.handleLLMNewToken(done.text);
+    }
+    if (done?.usage) this.frames?.({ type: "usage", usage: done.usage });
   }
 }

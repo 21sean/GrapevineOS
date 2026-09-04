@@ -36,6 +36,9 @@ import type {
   User,
   UserPrefs,
 } from "./types.js";
+import { logger } from "./log.js";
+
+const log = logger("store");
 
 /** Stable dedupe key, enforced by a unique index on events.dedupe_key so
  * ingest dedupe is a DB guarantee. One-offs key on normalized title + the
@@ -262,6 +265,10 @@ function rowToIngest(r: Tables<"ingests">): IngestRecord {
   };
 }
 
+/** settings() cache: see the method for why five seconds is the number. */
+const SETTINGS_TTL_MS = 5_000;
+let settingsCache: { at: number; value: Settings } | null = null;
+
 export const store = {
   // ---------- events ----------
 
@@ -324,7 +331,7 @@ export const store = {
     // two rows at this point. Fold those together before the write.
     const { events: batch, collapsed } = collapseNearDuplicates(keyed);
     for (const c of collapsed) {
-      console.log(`[grapevine] dedupe: "${c.dropped}" folded into "${c.kept}"`);
+      log.info(`dedupe: "${c.dropped}" folded into "${c.kept}"`);
     }
     if (!batch.length) return [];
 
@@ -353,7 +360,7 @@ export const store = {
       // on write and updateEvent cannot keep the two in step.
       const patch = backfillPatch(twin, e);
       if (Object.keys(patch).length) await this.updateEvent(twin.id, patch);
-      console.log(`[grapevine] dedupe: "${e.title}" already stored as "${twin.title}"`);
+      log.info(`dedupe: "${e.title}" already stored as "${twin.title}"`);
     }
     if (!fresh.length) return [];
 
@@ -466,7 +473,19 @@ export const store = {
 
   // ---------- settings (singleton row) ----------
 
+  /**
+   * Cached for a few seconds. Every rail scan reads settings and one
+   * extraction call used to read them four times; a write drops the cache,
+   * and the TTL covers a write from another process.
+   */
   async settings(): Promise<Settings> {
+    if (settingsCache && Date.now() - settingsCache.at < SETTINGS_TTL_MS) return settingsCache.value;
+    const value = await this.settingsUncached();
+    settingsCache = { at: Date.now(), value };
+    return value;
+  },
+
+  async settingsUncached(): Promise<Settings> {
     const { data } = await db
       .from("app_settings")
       .select("*")
@@ -517,6 +536,7 @@ export const store = {
         guard_threshold: next.guardThreshold,
       })
       .throwOnError();
+    settingsCache = { at: Date.now(), value: next };
     return next;
   },
 

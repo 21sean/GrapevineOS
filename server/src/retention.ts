@@ -25,8 +25,12 @@
  */
 import { pruneChatCheckpoints } from "./checkpointer.js";
 import { db } from "./db.js";
+import { startLoop } from "./lifecycle.js";
 import { nextOccurrence } from "./recurrence.js";
 import { store } from "./store.js";
+import { logger } from "./log.js";
+
+const log = logger("retention");
 
 const SWEEP_INTERVAL_MS = 12 * 3_600_000;
 
@@ -83,8 +87,8 @@ export async function pruneEndedEvents(): Promise<number> {
   if (!stale.length) return 0;
 
   const removed = await store.deleteEvents(stale.map((e) => e.id));
-  console.log(
-    `[grapevine] retention: pruned ${removed} event${removed === 1 ? "" : "s"} ` +
+  log.info(
+    `retention: pruned ${removed} event${removed === 1 ? "" : "s"} ` +
       `(one-offs >${oneOffDays}d, series >${days}d ended; ` +
       `${stale.slice(0, 3).map((e) => e.id).join(", ")}${stale.length > 3 ? ", …" : ""})`,
   );
@@ -108,7 +112,7 @@ export async function pruneGuardrailScans(): Promise<number> {
   const cutoff = new Date(Date.now() - days * 86_400_000);
   const removed = await store.pruneGuardrailScans(cutoff);
   if (removed) {
-    console.log(`[grapevine] retention: pruned ${removed} guardrail scan${removed === 1 ? "" : "s"} older than ${days}d`);
+    log.info(`retention: pruned ${removed} guardrail scan${removed === 1 ? "" : "s"} older than ${days}d`);
   }
   return removed;
 }
@@ -129,7 +133,7 @@ export async function pruneOldCheckpoints(): Promise<number> {
   if (days === 0) return 0;
   const removed = await pruneChatCheckpoints(new Date(Date.now() - days * 86_400_000));
   if (removed) {
-    console.log(`[grapevine] retention: pruned ${removed} chat checkpoint${removed === 1 ? "" : "s"} older than ${days}d`);
+    log.info(`retention: pruned ${removed} chat checkpoint${removed === 1 ? "" : "s"} older than ${days}d`);
   }
   return removed;
 }
@@ -146,28 +150,32 @@ export function startRetentionSweep(): void {
   const events = retentionDays() > 0;
   const scans = guardrailRetentionDays() > 0;
   const checkpoints = checkpointRetentionDays() > 0;
-  if (!events) console.log("[grapevine] retention: events disabled (EVENT_RETENTION_DAYS=0)");
-  if (!scans) console.log("[grapevine] retention: guardrail scans disabled (GUARDRAIL_RETENTION_DAYS=0)");
-  if (!checkpoints) console.log("[grapevine] retention: chat checkpoints disabled (CHAT_CHECKPOINT_RETENTION_DAYS=0)");
-  if (!events && !scans && !checkpoints) return;
-
+  if (!events) log.info("retention: events disabled (EVENT_RETENTION_DAYS=0)");
+  if (!scans) log.info("retention: guardrail scans disabled (GUARDRAIL_RETENTION_DAYS=0)");
+  if (!checkpoints) log.info("retention: chat checkpoints disabled (CHAT_CHECKPOINT_RETENTION_DAYS=0)");
   const run = async () => {
     if (events) {
       await pruneEndedEvents().catch((err) =>
-        console.log(`[grapevine] retention error: ${String(err).slice(0, 200)}`),
+        log.info(`retention error: ${String(err).slice(0, 200)}`),
       );
     }
     if (scans) {
       await pruneGuardrailScans().catch((err) =>
-        console.log(`[grapevine] guardrail retention error: ${String(err).slice(0, 200)}`),
+        log.info(`guardrail retention error: ${String(err).slice(0, 200)}`),
       );
     }
     if (checkpoints) {
       await pruneOldCheckpoints().catch((err) =>
-        console.log(`[grapevine] checkpoint retention error: ${String(err).slice(0, 200)}`),
+        log.info(`checkpoint retention error: ${String(err).slice(0, 200)}`),
       );
     }
   };
-  void run();
-  setInterval(() => void run(), SWEEP_INTERVAL_MS);
+  startLoop({
+    name: "retention",
+    enabled: events || scans || checkpoints,
+    disabledReason: "every retention window is 0",
+    intervalMs: SWEEP_INTERVAL_MS,
+    immediate: true,
+    run,
+  });
 }

@@ -1,6 +1,16 @@
-import { LLM_RETRIES, LLM_RETRY_DELAY_MS, LLM_TIMEOUT_MS } from "./budget.js";
+import { llmPolicy } from "./budget.js";
 import { parseLooseJSON } from "./llm-json.js";
 import { store } from "./store.js";
+
+/**
+ * Ollama rejects the `think` flag on models without a thinking mode, and the
+ * rejection arrives before any token does. One test for that, shared by
+ * chatJSON below and the graph's ChatOllama pair, so both fall back the same
+ * way and neither can retry after output has started.
+ */
+export function thinkFlagRejected(err: unknown): boolean {
+  return /think/i.test(String((err as Error)?.message ?? err));
+}
 
 export async function ollamaBase(): Promise<string> {
   return (
@@ -105,18 +115,19 @@ export async function chatJSON(opts: {
     ],
   };
 
+  const policy = llmPolicy("ollama");
   const post = (body: unknown) =>
     fetch(`${base}/api/chat`, {
       method: "POST",
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
+      signal: AbortSignal.timeout(policy.timeoutMs),
     });
 
   const attempt = async (): Promise<any> => {
     let res = await post({ ...payload, think: false });
     if (!res.ok) {
       const errText = await res.text();
-      if (/think/i.test(errText)) res = await post(payload);
+      if (thinkFlagRejected(errText)) res = await post(payload);
       if (!res.ok) throw new Error(`ollama chat failed: ${errText.slice(0, 300)}`);
     }
     const body = (await res.json()) as any;
@@ -126,7 +137,7 @@ export async function chatJSON(opts: {
   };
 
   let lastErr: unknown;
-  for (let i = 0; i <= LLM_RETRIES; i++) {
+  for (let i = 0; i <= policy.retries; i++) {
     try {
       return await attempt();
     } catch (err) {
@@ -134,7 +145,7 @@ export async function chatJSON(opts: {
       // paging into VRAM looks exactly like this). A prompt the model refuses
       // to answer will fail identically every time, so the cap is low.
       lastErr = err;
-      if (i < LLM_RETRIES) await new Promise((r) => setTimeout(r, LLM_RETRY_DELAY_MS));
+      if (i < policy.retries) await new Promise((r) => setTimeout(r, policy.retryDelayMs));
     }
   }
   throw lastErr;

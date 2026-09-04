@@ -19,6 +19,9 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { EvalRun } from "../types.js";
+import { logger } from "../log.js";
+
+const log = logger("history");
 
 /** server/.evals/history.jsonl, resolved from this module, not from cwd. */
 const FILE = fileURLToPath(new URL("../../.evals/history.jsonl", import.meta.url));
@@ -31,7 +34,7 @@ let warned = false;
 function warnOnce(what: string, err: unknown): void {
   if (warned) return;
   warned = true;
-  console.warn(`[evals] ${what} — history disabled for this boot:`, String(err).slice(0, 200));
+  log.warn({ err: String(err).slice(0, 200) }, `${what}: history disabled for this boot`);
 }
 
 /** Newest first. Never throws: no history is a normal state, not an error. */

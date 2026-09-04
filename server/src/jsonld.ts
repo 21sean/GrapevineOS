@@ -278,10 +278,21 @@ export function extractJsonLdEvents(html: string, sourceUrl: string): JsonLdCand
   } catch {
     return [];
   }
-  const nodes: Record<string, unknown>[] = [];
+  const blocks: string[] = [];
   for (const block of dom.window.document.querySelectorAll('script[type="application/ld+json"]')) {
     const text = block.textContent?.trim();
-    if (!text) continue;
+    if (text) blocks.push(text);
+  }
+  return eventsFromJsonLdBlocks(blocks, sourceUrl);
+}
+
+/**
+ * The same harvest from block texts already pulled out of a page, so a caller
+ * that parsed the page once (discovery, via readPage) does not parse it again.
+ */
+export function eventsFromJsonLdBlocks(blocks: string[], sourceUrl: string): JsonLdCandidate[] {
+  const nodes: Record<string, unknown>[] = [];
+  for (const text of blocks) {
     try {
       collectEvents(JSON.parse(text), nodes);
     } catch {

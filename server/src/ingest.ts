@@ -6,6 +6,9 @@ import { geocode } from "./mapbox.js";
 import { normalizeRRule } from "./recurrence.js";
 import { store } from "./store.js";
 import { CATEGORIES, type Category, type CityEvent, type Rarity } from "./types.js";
+import { logger } from "./log.js";
+
+const log = logger("ingest");
 
 /** One rubric for the buzz fields, shared by extraction and re-rating so the
  * two prompts can't drift apart. */
@@ -118,8 +121,8 @@ export async function extractEvents(opts: {
   const budget = charsPerChunk(await activeProvider(opts.model));
   const { chunks, dropped } = chunkDocument(opts.text, budget);
   if (dropped > 0) {
-    console.log(
-      `[grapevine] extract: ${opts.source} exceeded the ${MAX_CHUNKS}-chunk budget — ` +
+    log.info(
+      `extract: ${opts.source} exceeded the ${MAX_CHUNKS}-chunk budget — ` +
         `${dropped} of ${opts.text.length} chars not read`,
     );
   }
@@ -134,8 +137,8 @@ export async function extractEvents(opts: {
       items.push(...(Array.isArray(raw) ? raw : (raw?.events ?? [])));
     } catch (err) {
       if (chunks.length === 1) throw err;
-      console.log(
-        `[grapevine] extract: ${opts.source} chunk ${i + 1}/${chunks.length} failed — ` +
+      log.info(
+        `extract: ${opts.source} chunk ${i + 1}/${chunks.length} failed — ` +
           `${String(err).slice(0, 160)}`,
       );
     }

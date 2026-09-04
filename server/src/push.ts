@@ -22,11 +22,15 @@ import webpush from "web-push";
 import { affinityTerms } from "../../shared/affinity.js";
 import { sessionUser } from "./auth.js";
 import { isMutedFor, mutedSets, stringList, weekPicks } from "./digest.js";
+import { startLoop } from "./lifecycle.js";
 import { eta } from "./mapbox.js";
 import { nextOccurrence } from "./recurrence.js";
 import { store } from "./store.js";
 import type { CityEvent, PushSub } from "./types.js";
 import { webOrigin } from "./urls.js";
+import { logger } from "./log.js";
+
+const log = logger("push");
 
 const REMINDER_WINDOW_MIN = 45; // "starts soon" lead time
 const TICK_MS = 60_000;
@@ -79,7 +83,7 @@ async function send(sub: PushSub, payload: PushPayload): Promise<void> {
     if (code === 404 || code === 410) {
       await store.deletePushEndpoint(sub.endpoint).catch(() => {});
     } else {
-      console.log(`[grapevine] push failed (${code ?? err}): ${String(err).slice(0, 120)}`);
+      log.info(`push failed (${code ?? err}): ${String(err).slice(0, 120)}`);
     }
   }
 }
@@ -417,19 +421,24 @@ async function tick(): Promise<void> {
       await digestTick(byUser, tz, city);
     }
   } catch (err) {
-    console.log(`[grapevine] push tick error: ${String(err).slice(0, 200)}`);
+    log.info(`push tick error: ${String(err).slice(0, 200)}`);
   } finally {
     running = false;
   }
 }
 
 export function startPushScheduler(): void {
-  if (/^(0|false|no)$/i.test(process.env.PUSH_SCHEDULER ?? "")) {
-    console.log("[grapevine] push scheduler disabled (PUSH_SCHEDULER=0)");
-    return;
+  const off = /^(0|false|no)$/i.test(process.env.PUSH_SCHEDULER ?? "");
+  if (!off) {
+    log.info(
+      `push scheduler on: leave-by alerts (drive + ${LEAVEBY_BUFFER_MIN}min buffer), reminders ${REMINDER_WINDOW_MIN}min before start, digest ${DIGEST_DOW} ${DIGEST_HOUR}:00`,
+    );
   }
-  setInterval(() => void tick(), TICK_MS);
-  console.log(
-    `[grapevine] push scheduler on — leave-by alerts (drive + ${LEAVEBY_BUFFER_MIN}min buffer), reminders ${REMINDER_WINDOW_MIN}min before start, digest ${DIGEST_DOW} ${DIGEST_HOUR}:00`,
-  );
+  startLoop({
+    name: "push",
+    enabled: !off,
+    disabledReason: "PUSH_SCHEDULER=0",
+    intervalMs: TICK_MS,
+    run: tick,
+  });
 }

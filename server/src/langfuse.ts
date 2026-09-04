@@ -19,7 +19,10 @@ import { CallbackHandler } from "@langfuse/langchain";
 import { LangfuseSpanProcessor } from "@langfuse/otel";
 import { defaultResource, resourceFromAttributes } from "@opentelemetry/resources";
 import { NodeSDK } from "@opentelemetry/sdk-node";
+import { logger } from "./log.js";
 import type { ConversationEval } from "./types.js";
+
+const log = logger("langfuse");
 
 export function langfuseEnabled(): boolean {
   return !!(process.env.LANGFUSE_PUBLIC_KEY && process.env.LANGFUSE_SECRET_KEY);
@@ -27,12 +30,44 @@ export function langfuseEnabled(): boolean {
 
 let sdk: NodeSDK | null = null;
 let client: LangfuseClient | null = null;
-let warned = false;
 
-function warnOnce(err: unknown): void {
-  if (warned) return;
-  warned = true;
-  console.warn(`[langfuse] disabled after error: ${String(err).slice(0, 200)}`);
+/** One warning per failing site, not one for the whole module: the first
+ * site to fail used to silence the other three. */
+const warnedSites = new Set<string>();
+
+function warnOnce(site: string, err: unknown): void {
+  if (warnedSites.has(site)) return;
+  warnedSites.add(site);
+  log.warn({ site, err: String(err).slice(0, 200) }, "langfuse: giving up on this site after an error");
+}
+
+/**
+ * Scores are batched: one flush a few seconds after the last score rather
+ * than one per rail decision, which under a burst was a POST per scan.
+ */
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleFlush(): void {
+  if (flushTimer) return;
+  flushTimer = setTimeout(() => {
+    flushTimer = null;
+    client?.flush().catch((err) => warnOnce("flush", err));
+  }, 5_000);
+  flushTimer.unref?.();
+}
+
+/** Flush what is queued and stop the exporter; the shutdown hook calls this. */
+export async function shutdownLangfuse(): Promise<void> {
+  if (flushTimer) {
+    clearTimeout(flushTimer);
+    flushTimer = null;
+  }
+  try {
+    await client?.flush();
+    await sdk?.shutdown();
+  } catch (err) {
+    warnOnce("shutdown", err);
+  }
 }
 
 /**
@@ -79,7 +114,7 @@ function start(): boolean {
     sdk.start();
     return true;
   } catch (err) {
-    warnOnce(err);
+    warnOnce("start", err);
     return false;
   }
 }
@@ -93,6 +128,8 @@ export function langfuseHandler(opts: {
   threadId: string;
   userId?: string;
   model: string;
+  /** The HTTP request id, so a trace and a support question share a handle. */
+  requestId?: string;
 }): CallbackHandler | null {
   if (!start()) return null;
   try {
@@ -100,10 +137,10 @@ export function langfuseHandler(opts: {
       sessionId: opts.threadId,
       userId: opts.userId,
       tags: ["ask-grapevine"],
-      traceMetadata: { model: opts.model },
+      traceMetadata: { model: opts.model, ...(opts.requestId && { request_id: opts.requestId }) },
     });
   } catch (err) {
-    warnOnce(err);
+    warnOnce("handler", err);
     return null;
   }
 }
@@ -136,10 +173,10 @@ export function recordRailScore(scan: {
         comment: `${scan.surface ?? "unknown"} · ${outcome}`,
       }),
     )
-      .then(() => client!.flush())
-      .catch(warnOnce);
+      .then(scheduleFlush)
+      .catch((err) => warnOnce("rail score", err));
   } catch (err) {
-    warnOnce(err);
+    warnOnce("rail score", err);
   }
 }
 
@@ -171,8 +208,8 @@ export async function recordConversationScores(ev: ConversationEval): Promise<vo
         }),
       ),
     ]);
-    await client.flush();
+    scheduleFlush();
   } catch (err) {
-    warnOnce(err);
+    warnOnce("conversation scores", err);
   }
 }

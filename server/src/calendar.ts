@@ -24,6 +24,9 @@ import { icsCalendar } from "./ics.js";
 import { store } from "./store.js";
 import type { CalendarStatus, User } from "./types.js";
 import { webOrigin } from "./urls.js";
+import { logger } from "./log.js";
+
+const log = logger("calendar");
 
 export const calendar = Router();
 
@@ -296,7 +299,7 @@ async function backfillGoogleCalendar(user: User): Promise<void> {
       const googleEventId = await insertGoogleEvent(user, event, tz);
       await store.upsertCalendarEntry(user.id, entry.eventId, { googleEventId });
     } catch (err) {
-      console.error(`[calendar] backfill ${entry.eventId}:`, String(err).slice(0, 160));
+      log.error({ err: String(err).slice(0, 160) }, `backfill ${entry.eventId} failed`);
     }
   }
 }

@@ -19,35 +19,28 @@ ollama.get("/api/ollama/health", requireAdmin, async (_req, res) => {
     const version = r.ok ? ((await r.json()) as { version?: string }).version : null;
     res.json({ ok: r.ok, url: base, version });
   } catch {
+    // Down is an answer here, not an error.
     res.json({ ok: false, url: base, version: null });
   }
 });
 
 ollama.get("/api/ollama/models", requireAdmin, async (_req, res) => {
-  try {
-    res.json(await listInstalled());
-  } catch (err) {
-    res.status(502).json({ error: String(err) });
-  }
+  res.json(await listInstalled());
 });
 
 /** Streams Ollama's NDJSON pull progress straight through to the client. */
 ollama.post("/api/ollama/pull", requireAdmin, async (req, res) => {
   const model = String(req.body?.model ?? "");
   if (!model) return res.status(400).json({ error: "model required" });
-  try {
-    const upstream = await fetch(`${await ollamaBase()}/api/pull`, {
-      method: "POST",
-      body: JSON.stringify({ model, stream: true }),
-    });
-    if (!upstream.ok || !upstream.body) {
-      return res.status(502).json({ error: await upstream.text() });
-    }
-    res.setHeader("Content-Type", "application/x-ndjson");
-    Readable.fromWeb(upstream.body as any).pipe(res);
-  } catch (err) {
-    res.status(502).json({ error: String(err) });
+  const upstream = await fetch(`${await ollamaBase()}/api/pull`, {
+    method: "POST",
+    body: JSON.stringify({ model, stream: true }),
+  });
+  if (!upstream.ok || !upstream.body) {
+    return res.status(502).json({ error: await upstream.text() });
   }
+  res.setHeader("Content-Type", "application/x-ndjson");
+  Readable.fromWeb(upstream.body as any).pipe(res);
 });
 
 // ---------- model catalog (models.dev) ----------

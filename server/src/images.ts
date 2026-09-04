@@ -14,6 +14,9 @@ import { PNG } from "pngjs";
 import { isBlockedUrl } from "./agent/websearch.js";
 import { store } from "./store.js";
 import type { CityEvent } from "./types.js";
+import { logger } from "./log.js";
+
+const log = logger("images");
 
 const PAGE_TIMEOUT_MS = 12_000;
 const IMAGE_TIMEOUT_MS = 12_000;
@@ -206,7 +209,7 @@ export async function enrichEventImages(events: CityEvent[]): Promise<number> {
     }
   });
   await Promise.all(workers);
-  if (enriched) console.log(`[grapevine] images: ${enriched}/${events.length} events got artwork`);
+  if (enriched) log.info(`images: ${enriched}/${events.length} events got artwork`);
   return enriched;
 }
 
@@ -236,7 +239,7 @@ export async function pruneGenericImages(): Promise<number> {
       cleared++;
     }
   }
-  if (cleared) console.log(`[grapevine] images: cleared ${cleared} shared/generic banners`);
+  if (cleared) log.info(`images: cleared ${cleared} shared/generic banners`);
   return cleared;
 }
 

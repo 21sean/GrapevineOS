@@ -12,12 +12,8 @@ import { apiOrigin } from "../urls.js";
 export const providers = Router();
 
 providers.get("/api/providers", requireAdmin, async (req, res) => {
-  try {
-    const force = req.query.refresh === "1";
-    res.json({ providers: await detectProviders(force) });
-  } catch (err) {
-    res.status(502).json({ error: String(err) });
-  }
+  const force = req.query.refresh === "1";
+  res.json({ providers: await detectProviders(force) });
 });
 
 providers.get("/api/mcp/info", requireAdmin, (_req, res) => {

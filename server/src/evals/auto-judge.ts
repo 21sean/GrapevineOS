@@ -15,10 +15,14 @@
  * assistant replies — each just leaves the thread for a later sweep.
  */
 import { recordConversationScores } from "../langfuse.js";
+import { startLoop } from "../lifecycle.js";
+import { logger } from "../log.js";
 import { store } from "../store.js";
 import { evaluateConversation } from "./conversation-judge.js";
 import { judgeUnavailable } from "./judge.js";
 import { runInProgress } from "./runner.js";
+
+const log = logger("auto-judge");
 
 function sweepMinutes(): number {
   const raw = Number(process.env.EVAL_SWEEP_MINUTES ?? 10);
@@ -71,21 +75,17 @@ export async function sweepOnce(): Promise<string> {
 
 export function startEvalSweep(): void {
   const minutes = sweepMinutes();
-  if (minutes === 0) {
-    console.log("[grapevine] eval sweep disabled (EVAL_SWEEP_MINUTES=0)");
-    return;
-  }
-  const tick = async () => {
-    try {
+  if (minutes > 0) log.info(`every ${minutes}m, judging threads idle ${idleMinutes()}m+`);
+  // No immediate pass: booting the server should never race the guardrail
+  // warmup and model load for the GPU.
+  startLoop({
+    name: "eval sweep",
+    enabled: minutes > 0,
+    disabledReason: "EVAL_SWEEP_MINUTES=0",
+    intervalMs: minutes * 60_000,
+    run: async () => {
       const outcome = await sweepOnce();
-      if (outcome.startsWith("judged")) console.log(`[grapevine] eval sweep: ${outcome}`);
-    } catch (err) {
-      console.log(`[grapevine] eval sweep error: ${String(err).slice(0, 200)}`);
-    }
-  };
-  // First pass waits one interval: booting the server should never race the
-  // guardrail warmup and model load for the GPU.
-  const timer = setInterval(() => void tick(), minutes * 60_000);
-  timer.unref?.();
-  console.log(`[grapevine] eval sweep: every ${minutes}m, judging threads idle ${idleMinutes()}m+`);
+      if (outcome.startsWith("judged")) log.info(outcome);
+    },
+  });
 }

@@ -176,10 +176,13 @@ export type ReadPageResult =
       byline?: string;
       text: string;
       truncated: boolean;
-      /** Raw HTML, only when the caller asks for it (see `withHtml`). Discovery
-       * needs it to harvest schema.org/Event markup, which Readability strips
-       * along with every other <script>. */
-      html?: string;
+      /** Only with `withMarkup`: the JSON-LD blocks the page carried and how
+       * big the HTML was. Discovery harvests schema.org/Event markup from the
+       * blocks (Readability strips every <script>), and the size tells a
+       * client-rendered page from a thin one. Taken from the same parse as the
+       * text, so the page is read once. */
+      jsonLd?: string[];
+      htmlChars?: number;
     }
   | { error: string };
 
@@ -227,9 +230,25 @@ export function isBlockedUrl(rawUrl: string): boolean {
   return blockedHost(url.hostname);
 }
 
+/**
+ * The text of every <script type="application/ld+json"> in a page, pulled
+ * with a scanner rather than a second DOM: the DOM below is Readability's,
+ * and Readability discards scripts as it parses.
+ */
+const LD_JSON_BLOCK = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+
+export function jsonLdBlocks(html: string): string[] {
+  const out: string[] = [];
+  for (const m of html.matchAll(LD_JSON_BLOCK)) {
+    const text = m[1].trim();
+    if (text) out.push(text);
+  }
+  return out;
+}
+
 export async function readPage(
   rawUrl: string,
-  opts: { signal?: AbortSignal; maxChars?: number; withHtml?: boolean } = {},
+  opts: { signal?: AbortSignal; maxChars?: number; withMarkup?: boolean } = {},
 ): Promise<ReadPageResult> {
   const maxChars = Math.min(opts.maxChars ?? MAX_PAGE_CHARS, 16_000);
   let url: URL;
@@ -277,14 +296,19 @@ export async function readPage(
     // A JS-rendered page can have no readable prose and still carry a full
     // event calendar in its JSON-LD, so an empty distillation is only fatal
     // when the caller has no use for the markup either.
-    if (!raw && !opts.withHtml) return { error: "no readable text on page" };
+    if (!raw && !opts.withMarkup) return { error: "no readable text on page" };
+    // Readability mutates the document it parses, but <script> blocks are
+    // what it removes, so read the JSON-LD off a fresh query of the same DOM
+    // built from `html` before parse: the block texts survive in `dom` only
+    // when harvested first. Harvest them here from the original markup.
+    const jsonLd = opts.withMarkup ? jsonLdBlocks(html) : undefined;
     return {
       url: res.url,
       title: article?.title || dom.window.document.title || url.hostname,
       ...(article?.byline ? { byline: article.byline } : {}),
       text: raw.slice(0, maxChars),
       truncated: raw.length > maxChars,
-      ...(opts.withHtml && { html }),
+      ...(jsonLd && { jsonLd, htmlChars: html.length }),
     };
   } catch (err) {
     return { error: `parse failed: ${String((err as Error)?.message ?? err).slice(0, 120)}` };

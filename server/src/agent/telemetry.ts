@@ -30,6 +30,9 @@ import { db } from "../db.js";
 import type { TablesInsert } from "../db-types.js";
 import { recordRailScore } from "../langfuse.js";
 import type { GuardrailRail, GuardrailSurface } from "../types.js";
+import { logger } from "../log.js";
+
+const log = logger("telemetry");
 
 /** Enough of the text to judge a decision by; a page is far longer than this. */
 const MAX_TEXT_CHARS = 8_000;
@@ -153,7 +156,7 @@ export async function flush(): Promise<void> {
         const message = String(err).slice(0, 200);
         if (lastError !== message) {
           lastError = message;
-          console.warn(`[guardrails] telemetry write failed, rows dropped: ${message}`);
+          log.warn(`telemetry write failed, rows dropped: ${message}`);
         }
         // A failing database will fail for the rest of the queue too; stop
         // here and let the next tick retry rather than burning the backlog.

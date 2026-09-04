@@ -1,6 +1,7 @@
 /**
  * The event catalog as the browser reads it, plus the per-user reactions
  * that teach the ranking. Re-rating is admin-only: it spends a model call.
+ * Failures fall through to the error handler in request-id.ts.
  */
 import { Router } from "express";
 import { requireAdmin, sessionUser } from "../auth.js";
@@ -11,27 +12,19 @@ import { REACTIONS, type Reaction } from "../types.js";
 export const events = Router();
 
 events.get("/api/events", async (_req, res) => {
-  try {
-    res.json(await store.events());
-  } catch (err) {
-    res.status(502).json({ error: String(err) });
-  }
+  res.json(await store.events());
 });
 
 events.post("/api/events/:id/rate", requireAdmin, async (req, res) => {
   const event = await store.eventById(String(req.params.id));
   if (!event) return res.status(404).json({ error: "unknown event" });
-  try {
-    const r = await rateEvent(event);
-    const updated = await store.updateEvent(event.id, {
-      rating: r.rating,
-      ratingRationale: r.rationale,
-      promoted: r.promoted,
-    });
-    res.json(updated);
-  } catch (err) {
-    res.status(502).json({ error: String(err) });
-  }
+  const r = await rateEvent(event);
+  const updated = await store.updateEvent(event.id, {
+    rating: r.rating,
+    ratingRationale: r.rationale,
+    promoted: r.promoted,
+  });
+  res.json(updated);
 });
 
 // ---------- reactions (per-user feedback loop) ----------
@@ -39,11 +32,7 @@ events.post("/api/events/:id/rate", requireAdmin, async (req, res) => {
 events.get("/api/reactions", async (req, res) => {
   const user = await sessionUser(req);
   if (!user) return res.status(401).json({ error: "not signed in" });
-  try {
-    res.json({ reactions: await store.userReactions(user.id) });
-  } catch (err) {
-    res.status(502).json({ error: String(err) });
-  }
+  res.json({ reactions: await store.userReactions(user.id) });
 });
 
 /** Set or clear (reaction: null) the caller's reaction to an event. */
@@ -58,10 +47,6 @@ events.put("/api/events/:id/reaction", async (req, res) => {
   }
   const event = await store.eventById(String(req.params.id));
   if (!event) return res.status(404).json({ error: "unknown event" });
-  try {
-    await store.setReaction(user.id, event.id, reaction as Reaction | null);
-    res.json({ ok: true, eventId: event.id, reaction });
-  } catch (err) {
-    res.status(502).json({ error: String(err) });
-  }
+  await store.setReaction(user.id, event.id, reaction as Reaction | null);
+  res.json({ ok: true, eventId: event.id, reaction });
 });

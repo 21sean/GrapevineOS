@@ -2,7 +2,7 @@
  * The Mapbox calls the browser needs (the secret token stays here), each
  * rate-limited per address because each spends quota: directions and
  * isochrones are metered, and the Places preview allows 1,000 records a
- * month.
+ * month. Failures fall through to the error handler.
  */
 import { Router } from "express";
 import { eta, isochrone } from "../mapbox.js";
@@ -28,11 +28,7 @@ mapbox.get("/api/eta", etaLimit, async (req, res) => {
   const from = parsePair(req.query.from) ?? (await store.settings()).center;
   const to = parsePair(req.query.to);
   if (!to) return res.status(400).json({ error: "to=lng,lat required" });
-  try {
-    res.json((await eta(from, to)) ?? { minutes: null, km: null });
-  } catch (err) {
-    res.status(502).json({ error: String(err) });
-  }
+  res.json((await eta(from, to)) ?? { minutes: null, km: null });
 });
 
 /**
@@ -46,11 +42,7 @@ mapbox.get("/api/isochrone", isochroneLimit, async (req, res) => {
   if (!Number.isFinite(minutes) || minutes < 1 || minutes > 60) {
     return res.status(400).json({ error: "minutes must be 1-60" });
   }
-  try {
-    res.json((await isochrone(center, minutes)) ?? { polygons: [] });
-  } catch (err) {
-    res.status(502).json({ error: String(err).slice(0, 200) });
-  }
+  res.json((await isochrone(center, minutes)) ?? { polygons: [] });
 });
 
 /**
@@ -73,6 +65,6 @@ mapbox.get("/api/events/:id/venue", venueLimit, async (req, res) => {
     if (err instanceof PlacesScopeError || err instanceof PlacesQuotaError) {
       return res.status(200).json({ venue: null, unavailable: String(err.message) });
     }
-    res.status(502).json({ error: String(err).slice(0, 200) });
+    throw err;
   }
 });

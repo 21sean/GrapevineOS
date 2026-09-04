@@ -37,6 +37,9 @@ import {
 import type { RunnableConfig } from "@langchain/core/runnables";
 import { db } from "./db.js";
 import type { Tables } from "./db-types.js";
+import { logger } from "./log.js";
+
+const log = logger("checkpointer");
 
 /** Newest checkpoints kept per thread; older supersteps are history nobody replays. */
 const KEEP_PER_THREAD = 12;
@@ -48,8 +51,8 @@ let warned = false;
 function warnOnce(op: string, err: unknown): void {
   if (warned) return;
   warned = true;
-  console.warn(
-    `[checkpointer] ${op} failed — chat memory degrades to per-process until the database answers: ${String(err).slice(0, 200)}`,
+  log.warn(
+    `${op} failed — chat memory degrades to per-process until the database answers: ${String(err).slice(0, 200)}`,
   );
 }
 

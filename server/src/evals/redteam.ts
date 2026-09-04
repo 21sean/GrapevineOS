@@ -32,7 +32,6 @@ import { createServer, type Server } from "node:http";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { AIMessage, HumanMessage, isAIMessage, type BaseMessage } from "@langchain/core/messages";
-import { inputRefusalMessage, personaGuard, personaRefusalMessage } from "../agent/guardrails.js";
 import { buildAgentGraph, turnInput } from "../agent/graph.js";
 import { ollamaBase } from "../ollama.js";
 import { FIXTURE_SETTINGS, fixtureCtx } from "./fixtures.js";
@@ -147,7 +146,6 @@ export interface BridgeOptions {
  */
 export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
   const city = FIXTURE_SETTINGS.city;
-  const refusal = inputRefusalMessage(city);
 
   const state = { blockedTurns: 0, personaTrips: 0 };
 
@@ -180,25 +178,16 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
 
     const messages = (result.messages ?? []) as BaseMessage[];
     const last = [...messages].reverse().find((m) => isAIMessage(m));
-    let reply = typeof last?.content === "string" ? last.content : "";
+    const reply = typeof last?.content === "string" ? last.content : "";
 
-    // The input rail writes this exact string and nothing else does, so it is
-    // a reliable marker for "refused before the model ran".
-    const blocked = reply === refusal;
+    // All three rails run inside the graph, so the run reports its own
+    // verdicts and the reply above is exactly what a person would have read.
+    const blocked = result.inputBlocked === true;
     if (blocked) state.blockedTurns++;
+    const personaTripped = result.outputTripped === true;
+    if (personaTripped) state.personaTrips++;
 
-    // The persona rail is applied by the HTTP layer over the token stream, not
-    // by the graph, so the bridge has to apply it to show what a user read.
-    const guard = personaGuard({ modelName: opts.model, telemetry: { record: false } });
-    const shown = guard.push(reply) + guard.flush();
-    if (guard.tripped) {
-      state.personaTrips++;
-      reply = personaRefusalMessage(city);
-    } else {
-      reply = shown;
-    }
-
-    return { reply, blocked, personaTripped: guard.tripped };
+    return { reply, blocked, personaTripped };
   }
 
   const server: Server = createServer((req, res) => {

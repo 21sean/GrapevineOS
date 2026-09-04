@@ -43,6 +43,7 @@
 import type http from "node:http";
 import { FastMCP, UserError } from "fastmcp";
 import { INTERNAL_MCP_KEY, ISSUER, userFromClaims, verifySupabaseToken } from "./auth.js";
+import { logger } from "./log.js";
 import {
   applyInterests,
   anyLngLat,
@@ -63,8 +64,16 @@ import { safeEqual } from "./secrets.js";
 import { store } from "./store.js";
 import type { User } from "./types.js";
 import { apiOrigin } from "./urls.js";
+import { VERSION } from "./version.js";
 
-export const SERVER_INFO = { name: "grapevine", version: "0.1.0" } as const;
+/** Same version /version reports; the MCP handshake used to say 0.1.0 forever. */
+export const SERVER_INFO = {
+  name: VERSION.name,
+  // FastMCP types the version as a semver template; package.json's is one.
+  version: VERSION.version as `${number}.${number}.${number}`,
+} as const;
+
+const log = logger("mcp");
 
 /** What `authenticate` hands to every tool call. */
 interface McpAuth extends Record<string, unknown> {
@@ -306,7 +315,7 @@ async function authorizationServerConfig() {
     const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
     if (r.ok) doc = (await r.json()) as RawAsDoc;
   } catch (err) {
-    console.warn(`[mcp] authorization server metadata unavailable: ${String(err).slice(0, 120)}`);
+    log.warn({ err: String(err).slice(0, 120) }, "authorization server metadata unavailable");
   }
   return {
     issuer: doc.issuer ?? ISSUER,
@@ -405,7 +414,12 @@ export async function startMcpServer(): Promise<void> {
       },
     },
   });
-  console.log(
-    `[grapevine] mcp (fastmcp) on ${apiOrigin()}${MCP_ENDPOINT} — auth: ${mcpAuthMode()}`,
-  );
+  log.info(`mcp (fastmcp) on ${apiOrigin()}${MCP_ENDPOINT}, auth: ${mcpAuthMode()}`);
+}
+
+/** Close the loopback listener; the shutdown hook calls this. */
+export async function stopMcpServer(): Promise<void> {
+  const running = server;
+  server = null;
+  await running?.stop();
 }

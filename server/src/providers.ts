@@ -22,6 +22,7 @@ import os from "node:os";
 import path from "node:path";
 import { cliToolsNote, toolLabel } from "./agent/contracts.js";
 import { INTERNAL_MCP_KEY } from "./auth.js";
+import { llmPolicy } from "./budget.js";
 import { parseLooseJSON } from "./llm-json.js";
 import {
   isChatEffort,
@@ -279,7 +280,8 @@ export function providerInfo(id: CliProviderId): CliProviderInfo {
 // Chat — one prompt in, one answer out, per provider
 // ---------------------------------------------------------------------------
 
-const CLI_TIMEOUT_MS = 110_000; // under the route's 120s deadline
+/** From the one LLM policy (budget.ts); under the chat route's 120s deadline. */
+const CLI_TIMEOUT_MS = llmPolicy("claude").timeoutMs;
 
 /** CLIs we can point at Grapevine's own MCP endpoint per-invocation. */
 export function cliSupportsTools(id: CliProviderId): boolean {

@@ -2,7 +2,8 @@
  * Ingestion over HTTP: pasted newsletters (preview, then commit), the ingest
  * history, the image backfill, and the kick the email worker sends after it
  * inserts a raw email. Everything but the kick is admin-only; the kick is
- * guarded by the shared ingest key.
+ * guarded by the shared ingest key. Failures fall through to the error
+ * handler.
  */
 import { Router } from "express";
 import { requireAdmin } from "../auth.js";
@@ -18,20 +19,12 @@ export const ingest = Router();
 
 /** Clear shared/generic banners, then scrape og:images for events without art. */
 ingest.post("/api/ingest/backfill-images", requireAdmin, async (_req, res) => {
-  try {
-    res.json(await backfillImages());
-  } catch (err) {
-    res.status(502).json({ error: String(err) });
-  }
+  res.json(await backfillImages());
 });
 
 /** Newest-first log of every email/paste that went through the pipeline. */
 ingest.get("/api/ingest/history", requireAdmin, async (_req, res) => {
-  try {
-    res.json(await store.ingests());
-  } catch (err) {
-    res.status(502).json({ error: String(err) });
-  }
+  res.json(await store.ingests());
 });
 
 /** Extract events from pasted/forwarded email text. dryRun previews only. */
@@ -39,16 +32,12 @@ ingest.post("/api/ingest/email", requireAdmin, async (req, res) => {
   const { text, source = "manual" } = req.body ?? {};
   const dry = req.body?.dryRun === true || req.body?.dry_run === true;
   if (!text) return res.status(400).json({ error: "text required" });
-  try {
-    // Pasted text is a manual entry: the stored events and the ingest log
-    // agree on provenance (both "manual").
-    const events = await extractEvents({ text, source, sourceKind: "manual" });
-    if (dry) return res.json({ events, added: 0 });
-    const { added } = await commitIngest({ events, source, kind: "manual" });
-    res.json({ events, added: added.length });
-  } catch (err) {
-    res.status(502).json({ error: String(err) });
-  }
+  // Pasted text is a manual entry: the stored events and the ingest log
+  // agree on provenance (both "manual").
+  const events = await extractEvents({ text, source, sourceKind: "manual" });
+  if (dry) return res.json({ events, added: 0 });
+  const { added } = await commitIngest({ events, source, kind: "manual" });
+  res.json({ events, added: added.length });
 });
 
 /** Commit previously previewed events (email pastes and discovery dry runs). */
@@ -57,16 +46,12 @@ ingest.post("/api/ingest/commit", requireAdmin, async (req, res) => {
   if (!Array.isArray(events) || !events.length) {
     return res.status(400).json({ error: "events[] required" });
   }
-  try {
-    const { added } = await commitIngest({
-      events,
-      source: events[0]?.source ?? "manual",
-      kind: events[0]?.sourceKind === "search" ? "search" : "manual",
-    });
-    res.json({ added: added.length });
-  } catch (err) {
-    res.status(502).json({ error: String(err) });
-  }
+  const { added } = await commitIngest({
+    events,
+    source: events[0]?.source ?? "manual",
+    kind: events[0]?.sourceKind === "search" ? "search" : "manual",
+  });
+  res.json({ added: added.length });
 });
 
 /**

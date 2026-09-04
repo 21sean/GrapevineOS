@@ -31,12 +31,17 @@
  * records the error, so the next kick (or the next inbound email) retries it
  * and the admin inbox can show what's stuck — same retry semantics as before.
  */
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { MAX_ATTEMPTS } from "./budget.js";
 import { db } from "./db.js";
+import { startLoop } from "./lifecycle.js";
 import type { Tables } from "./db-types.js";
 import type { InboxEmail } from "./types.js";
 import { extractEvents } from "./ingest.js";
 import { commitIngest } from "./pipeline.js";
+import { logger } from "./log.js";
+
+const log = logger("inbox");
 
 /** Rows drained per query; a full batch re-runs so one kick clears a backlog. */
 const BATCH = 20;
@@ -127,8 +132,8 @@ async function selectPending(): Promise<RawEmail[]> {
     hasAttempts = false;
     if (!warnedNoAttempts) {
       warnedNoAttempts = true;
-      console.log(
-        "[grapevine] inbox: raw_emails.attempts is missing, so failed emails retry without a " +
+      log.info(
+        "inbox: raw_emails.attempts is missing, so failed emails retry without a " +
           "budget. Apply supabase/migrations/20260731170000_raw_emails_attempts.sql.",
       );
     }
@@ -151,8 +156,8 @@ async function tick(): Promise<void> {
       const pending = await selectPending();
       if (pending.length && subscribed && realtimeDeliveries === 0 && !warnedRealtimeSilent) {
         warnedRealtimeSilent = true;
-        console.log(
-          "[grapevine] inbox: found unprocessed mail that realtime never announced — " +
+        log.info(
+          "inbox: found unprocessed mail that realtime never announced — " +
             "the subscription is open but silent. Apply " +
             "supabase/migrations/20260731191301_raw_emails_realtime.sql " +
             "(raw_emails must be in the supabase_realtime publication).",
@@ -163,16 +168,16 @@ async function tick(): Promise<void> {
         try {
           const r = await processEmail(row);
           processed++;
-          console.log(
-            `[grapevine] inbox: ${row.source} “${row.subject || "(no subject)"}” → ` +
+          log.info(
+            `inbox: ${row.source} “${row.subject || "(no subject)"}” → ` +
               `${r.extracted} extracted, ${r.added} new`,
           );
         } catch (err) {
           const message = String(err).slice(0, 300);
           const attempts = (row.attempts ?? 0) + 1;
           const exhausted = hasAttempts && attempts >= MAX_ATTEMPTS;
-          console.log(
-            `[grapevine] inbox: ${row.email_key} failed` +
+          log.info(
+            `inbox: ${row.email_key} failed` +
               (hasAttempts
                 ? ` (attempt ${attempts}/${MAX_ATTEMPTS}` +
                   `${exhausted ? ", giving up — reprocess by hand to retry" : ""})`
@@ -192,7 +197,7 @@ async function tick(): Promise<void> {
       if (pending.length === BATCH && processed > 0) rerun = true;
     } while (rerun);
   } catch (err) {
-    console.log(`[grapevine] inbox error: ${String(err).slice(0, 200)}`);
+    log.info(`inbox error: ${String(err).slice(0, 200)}`);
   } finally {
     running = false;
   }
@@ -268,8 +273,17 @@ export async function reprocessInbox(key: string): Promise<{
  * email. That is also why a failed subscription is only a warning: the boot
  * pass plus INBOX_POLL_SECONDS still drain the queue.
  */
+let channel: RealtimeChannel | null = null;
+
+/** Unsubscribe the realtime channel; the shutdown hook calls this. */
+export async function stopInbox(): Promise<void> {
+  const open = channel;
+  channel = null;
+  await open?.unsubscribe();
+}
+
 function startRealtime(): void {
-  db.channel("raw_emails_inserts")
+  channel = db.channel("raw_emails_inserts")
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "raw_emails" }, () => {
       realtimeDeliveries++;
       kickInbox();
@@ -277,11 +291,11 @@ function startRealtime(): void {
     .subscribe((status) => {
       if (status === "SUBSCRIBED") {
         subscribed = true;
-        console.log("[grapevine] inbox: realtime subscribed");
+        log.info("inbox: realtime subscribed");
       } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
         subscribed = false;
-        console.log(
-          `[grapevine] inbox: realtime unavailable (${status}) — ` +
+        log.info(
+          `inbox: realtime unavailable (${status}) — ` +
             "falling back to the boot pass + INBOX_POLL_SECONDS.",
         );
       }
@@ -297,13 +311,15 @@ function startRealtime(): void {
 export function startInboxPoll(): void {
   void tick();
   startRealtime();
-  const intervalMs = pollIntervalMs();
-  if (!intervalMs) {
-    console.log("[grapevine] inbox: no interval polling (set INBOX_POLL_SECONDS for a safety net)");
-    return;
-  }
-  console.log(`[grapevine] inbox: also polling raw_emails every ${intervalMs / 1000}s (safety net)`);
-  setInterval(() => void tick(), intervalMs);
+  const intervalMs = pollIntervalMs() ?? 0;
+  if (intervalMs) log.info(`also polling raw_emails every ${intervalMs / 1000}s (safety net)`);
+  startLoop({
+    name: "inbox poll",
+    enabled: intervalMs > 0,
+    disabledReason: "set INBOX_POLL_SECONDS for a safety net",
+    intervalMs,
+    run: tick,
+  });
 }
 
 /**
