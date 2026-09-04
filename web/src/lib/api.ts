@@ -2,7 +2,7 @@ import { accessToken } from "./supabase"
 import type {
   AgentFrame,
   CalendarStatus,
-  ChatMessageRec,
+  ChatMessage,
   ChatThreadMeta,
   CityEvent,
   CliProviderStatus,
@@ -195,12 +195,6 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ endpoint }),
     }).then((r) => json<{ ok: boolean }>(r)),
-
-  /** Scrape og:images for catalog events that never got artwork. */
-  backfillImages: () =>
-    fetch("/api/ingest/backfill-images", { method: "POST" }).then((r) =>
-      json<{ scanned: number; enriched: number }>(r),
-    ),
 
   ollamaHealth: () =>
     fetch("/api/ollama/health").then((r) =>
@@ -410,7 +404,7 @@ export const api = {
 
   chatThread: (id: string) =>
     fetch(`/api/chat/threads/${encodeURIComponent(id)}`).then((r) =>
-      json<{ id: string; messages: ChatMessageRec[] }>(r),
+      json<{ id: string; messages: ChatMessage[] }>(r),
     ),
 
   chatThreadDelete: (id: string) =>
@@ -466,7 +460,8 @@ export const api = {
     fetch("/api/discovery/searches", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, cadenceHours }),
+      // cadence_hours is the contract's spelling (server/src/agent/contracts.ts)
+      body: JSON.stringify({ query, cadence_hours: cadenceHours }),
     }).then((r) => json<DiscoverySearch>(r)),
 
   patchDiscoverySearch: (
@@ -476,7 +471,10 @@ export const api = {
     fetch(`/api/discovery/searches/${encodeURIComponent(id)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
+      body: JSON.stringify({
+        ...(patch.active !== undefined && { active: patch.active }),
+        ...(patch.cadenceHours !== undefined && { cadence_hours: patch.cadenceHours }),
+      }),
     }).then((r) => json<DiscoverySearch>(r)),
 
   deleteDiscoverySearch: (id: string) =>

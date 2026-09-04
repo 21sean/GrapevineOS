@@ -114,10 +114,11 @@ import { SupabaseSaver } from "../checkpointer.js";
 import type { ChatEffort, CliProviderId } from "../types.js";
 import { CliChatModel } from "./cli-model.js";
 import { buildSystemPrompt, type AgentCtx, type ChatContext } from "./context.js";
+import { toolDetail, toolLabel } from "./contracts.js";
 import { inputRefusalMessage, scanText, type ScanOptions } from "./guardrails.js";
-import { makeTools, toolDetail, toolLabel } from "./tools.js";
+import { emit, makeTools } from "./tools.js";
 
-export const MAX_TOOL_ROUNDS = 6;
+const MAX_TOOL_ROUNDS = 6;
 
 /** A stalled generation fails here; a healthy stream refreshes the timer per token. */
 const MODEL_IDLE_TIMEOUT_MS = 45_000;
@@ -353,7 +354,7 @@ export function buildAgentGraph(deps: GraphDeps) {
     withTools: boolean,
   ) {
     if (cli) {
-      cli.frames = (frame) => config.writer?.(frame);
+      cli.frames = (frame) => emit(config, frame);
       return await cli.invoke(messages, config);
     }
     const [primary, fallback] = withTools ? [agentLlm, agentLlmNoFlag] : [llm, llmNoFlag];
@@ -407,20 +408,20 @@ export function buildAgentGraph(deps: GraphDeps) {
     // persisted transcript; `notice` is the sentence a person reads. The
     // dispatchCustomEvent above reaches LangSmith but NOT this stream, so it
     // cannot stand in for either.
-    config.writer?.({
+    emit(config, {
       type: "guardrail",
       rail: "input",
       blocked: true,
       score: Number(verdict.score.toFixed(4)),
       threshold: verdict.threshold,
     });
-    config.writer?.({
+    emit(config, {
       type: "notice",
       code: "guardrails",
       message: `Blocked by the local safety classifier (score ${verdict.score.toFixed(2)}, threshold ${verdict.threshold.toFixed(2)}).`,
     });
     const refusal = inputRefusalMessage(city);
-    config.writer?.({ type: "delta", text: refusal });
+    emit(config, { type: "delta", text: refusal });
     // The refusal is the assistant's turn as far as the transcript is
     // concerned; the message that provoked it is deliberately not recorded.
     return new Command({ goto: END, update: { messages: [new AIMessage(refusal)] } });
@@ -504,7 +505,7 @@ export function buildAgentGraph(deps: GraphDeps) {
     const results: ToolMessage[] = [];
     for (const call of calls) {
       const label = toolLabel(call.name, call.args);
-      config.writer?.({ type: "tool", name: call.name, label, state: "start" });
+      emit(config, { type: "tool", name: call.name, label, state: "start" });
       let message: ToolMessage;
       const t = toolsByName.get(call.name);
       if (!t) {
@@ -527,7 +528,7 @@ export function buildAgentGraph(deps: GraphDeps) {
         }
       }
       const detail = toolDetail(call.name, message.content);
-      config.writer?.({
+      emit(config, {
         type: "tool",
         name: call.name,
         label,
@@ -600,7 +601,7 @@ export function buildAgentGraph(deps: GraphDeps) {
     }
 
     if (dropped) {
-      config.writer?.({
+      emit(config, {
         type: "notice",
         code: "guardrails",
         message:

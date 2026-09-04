@@ -32,7 +32,7 @@ import {
   cliSupportsTools,
   type CliProviderId,
 } from "../providers.js";
-import type { ChatEffort } from "../types.js";
+import type { AgentFrame, ChatEffort } from "../types.js";
 
 export interface CliChatModelFields extends BaseChatModelParams {
   provider: CliProviderId;
@@ -88,7 +88,7 @@ export class CliChatModel extends BaseChatModel<BaseChatModelCallOptions> {
    * current run's custom-stream writer before each invoke — the model object
    * lives for one HTTP request, same as the graph it's bound into.
    */
-  frames: ((frame: Record<string, unknown>) => void) | null = null;
+  frames: ((frame: AgentFrame) => void) | null = null;
 
   constructor(fields: CliChatModelFields) {
     super(fields);

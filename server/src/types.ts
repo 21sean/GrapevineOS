@@ -1,10 +1,10 @@
 /**
  * Server types. The domain shapes the web client also consumes live in
  * shared/types.ts (one definition, re-exported here); this file adds the
- * server-only shapes — auth, push, calendar grants — that never cross the
- * wire to the browser as-is.
+ * server-only shapes (auth, push, calendar grants) that never cross the wire
+ * to the browser as-is.
  */
-import type { Reaction } from "../../shared/types.js";
+import type { Reaction, User as PublicUser } from "../../shared/types.js";
 
 export * from "../../shared/types.js";
 
@@ -28,16 +28,6 @@ export interface PushSub {
   rareFinds: boolean;
 }
 
-/** Per-account copies of the browser preferences, synced when signed in. */
-export interface UserPrefs {
-  filters?: unknown;
-  interests?: unknown;
-  pinnedIds?: unknown;
-  hiddenIds?: unknown;
-  mutedVenues?: unknown;
-  mutedSources?: unknown;
-}
-
 /**
  * Google Calendar connection metadata. The refresh token itself lives in
  * Supabase Vault (encrypted at rest) and is only read through the
@@ -59,17 +49,11 @@ export interface CalendarEntry {
   addedAt: string; // ISO 8601
 }
 
-export interface User {
-  id: string; // auth.users.id — Supabase Auth is the identity source
-  email: string;
-  name: string;
-  picture: string;
-  createdAt: string;
-  lastLoginAt: string;
-  prefs?: UserPrefs;
+/** The public user shape, plus what only the server may see. */
+export interface User extends PublicUser {
   googleCalendar?: GoogleCalendarGrant; // present once Google Calendar is connected
   feedToken?: string; // unguessable path segment for the personal ICS feed
-  /** Last coarse position (~110 m grid) the browser reported — the origin for
+  /** Last coarse position (~110 m grid) the browser reported: the origin for
    * leave-by ETAs. Absent until the user grants geolocation while signed in. */
   lastPos?: { lng: number; lat: number; at: string };
 }

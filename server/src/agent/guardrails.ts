@@ -460,10 +460,7 @@ export function personaGuard(opts: PersonaGuardOptions = {}): StreamGuard {
 // Canned in-character replies
 // ---------------------------------------------------------------------------
 
-export function inputRefusalMessage(city: string): string {
-  return `I'll pass on that one — it reads like an attempt to rewire me rather than a question about ${city}. Ask me about tonight, the weekend, or a vibe and I'm all yours.`;
-}
-
-export function personaRefusalMessage(city: string): string {
-  return `I'm Grapevine, ${city}'s events concierge — how I'm built stays behind the bar. What are you in the mood for: live music, food, something free tonight?`;
-}
+// The canned replies live in refusals.ts (import-free) so scripts can take
+// the words without loading the classifier; re-exported here for the callers
+// that think of them as part of the rails.
+export { inputRefusalMessage, personaRefusalMessage } from "./refusals.js";

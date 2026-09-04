@@ -74,7 +74,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { LangfuseClient } from "@langfuse/client";
-import { BENIGN, INDIRECT, INJECTIONS, LEAKS } from "../../src/evals/suites/guardrails.js";
+import { BENIGN, INDIRECT, INJECTIONS, LEAKS } from "../../src/evals/guardrail-fixtures.js";
 import { CLEAN_REPLIES, SUBTLE_LEAKS } from "../../src/evals/suites/guardrails-judge.js";
 
 const lf = new LangfuseClient();

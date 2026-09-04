@@ -45,6 +45,7 @@
  *   npx tsx scripts/langfuse/simulate-traffic.ts --turns 40 --from 2026-08-25 --prefix probe
  *   npx tsx scripts/langfuse/simulate-traffic.ts --reset
  */
+import { verdictOf } from "../../src/evals/judge-rubric.js";
 import "dotenv/config";
 import { startObservation } from "@langfuse/tracing";
 import type { SpanContext } from "@opentelemetry/api";
@@ -881,10 +882,6 @@ const JUDGE_COMMENTS = {
   ],
 } as const;
 
-function verdictOf(overall: number): string {
-  return overall < 0.6 ? "fail" : overall < 0.75 ? "borderline" : "pass";
-}
-
 function buildScores(
   rng: Rng,
   plan: SessionPlan,
@@ -1032,7 +1029,7 @@ function buildScores(
         configId: CONFIG.overall,
         environment: env,
         source: "EVAL",
-        comment: `${verdictOf(overall)} · judged by ${JUDGE_MODEL}`,
+        comment: `${verdictOf(overall, [overall])} · judged by ${JUDGE_MODEL}`,
         metadata: { judge: JUDGE_MODEL, turns: outcomes.length },
       },
     });

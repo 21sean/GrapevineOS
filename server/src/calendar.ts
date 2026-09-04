@@ -22,16 +22,17 @@ import {
 } from "./gcal.js";
 import { icsCalendar } from "./ics.js";
 import { store } from "./store.js";
-import type { User } from "./types.js";
+import type { CalendarStatus, User } from "./types.js";
+import { webOrigin } from "./urls.js";
 
 export const calendar = Router();
 
 /** Where feed links should point. Dev default matches the Vite proxy. */
 function baseUrl(): string {
-  return (process.env.PUBLIC_BASE_URL ?? "http://localhost:5174").replace(/\/$/, "");
+  return webOrigin();
 }
 
-async function status(user: User) {
+async function status(user: User): Promise<CalendarStatus> {
   const [entries, feedToken] = await Promise.all([
     store.userCalendar(user.id),
     store.ensureFeedToken(user.id),
@@ -44,7 +45,7 @@ async function status(user: User) {
   };
 }
 
-const SIGNED_OUT = { signedIn: false, google: false, synced: [], feedUrl: null };
+const SIGNED_OUT: CalendarStatus = { signedIn: false, google: false, synced: [], feedUrl: null };
 
 function requireUser(req: Request): Promise<User | null> {
   return sessionUser(req);

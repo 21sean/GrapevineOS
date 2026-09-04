@@ -1,66 +1,40 @@
 /**
- * HTTP surface for the "Ask Grapevine" agent.
+ * The "Ask Grapevine" HTTP bridge: POST /api/agent/chat streams the LangGraph
+ * run onto NDJSON frames the web client renders live, and the chat-history
+ * routes below it let a signed-in user resume or delete a conversation.
  *
- *  - POST /api/agent/chat — bridges the LangGraph stream onto NDJSON frames
- *    the web client renders live. The client sends { threadId, message,
- *    context }; conversation history lives server-side in the graph's
- *    checkpointer, keyed by threadId.
- *  - /api/ext/v1/* — the same executors behind an X-Agent-Key header for
- *    external assistants (OpenClaw et al.); writes bind to the account named
- *    by AGENT_USER_EMAIL. See openclaw/skills/grapevine/SKILL.md.
+ * The client sends { threadId, message, context }; conversation history
+ * lives server-side in the graph's checkpointer, keyed by threadId.
  *
- * Frame protocol (one JSON object per line):
- *   {type:"delta", text}                        streamed answer tokens
- *   {type:"tool", name, label, state, detail?}  tool start/done
- *   {type:"action", action}                     map highlight / proposals
- *   {type:"notice", code, message}              degraded-mode explanations
- *   {type:"guardrail", rail, ...}               a rail acted on this turn
- *   {type:"done", threadId} · {type:"error", message}
+ * The frame protocol is the AgentFrame union in shared/types.ts: one JSON
+ * object per line, typed on both ends. In outline:
+ *   status     a short label while nothing streams yet ("Thinking…")
+ *   delta      streamed answer tokens
+ *   replace    the persona rail swapped the partial answer for a refusal
+ *   tool       a tool call started or finished
+ *   action     a map highlight, filter change, proposal, or refresh
+ *   notice     a degraded-mode explanation the person should read
+ *   guardrail  a rail acted on this turn (machine-readable)
+ *   usage      token and cost telemetry, when the provider reports it
+ *   done       the thread id to continue with; error, when it went wrong
  */
 import { AIMessage, HumanMessage, type BaseMessage } from "@langchain/core/messages";
-import { Router, type Request, type Response } from "express";
+import { Router } from "express";
 import { sessionUser } from "../auth.js";
-import { removeEventForUser, saveEventForUser } from "../calendar.js";
-import {
-  clampCadence,
-  runDiscovery,
-  runSavedSearch,
-  validQuery,
-  wantsCommit,
-} from "../discovery.js";
-import { personaGuard, personaRefusalMessage } from "./guardrails.js";
 import { langfuseHandler } from "../langfuse.js";
 import { modelSupportsTools, ollamaBase } from "../ollama.js";
 import { cliSupportsTools, detectProviders, providerInfo } from "../providers.js";
 import { rateLimit, singleFlight } from "../rate-limit.js";
-import { safeEqual } from "../secrets.js";
 import { store } from "../store.js";
-import { isChatEffort, type User } from "../types.js";
-import {
-  boundAgentUser,
-  buildCtx,
-  coercePos,
-  getEta,
-  getEvent,
-  INTEREST_TOPICS,
-  interestPatchEmpty,
-  mergeInterests,
-  parseInterestPatch,
-  parseLngLat,
-  searchEvents,
-  searchShape,
-  setEventRarity,
-  type ChatContext,
-  type SearchParams,
-} from "./context.js";
+import { isChatEffort, type AgentFrame } from "../types.js";
+import { buildCtx, coercePos, type ChatContext } from "./context.js";
 import { buildAgentGraph, forgetThread, hasCheckpoint, turnInput } from "./graph.js";
+import { personaGuard, personaRefusalMessage } from "./guardrails.js";
 
-export const agent = Router();
+export const chat = Router();
 
 const CHAT_DEADLINE_MS = 120_000;
 const MAX_MESSAGE_CHARS = 2_000;
-
-type Frame = Record<string, unknown>;
 
 /**
  * Strips <think>…</think> spans from streamed text, holding back partial tags
@@ -119,10 +93,10 @@ const chatFlight = singleFlight({
   key: async (req) => (await sessionUser(req).catch(() => null))?.id ?? `ip:${req.ip}`,
 });
 
-agent.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
+chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
   res.setHeader("Content-Type", "application/x-ndjson");
   res.setHeader("Cache-Control", "no-cache");
-  const send = (frame: Frame) => res.write(JSON.stringify(frame) + "\n");
+  const send = (frame: AgentFrame) => res.write(JSON.stringify(frame) + "\n");
   // A closed tab must not leave the local GPU generating.
   const ac = new AbortController();
   res.on("close", () => {
@@ -151,7 +125,7 @@ agent.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
 
     // History is per-account: a threadId that already belongs to a different
     // user (or to anyone, for a signed-out caller) is re-minted, so nobody can
-    // resume — or write into — someone else's conversation by guessing an id.
+    // resume, or write into, someone else's conversation by guessing an id.
     const user = await sessionUser(req).catch(() => null);
     const threadOwner = await store.chatThreadOwner(threadId).catch(() => null);
     const ownsThread = !!user && threadOwner === user.id;
@@ -178,7 +152,7 @@ agent.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
       return res.end();
     }
 
-    // Every provider goes through the same LangGraph now — the rails, the
+    // Every provider goes through the same LangGraph: the rails, the
     // checkpointer, the persona guard, and the traces are identical whether
     // the model is local Ollama or a subscription CLI (cli-model.ts). What
     // differs per provider is only the pre-flight below.
@@ -209,15 +183,15 @@ agent.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
         return done();
       }
       toolsOk = cliSupportsTools(provider);
-      // Once per conversation, not once per turn — repeated on every reply it
+      // Once per conversation, not once per turn: repeated on every reply it
       // was just noise stacked above the answer.
       if (!(await hasCheckpoint(threadId))) {
         send({
           type: "notice",
           code: "cli-mode",
           message: toolsOk
-            ? `${info.name} answers with Grapevine's own MCP tools (event search, details, ETAs, web discovery, calendar saves on the linked account) — live map pinning still needs the local Ollama agent.`
-            : `${info.name} answers from the event digest only — map pinning, ETAs, and calendar saves need the local Ollama agent.`,
+            ? `${info.name} answers with Grapevine's own MCP tools (event search, details, ETAs, web discovery, calendar saves on the linked account); live map pinning still needs the local Ollama agent.`
+            : `${info.name} answers from the event digest only; map pinning, ETAs, and calendar saves need the local Ollama agent.`,
         });
       }
       send({ type: "status", label: `Asking ${info.name}…` });
@@ -253,13 +227,13 @@ agent.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
       }
     }
 
-    // sessionUser comes from the verified Supabase JWT, never from the wire —
+    // sessionUser comes from the verified Supabase JWT, never from the wire:
     // overwrite whatever a crafted request may have put in context.
-    const chat: ChatContext = { ...(body.context ?? {}), sessionUser: user ?? undefined };
-    const ctx = await buildCtx(coercePos(chat.userPos));
+    const chatCtx: ChatContext = { ...(body.context ?? {}), sessionUser: user ?? undefined };
+    const ctx = await buildCtx(coercePos(chatCtx.userPos));
     const graph = buildAgentGraph({
       ctx,
-      chat,
+      chat: chatCtx,
       baseUrl,
       model: settings.model,
       toolsOk,
@@ -278,9 +252,8 @@ agent.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
       },
     });
 
-    // Server restarts wipe the in-memory checkpointer. When the client resumes
-    // a persisted thread it owns, replay the stored transcript into the graph
-    // so the conversation keeps its memory across restarts.
+    // Threads that predate the durable checkpoint table have no graph state;
+    // replay their persisted transcript once so they keep their memory.
     const seed: BaseMessage[] = [];
     if (ownsThread && user && !(await hasCheckpoint(threadId))) {
       for (const m of (await store.chatMessages(user.id, threadId).catch(() => null)) ?? []) {
@@ -301,7 +274,7 @@ agent.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
       },
     });
     // With LANGFUSE_* keys set, the turn also lands in Langfuse, grouped into
-    // a session by thread id. Null when disabled — no keys, no callbacks.
+    // a session by thread id. Null when disabled: no keys, no callbacks.
     const lf = langfuseHandler({ threadId, userId: user?.id, model: providerLabel });
     const stream = await graph.stream(
       // The new user text is NOT in the input: it rides in GraphDeps.userText
@@ -328,14 +301,14 @@ agent.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
     let railBlocked = false;
     for await (const [mode, chunk] of stream as AsyncIterable<[string, unknown]>) {
       if (mode === "custom") {
-        const frame = chunk as Frame;
+        const frame = chunk as AgentFrame;
         if (frame.type === "guardrail" && frame.rail === "input" && frame.blocked) {
           railBlocked = true;
         }
         // The rail nodes emit their refusal as a custom frame, so it has to
-        // join `answer` the way a streamed token would — otherwise the reply
+        // join `answer` the way a streamed token would; otherwise the reply
         // the user read is not the reply anything downstream sees.
-        if (frame.type === "delta" && typeof frame.text === "string") answer += frame.text;
+        if (frame.type === "delta") answer += frame.text;
         send(frame);
         continue;
       }
@@ -374,7 +347,7 @@ agent.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
       send({
         type: "notice",
         code: "guardrails",
-        message: "The reply broke character (model identity leak) — replaced by the persona rail.",
+        message: "The reply broke character (model identity leak) and was replaced by the persona rail.",
       });
       const refusal = personaRefusalMessage(settings.city);
       send({ type: "replace", text: refusal });
@@ -397,7 +370,7 @@ agent.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
     send({
       type: "error",
       message: timedOut
-        ? "That took too long — try a smaller question or a faster model."
+        ? "That took too long. Try a smaller question or a faster model."
         : String(err).slice(0, 300),
     });
     res.end();
@@ -405,11 +378,11 @@ agent.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Chat history — signed-in users only; every route re-checks thread ownership
+// Chat history: signed-in users only; every route re-checks thread ownership
 // against the session, so ids never grant access on their own.
 // ---------------------------------------------------------------------------
 
-agent.get("/api/chat/threads", async (req, res) => {
+chat.get("/api/chat/threads", async (req, res) => {
   const user = await sessionUser(req);
   if (!user) return res.status(401).json({ error: "not signed in" });
   try {
@@ -419,265 +392,29 @@ agent.get("/api/chat/threads", async (req, res) => {
   }
 });
 
-agent.get("/api/chat/threads/:id", async (req, res) => {
+chat.get("/api/chat/threads/:id", async (req, res) => {
   const user = await sessionUser(req);
   if (!user) return res.status(401).json({ error: "not signed in" });
   try {
-    const messages = await store.chatMessages(user.id, req.params.id);
+    const id = String(req.params.id);
+    const messages = await store.chatMessages(user.id, id);
     if (!messages) return res.status(404).json({ error: "unknown thread" });
-    res.json({ id: req.params.id, messages });
+    res.json({ id, messages });
   } catch (err) {
     res.status(502).json({ error: String(err).slice(0, 200) });
   }
 });
 
-agent.delete("/api/chat/threads/:id", async (req, res) => {
+chat.delete("/api/chat/threads/:id", async (req, res) => {
   const user = await sessionUser(req);
   if (!user) return res.status(401).json({ error: "not signed in" });
   try {
-    const deleted = await store.deleteChatThread(user.id, req.params.id);
+    const id = String(req.params.id);
+    const deleted = await store.deleteChatThread(user.id, id);
     if (!deleted) return res.status(404).json({ error: "unknown thread" });
-    await forgetThread(req.params.id).catch(() => {});
+    await forgetThread(id).catch(() => {});
     res.json({ ok: true });
   } catch (err) {
     res.status(502).json({ error: String(err).slice(0, 200) });
-  }
-});
-
-// ---------------------------------------------------------------------------
-// External tools API (OpenClaw and friends) — X-Agent-Key authed.
-// Read endpoints mirror the agent's data tools; writes act on the account
-// named by AGENT_USER_EMAIL.
-// ---------------------------------------------------------------------------
-
-function extAuth(req: Request, res: Response, next: () => void) {
-  const key = process.env.AGENT_API_KEY;
-  if (!key)
-    return res
-      .status(503)
-      .json({ error: "external agent API disabled: set AGENT_API_KEY in server/.env" });
-  if (!safeEqual(req.get("X-Agent-Key"), key)) return res.status(401).json({ error: "bad agent key" });
-  next();
-}
-
-/** The account external writes act on — bound by env, not by the caller. */
-async function extUser(res: Response): Promise<User | null> {
-  const user = await boundAgentUser();
-  if ("error" in user) {
-    res.status(503).json({ error: user.error });
-    return null;
-  }
-  return user;
-}
-
-agent.get("/api/ext/v1/events", extAuth, async (req, res) => {
-  try {
-    const ctx = await buildCtx();
-    const q = req.query;
-    const str = (k: string) => (typeof q[k] === "string" && q[k] ? String(q[k]) : undefined);
-    const num = (k: string) => (str(k) !== undefined ? Number(str(k)) : undefined);
-    const bool = (k: string) =>
-      str(k) !== undefined ? ["1", "true", "yes"].includes(str(k)!.toLowerCase()) : undefined;
-    const result = await searchEvents(
-      {
-        query: str("q"),
-        categories: str("category")?.split(",").map((s) => s.trim()),
-        tags: str("tags")?.split(",").map((s) => s.trim()),
-        date_from: str("from"),
-        date_to: str("to"),
-        free_only: bool("free"),
-        min_rating: num("min_rating"),
-        exclude_promoted: bool("exclude_promoted"),
-        near: str("near"),
-        max_km: num("max_km"),
-        sort: str("sort") as SearchParams["sort"],
-        limit: num("limit"),
-      },
-      ctx,
-    );
-    res.json({ city: ctx.settings.city, tz: ctx.settings.tz, ...result });
-  } catch (err) {
-    res.status(502).json({ error: String(err) });
-  }
-});
-
-agent.get("/api/ext/v1/events/:id", extAuth, async (req, res) => {
-  try {
-    const ctx = await buildCtx();
-    const result = getEvent(String(req.params.id), ctx);
-    if ("error" in result) return res.status(404).json(result);
-    res.json(result);
-  } catch (err) {
-    res.status(502).json({ error: String(err) });
-  }
-});
-
-/** Correct an event's rarity (drives the app's "Rare finds" filter). */
-agent.post("/api/ext/v1/events/:id/rarity", extAuth, async (req, res) => {
-  try {
-    const ctx = await buildCtx();
-    const result = await setEventRarity(req.params.id, req.body?.rarity, ctx);
-    if ("error" in result) return res.status(400).json(result);
-    res.json({
-      id: result.event.id,
-      title: result.event.title,
-      rarity: result.event.rarity,
-      changed: result.changed,
-    });
-  } catch (err) {
-    res.status(502).json({ error: String(err) });
-  }
-});
-
-agent.get("/api/ext/v1/eta", extAuth, async (req, res) => {
-  try {
-    const ctx = await buildCtx();
-    const to = String(req.query.to ?? "");
-    const from = typeof req.query.from === "string" ? parseLngLat(req.query.from) : undefined;
-    const args = parseLngLat(to) ? { to: parseLngLat(to), from } : { to_event_id: to, from };
-    const result = await getEta(args, ctx);
-    if ("error" in result) return res.status(400).json(result);
-    res.json(result);
-  } catch (err) {
-    res.status(502).json({ error: String(err) });
-  }
-});
-
-agent.get("/api/ext/v1/calendar", extAuth, async (_req, res) => {
-  try {
-    const user = await extUser(res);
-    if (!user) return;
-    const ctx = await buildCtx();
-    const entries = await store.userCalendar(user.id);
-    const events = entries
-      .map((entry) => ctx.byId.get(entry.eventId))
-      .filter((hit): hit is NonNullable<typeof hit> => !!hit)
-      .map(({ e, occ }) => searchShape(e, occ, ctx.settings.tz));
-    res.json({ count: events.length, events });
-  } catch (err) {
-    res.status(502).json({ error: String(err) });
-  }
-});
-
-agent.post("/api/ext/v1/calendar/:eventId", extAuth, async (req, res) => {
-  try {
-    const user = await extUser(res);
-    if (!user) return;
-    const result = await saveEventForUser(user, String(req.params.eventId));
-    if ("error" in result) return res.status(result.code).json({ error: result.error });
-    res.json({ saved: true, ...result });
-  } catch (err) {
-    res.status(502).json({ error: String(err) });
-  }
-});
-
-agent.delete("/api/ext/v1/calendar/:eventId", extAuth, async (req, res) => {
-  try {
-    const user = await extUser(res);
-    if (!user) return;
-    const result = await removeEventForUser(user, String(req.params.eventId));
-    if ("error" in result) return res.status(result.code).json({ error: result.error });
-    res.json(result);
-  } catch (err) {
-    res.status(502).json({ error: String(err) });
-  }
-});
-
-// ---------- web discovery (search the web → verified events) ----------
-
-/**
- * Run a discovery search now. Body: { query, dry_run? }. Dry runs verify and
- * report without writing — the default on every surface; pass dry_run:false
- * to commit the verified events.
- */
-agent.post("/api/ext/v1/discovery/run", extAuth, async (req, res) => {
-  const query = validQuery(req.body?.query);
-  if (!query) return res.status(400).json({ error: "query must be 3-200 chars" });
-  try {
-    res.json(await runDiscovery({ query, commit: wantsCommit(req.body) }));
-  } catch (err) {
-    res.status(502).json({ error: String(err).slice(0, 300) });
-  }
-});
-
-agent.get("/api/ext/v1/discovery/searches", extAuth, async (_req, res) => {
-  try {
-    res.json({ searches: await store.discoverySearches() });
-  } catch (err) {
-    res.status(502).json({ error: String(err).slice(0, 300) });
-  }
-});
-
-/** Save a scheduled search: { query, cadence_hours? } (1-336, default 24). */
-agent.post("/api/ext/v1/discovery/searches", extAuth, async (req, res) => {
-  const query = validQuery(req.body?.query);
-  if (!query) return res.status(400).json({ error: "query must be 3-200 chars" });
-  try {
-    res.json(await store.addDiscoverySearch(query, clampCadence(req.body?.cadence_hours)));
-  } catch (err) {
-    res.status(502).json({ error: String(err).slice(0, 300) });
-  }
-});
-
-/** Pause/resume or re-pace a scheduled search: { active?, cadence_hours? } —
- * same capability the internal API has, so external agents can manage what
- * they create. */
-agent.patch("/api/ext/v1/discovery/searches/:id", extAuth, async (req, res) => {
-  const patch: { active?: boolean; cadenceHours?: number } = {};
-  if (req.body?.active !== undefined) patch.active = Boolean(req.body.active);
-  if (req.body?.cadence_hours !== undefined)
-    patch.cadenceHours = clampCadence(req.body.cadence_hours);
-  if (!Object.keys(patch).length) {
-    return res.status(400).json({ error: "nothing to update (active, cadence_hours)" });
-  }
-  try {
-    const updated = await store.updateDiscoverySearch(String(req.params.id), patch);
-    if (!updated) return res.status(404).json({ error: "unknown search" });
-    res.json(updated);
-  } catch (err) {
-    res.status(502).json({ error: String(err).slice(0, 300) });
-  }
-});
-
-/** Run one saved search immediately (also stamps last_run/status). */
-agent.post("/api/ext/v1/discovery/searches/:id/run", extAuth, async (req, res) => {
-  try {
-    const search = await store.discoverySearchById(String(req.params.id));
-    if (!search) return res.status(404).json({ error: "unknown search" });
-    res.json(await runSavedSearch(search));
-  } catch (err) {
-    res.status(502).json({ error: String(err).slice(0, 300) });
-  }
-});
-
-agent.delete("/api/ext/v1/discovery/searches/:id", extAuth, async (req, res) => {
-  try {
-    const deleted = await store.deleteDiscoverySearch(String(req.params.id));
-    if (!deleted) return res.status(404).json({ error: "unknown search" });
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(502).json({ error: String(err).slice(0, 300) });
-  }
-});
-
-agent.post("/api/ext/v1/interests", extAuth, async (req, res) => {
-  try {
-    const user = await extUser(res);
-    if (!user) return;
-    const patch = parseInterestPatch(req.body ?? {});
-    if (interestPatchEmpty(patch))
-      return res
-        .status(400)
-        .json({ error: `no valid topics — allowed: ${INTEREST_TOPICS.join(", ")}` });
-
-    const current = (user.prefs?.interests ?? {}) as { loves?: string[]; avoids?: string[] };
-    const { loves, avoids } = mergeInterests(current, patch);
-    const updated = await store.updateUserPrefs(user.id, { interests: { loves, avoids } });
-    res.json({
-      interests: updated?.prefs?.interests ?? { loves, avoids },
-      note: "an open Grapevine tab picks this up on its next page load",
-    });
-  } catch (err) {
-    res.status(502).json({ error: String(err) });
   }
 });

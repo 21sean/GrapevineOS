@@ -9,17 +9,17 @@ import { dayInTz } from "../../../shared/time.js";
 import { eta, geocode } from "../mapbox.js";
 import { nextOccurrence, recurrenceSummary } from "../recurrence.js";
 import { store } from "../store.js";
-import { CATEGORIES, type CityEvent, type Settings, type User } from "../types.js";
+import {
+  CATEGORIES,
+  INTEREST_TOPICS,
+  RARITIES,
+  type CityEvent,
+  type Interests,
+  type Settings,
+  type User,
+} from "../types.js";
 
-export { dayInTz };
-
-/** Mirror of web/src/lib/types.ts INTEREST_TOPICS — keep in sync. */
-export const INTEREST_TOPICS = [
-  "live music", "jazz", "edm", "comedy", "theater", "art", "immersive",
-  "markets", "vintage", "food trucks", "coffee", "beer", "running", "yoga",
-  "wellness", "outdoors", "beach", "water", "baseball", "family", "fireworks",
-  "parade", "nightlife", "dancing", "networking", "history",
-];
+export { dayInTz, INTEREST_TOPICS, RARITIES };
 
 export const DIGEST_MAX_EVENTS = 120;
 export const DIGEST_MAX_CHARS = 10_000;
@@ -278,12 +278,12 @@ export async function getEta(
     if (!hit) return { error: "unknown event id" };
     to = [hit.e.lng, hit.e.lat];
   } else {
-    to = coercePos(args.to);
+    to = anyLngLat(args.to);
   }
   if (!to) return { error: "give to_event_id or to:[lng,lat]" };
 
-  const from = coercePos(args.from) ?? ctx.userPos ?? ctx.settings.center;
-  const fromLabel = coercePos(args.from)
+  const from = anyLngLat(args.from) ?? ctx.userPos ?? ctx.settings.center;
+  const fromLabel = anyLngLat(args.from)
     ? "given origin"
     : ctx.userPos
       ? "user location"
@@ -316,7 +316,9 @@ export function vetTopics(v: unknown): string[] {
   if (!Array.isArray(v)) return [];
   return [
     ...new Set(
-      v.map((t) => String(t).trim().toLowerCase()).filter((t) => INTEREST_TOPICS.includes(t)),
+      v
+        .map((t) => String(t).trim().toLowerCase())
+        .filter((t) => (INTEREST_TOPICS as readonly string[]).includes(t)),
     ),
   ];
 }
@@ -397,8 +399,6 @@ export async function boundAgentUser(): Promise<User | { error: string }> {
   return user;
 }
 
-export const RARITIES = ["common", "notable", "rare"] as const;
-
 /**
  * Write an event's rarity to the DB (this powers the app's "Rare finds"
  * filter) and patch the request snapshot so later tool calls see it.
@@ -418,6 +418,50 @@ export async function setEventRarity(
   if (!updated) return { error: "event no longer exists" };
   hit.e = updated;
   return { event: updated, changed: true };
+}
+
+// ---------------------------------------------------------------------------
+// Executors behind the MCP and REST surfaces that the graph has no tool for
+// ---------------------------------------------------------------------------
+
+/** Events on a user's calendar, shaped like search results. */
+export async function savedEvents(user: User, ctx: AgentCtx) {
+  const entries = await store.userCalendar(user.id);
+  const events = entries
+    .map((entry) => ctx.byId.get(entry.eventId))
+    .filter((hit): hit is NonNullable<typeof hit> => !!hit)
+    .map(({ e, occ }) => searchShape(e, occ, ctx.settings.tz));
+  return { count: events.length, events };
+}
+
+/** What an interests patch would do, without doing it. The propose half of the story. */
+export async function interestsPreview(
+  user: User,
+  patch: InterestPatch,
+): Promise<{ current: Interests; proposed: Interests; changed: boolean } | { error: string }> {
+  if (interestPatchEmpty(patch)) {
+    return { error: `no valid topics — allowed: ${INTEREST_TOPICS.join(", ")}` };
+  }
+  const current: Interests = {
+    loves: user.prefs?.interests?.loves ?? [],
+    avoids: user.prefs?.interests?.avoids ?? [],
+  };
+  const proposed = mergeInterests(current, patch);
+  const changed =
+    proposed.loves.join("|") !== current.loves.join("|") ||
+    proposed.avoids.join("|") !== current.avoids.join("|");
+  return { current, proposed, changed };
+}
+
+/** Write an interests patch. Callers gate this on the user's confirmation. */
+export async function applyInterests(
+  user: User,
+  patch: InterestPatch,
+): Promise<{ interests: Interests } | { error: string }> {
+  const preview = await interestsPreview(user, patch);
+  if ("error" in preview) return preview;
+  const updated = await store.updateUserPrefs(user.id, { interests: preview.proposed });
+  return { interests: updated?.prefs?.interests ?? preview.proposed };
 }
 
 // ---------------------------------------------------------------------------
@@ -499,8 +543,8 @@ How to answer:
 - When the digest can't answer an events question, or the user asks to ADD
   events you surfaced from the web, call discover_events: it re-searches the
   topic, verifies every candidate against its source page, and with
-  commit:true writes the verified ones into the live catalog (list + map).
-  Preview first (no commit) unless the user already asked for them to be
+  dry_run:false writes the verified ones into the live catalog (list + map).
+  Preview first (the default) unless the user already asked for them to be
   added. Verified discover_events results ARE catalog events once committed —
   link them like any digest event.
 - Only discuss these events and this city. Never invent events, venues, times,

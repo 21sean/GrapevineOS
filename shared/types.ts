@@ -22,7 +22,11 @@ export type Category = (typeof CATEGORY_IDS)[number];
 
 export const CATEGORIES: Category[] = [...CATEGORY_IDS];
 
-export type Rarity = "common" | "notable" | "rare";
+const RARITY_IDS = ["common", "notable", "rare"] as const;
+
+export type Rarity = (typeof RARITY_IDS)[number];
+
+export const RARITIES = RARITY_IDS;
 
 export interface CityEvent {
   id: string;
@@ -132,6 +136,11 @@ export interface IngestRecord {
   /** Snapshot of what landed, so history survives event edits/deletes. */
   events: { id: string; title: string; start: string }[];
 }
+
+/** Bounds for a scheduled search's cadence, in hours between runs. */
+export const CADENCE_MIN_HOURS = 1;
+export const CADENCE_MAX_HOURS = 336;
+export const CADENCE_DEFAULT_HOURS = 24;
 
 /**
  * One saved web search the discovery scheduler re-runs. Each run searches the
@@ -398,9 +407,8 @@ export const GUARDRAIL_RAILS: GuardrailRail[] = ["input", "content", "output"];
 export type GuardrailSurface =
   | "chat"
   | "chat-cli"
-  | "search_web"
-  | "read_page"
   | "discovery"
+  | "eval"
   | "warmup"
   | "unknown"
   | (string & {});
@@ -604,3 +612,334 @@ export interface GuardrailDashboard {
   labelCounts: Record<GuardrailLabel, number>;
   health: GuardrailTelemetryHealth;
 }
+
+// ---------------------------------------------------------------------------
+// Interests and filters (the personalization the browser edits and the agent
+// proposes changes to)
+// ---------------------------------------------------------------------------
+
+/** Interest vocabulary: the pillbox selector shows it, event tags draw from it, and the agent may only propose from it. */
+export const INTEREST_TOPICS = [
+  "live music",
+  "jazz",
+  "edm",
+  "comedy",
+  "theater",
+  "art",
+  "immersive",
+  "markets",
+  "vintage",
+  "food trucks",
+  "coffee",
+  "beer",
+  "running",
+  "yoga",
+  "wellness",
+  "outdoors",
+  "beach",
+  "water",
+  "baseball",
+  "family",
+  "fireworks",
+  "parade",
+  "nightlife",
+  "dancing",
+  "networking",
+  "history",
+] as const;
+
+export interface Interests {
+  loves: string[];
+  avoids: string[];
+}
+
+/** Farmers markets are volume: show them with everything, alone, or not at all. */
+export type FarmersFilter = "any" | "only" | "hide";
+
+export interface Filters {
+  categories: Category[]; // "only these"; empty = all
+  hideCategories: Category[]; // categories to exclude (ignored for any in `categories`)
+  liveOnly: boolean;
+  rareOnly: boolean;
+  freeOnly: boolean;
+  farmers: FarmersFilter;
+  hidePromoted: boolean;
+  minRating: number;
+  /** YYYY-MM-DD city-local window over each event's next occurrence; null = open. */
+  dateFrom: string | null;
+  dateTo: string | null;
+  /** Max traffic-aware drive time from the user (minutes); null = anywhere. */
+  nearMinutes: number | null;
+}
+
+export const NEAR_MINUTES_MIN = 5;
+export const NEAR_MINUTES_MAX = 60;
+
+export const DEFAULT_FILTERS: Filters = {
+  categories: [],
+  hideCategories: [],
+  liveOnly: false,
+  rareOnly: false,
+  freeOnly: false,
+  farmers: "any",
+  hidePromoted: true,
+  minRating: 0,
+  dateFrom: null,
+  dateTo: null,
+  nearMinutes: null,
+};
+
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Coerce stored filters (localStorage v1 or account prefs written by an older
+ * client) into the current shape: the legacy boolean `farmersOnly` becomes
+ * `farmers: "only"`; freeOnly and the date window default off.
+ */
+export function normalizeFilters(raw: unknown): Filters {
+  const r = (raw ?? {}) as Record<string, unknown> & Partial<Filters>;
+  const farmers: FarmersFilter =
+    r.farmers === "only" || r.farmers === "hide" || r.farmers === "any"
+      ? r.farmers
+      : r.farmersOnly === true
+        ? "only"
+        : DEFAULT_FILTERS.farmers;
+  const day = (v: unknown): string | null => (typeof v === "string" && DAY_RE.test(v) ? v : null);
+  const nearMinutes =
+    typeof r.nearMinutes === "number" && Number.isFinite(r.nearMinutes)
+      ? Math.min(NEAR_MINUTES_MAX, Math.max(NEAR_MINUTES_MIN, Math.round(r.nearMinutes)))
+      : null;
+  return {
+    ...DEFAULT_FILTERS,
+    ...(Array.isArray(r.categories) && { categories: r.categories as Category[] }),
+    ...(Array.isArray(r.hideCategories) && {
+      hideCategories: r.hideCategories as Category[],
+    }),
+    ...(typeof r.liveOnly === "boolean" && { liveOnly: r.liveOnly }),
+    ...(typeof r.rareOnly === "boolean" && { rareOnly: r.rareOnly }),
+    ...(typeof r.freeOnly === "boolean" && { freeOnly: r.freeOnly }),
+    ...(typeof r.hidePromoted === "boolean" && { hidePromoted: r.hidePromoted }),
+    ...(typeof r.minRating === "number" && { minRating: r.minRating }),
+    dateFrom: day(r.dateFrom),
+    dateTo: day(r.dateTo),
+    farmers,
+    nearMinutes,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Users
+// ---------------------------------------------------------------------------
+
+/** Per-account copies of the browser preferences, synced when signed in. */
+export interface UserPrefs {
+  filters?: Filters;
+  interests?: Interests;
+  pinnedIds?: string[];
+  hiddenIds?: string[];
+  mutedVenues?: string[];
+  mutedSources?: string[];
+}
+
+/** The signed-in user as the browser sees it. The server's User adds fields that never cross the wire. */
+export interface User {
+  id: string; // auth.users.id: Supabase Auth is the identity source
+  email: string;
+  name: string;
+  picture: string;
+  createdAt: string;
+  lastLoginAt: string;
+  prefs?: UserPrefs;
+}
+
+// ---------------------------------------------------------------------------
+// Admin panels: the inbox, providers, MCP
+// ---------------------------------------------------------------------------
+
+/** A raw newsletter in Postgres, as the admin inbox lists it. */
+export interface InboxEmail {
+  key: string;
+  source: string;
+  from: string;
+  subject: string;
+  receivedAt: string;
+  chars: number;
+  processed: boolean;
+  error?: string;
+}
+
+/** A subscription-authed CLI the server can route chat or extraction through. */
+export interface CliProviderInfo {
+  id: CliProviderId;
+  name: string;
+  vendor: string;
+  /** models.dev logo id (served via /api/logo/:id) */
+  logo: string;
+  bin: string;
+  installHint: string;
+  /** Command(s) that set up key-less auth. */
+  loginHint: string;
+  /** What account the login uses. */
+  loginNote: string;
+}
+
+/** One row from GET /api/providers: a locally installed, OAuth-authed CLI. */
+export interface CliProviderStatus extends CliProviderInfo {
+  installed: boolean;
+  version: string | null;
+  authed: boolean;
+  authKind: "subscription" | "api-key" | null;
+}
+
+export interface McpInfo {
+  url: string;
+  transport: string;
+  /** "oauth": sign-in via the consent page; "open": MCP_OPEN=1 dev mode. */
+  auth: "oauth" | "open";
+  /** What goes in the Claude Desktop / claude.ai connector dialog: just the URL. */
+  connectorUrl: string;
+}
+
+// ---------------------------------------------------------------------------
+// Web discovery (AI web search, verified against the source page)
+// ---------------------------------------------------------------------------
+
+/** One extracted event candidate with its verification outcome. */
+export interface DiscoveryCandidate {
+  event: CityEvent;
+  verdict: "confirmed" | "corrected" | "rejected";
+  confidence: number;
+  /** Short quote from the source page that names the event (when verified). */
+  evidence?: string;
+  /** Why a rejected candidate was dropped. */
+  reason?: string;
+  sourceUrl: string;
+  /** How many pages in this run yielded the same event. */
+  corroborations: number;
+}
+
+export interface DiscoveryRunResult {
+  query: string;
+  searchedAt: string; // ISO 8601
+  pagesRead: {
+    url: string;
+    title: string;
+    /** Present when the page's events came from schema.org markup rather than
+     * the model reading its prose. */
+    method?: "schema.org";
+    structured?: number;
+  }[];
+  pagesSkipped: { url: string; error: string }[];
+  extracted: number;
+  verified: DiscoveryCandidate[];
+  rejected: DiscoveryCandidate[];
+  /** Events actually written (0 on dry runs; dedupe drops known ones). */
+  added: number;
+  error?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Calendar
+// ---------------------------------------------------------------------------
+
+/** Server view of the signed-in user's calendar sync state. */
+export interface CalendarStatus {
+  signedIn: boolean;
+  google: boolean; // Google Calendar connected (tokens on file)
+  synced: string[]; // event ids saved to "my calendar"
+  feedUrl: string | null; // personal ICS feed, for Apple Calendar and friends
+}
+
+export interface GcalAttendee {
+  email: string;
+  displayName?: string;
+  responseStatus: string; // needsAction | accepted | declined | tentative
+  organizer: boolean;
+  self: boolean;
+}
+
+/** One event from the user's primary Google Calendar, server-shaped. */
+export interface GcalEvent {
+  id: string;
+  title: string;
+  description: string;
+  location: string;
+  start: string; // ISO datetime, or YYYY-MM-DD when allDay
+  end: string; // exclusive end date when allDay (Google convention)
+  allDay: boolean;
+  color: string;
+  htmlLink: string;
+  canEdit: boolean;
+  guestsCanModify: boolean;
+  organizerEmail: string;
+  attendees: GcalAttendee[];
+  recurringEventId?: string;
+  /** Set when this Google event is a synced Grapevine save. */
+  grapevineEventId?: string;
+}
+
+/** Fields PATCH/POST /api/calendar/google/events accepts. */
+export interface GcalEventPatch {
+  title?: string;
+  description?: string;
+  location?: string;
+  start?: string;
+  end?: string;
+  allDay?: boolean;
+  color?: string;
+  guestsCanModify?: boolean;
+  attendees?: { email: string; displayName?: string; responseStatus?: string }[];
+}
+
+// ---------------------------------------------------------------------------
+// The agent stream: what POST /api/agent/chat writes, one JSON line each
+// ---------------------------------------------------------------------------
+
+/** Side-effects the agent asks the client to perform (or propose). */
+export type AgentAction =
+  | { kind: "highlight"; eventIds: string[]; fit?: boolean }
+  | { kind: "proposeCalendar"; eventIds: string[]; note?: string }
+  /** The agent edited an event server-side (set_rarity); the client swaps in
+   * the fresh copy so badges and filters update without a reload. */
+  | { kind: "eventPatched"; event: CityEvent }
+  /** discover_events committed new catalog rows; refetch so they appear. */
+  | { kind: "eventsRefresh"; count: number }
+  /** set_filters: reshape the user's live map. Applied immediately with an
+   * undo toast; `reset` clears to defaults before merging the patch. */
+  | { kind: "setFilters"; reset?: boolean; patch: Partial<Filters>; note?: string }
+  /** save_calendar already wrote server-side; refresh the saved set locally. */
+  | { kind: "calendarSaved"; eventIds: string[] }
+  | {
+      kind: "proposeInterests";
+      addLoves: string[];
+      addAvoids: string[];
+      removeLoves: string[];
+      removeAvoids: string[];
+      reason: string;
+    };
+
+/**
+ * One NDJSON line streamed from POST /api/agent/chat. The server's send() and
+ * the graph's writer are typed against this union, and the client's reducer
+ * switches over it exhaustively, so a frame added on one side is a compile
+ * error on the other until it is handled.
+ */
+export type AgentFrame =
+  /** A short label while nothing streams yet ("Thinking…", "Asking Claude Code…"). */
+  | { type: "status"; label: string }
+  /** Streamed answer text, appended in order. */
+  | { type: "delta"; text: string }
+  /** The persona rail replaced the partial answer: drop what streamed and show this. */
+  | { type: "replace"; text: string }
+  /** A tool call started or finished; `detail` is a short result summary. */
+  | { type: "tool"; name: string; label: string; state: "start" | "done"; detail?: string }
+  | { type: "action"; action: AgentAction }
+  /** A degraded-mode explanation the person should read (rail blocked, CLI missing, ...). */
+  | { type: "notice"; code: string; message: string }
+  /** A rail acted on this turn, machine-readable; the notice carries the sentence. */
+  | { type: "guardrail"; rail: GuardrailRail; blocked: boolean; score?: number; threshold?: number }
+  /** Token and cost telemetry, when the provider reports it (Claude Code). */
+  | { type: "usage"; usage: ChatUsage }
+  /** The turn finished; continue the conversation with this thread id. */
+  | { type: "done"; threadId?: string }
+  | { type: "error"; message: string };

@@ -34,7 +34,17 @@ import { generateJSON } from "./llm.js";
 import { geocode } from "./mapbox.js";
 import { commitIngest } from "./pipeline.js";
 import { eventKey, store } from "./store.js";
-import { CATEGORIES, type Category, type CityEvent, type DiscoverySearch } from "./types.js";
+import {
+  CADENCE_DEFAULT_HOURS,
+  CADENCE_MAX_HOURS,
+  CADENCE_MIN_HOURS,
+  CATEGORIES,
+  type Category,
+  type CityEvent,
+  type DiscoveryCandidate,
+  type DiscoveryRunResult,
+  type DiscoverySearch,
+} from "./types.js";
 
 const MAX_RESULTS = 8; // search hits considered
 const MAX_PAGES = 4; // pages actually read per run
@@ -53,9 +63,7 @@ function minConfidence(): number {
 // defaults, and limits, so the three routes can't drift apart.
 // ---------------------------------------------------------------------------
 
-export const CADENCE_MIN_HOURS = 1;
-export const CADENCE_MAX_HOURS = 336;
-export const CADENCE_DEFAULT_HOURS = 24;
+export { CADENCE_DEFAULT_HOURS, CADENCE_MAX_HOURS, CADENCE_MIN_HOURS };
 
 /** Clamp cadence to the DB's 1–336 h range; default daily. */
 export function clampCadence(v: unknown): number {
@@ -63,12 +71,6 @@ export function clampCadence(v: unknown): number {
   return Number.isFinite(n)
     ? Math.min(Math.max(CADENCE_MIN_HOURS, Math.round(n)), CADENCE_MAX_HOURS)
     : CADENCE_DEFAULT_HOURS;
-}
-
-/** Trimmed 3–200 char query, or null when invalid. */
-export function validQuery(v: unknown): string | null {
-  const q = String(v ?? "").trim();
-  return q.length >= 3 && q.length <= 200 ? q : null;
 }
 
 /**
@@ -81,38 +83,7 @@ export function wantsCommit(body: unknown): boolean {
   return (b.dry_run ?? b.dryRun) === false;
 }
 
-export interface DiscoveryCandidate {
-  event: CityEvent;
-  verdict: "confirmed" | "corrected" | "rejected";
-  confidence: number;
-  /** Short quote from the source page that names the event (when verified). */
-  evidence?: string;
-  /** Why a rejected candidate was dropped. */
-  reason?: string;
-  sourceUrl: string;
-  /** How many pages in this run yielded the same event. */
-  corroborations: number;
-}
-
-export interface DiscoveryRunResult {
-  query: string;
-  searchedAt: string; // ISO 8601
-  pagesRead: {
-    url: string;
-    title: string;
-    /** Present when the page's events came from schema.org markup rather than
-     * the model reading its prose. */
-    method?: "schema.org";
-    structured?: number;
-  }[];
-  pagesSkipped: { url: string; error: string }[];
-  extracted: number;
-  verified: DiscoveryCandidate[];
-  rejected: DiscoveryCandidate[];
-  /** Events actually written (0 on dry runs; dedupe drops known ones). */
-  added: number;
-  error?: string;
-}
+export type { DiscoveryCandidate, DiscoveryRunResult };
 
 // ---------------------------------------------------------------------------
 // Verification

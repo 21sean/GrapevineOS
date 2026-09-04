@@ -56,6 +56,8 @@ export type ChatItem =
       highlights: string[]
       /** token/cost telemetry, when the provider reports it (Claude Code) */
       usage?: ChatUsage
+      /** rail decisions the server reported this turn (the notice carries the sentence) */
+      rails?: { rail: string; blocked: boolean; score?: number }[]
       error?: string
     }
 
@@ -174,6 +176,11 @@ export function useAgentChat() {
         case "notice":
           patchLast((it) => ({
             notices: [...it.notices, { code: frame.code, message: frame.message }],
+          }))
+          break
+        case "guardrail":
+          patchLast((it) => ({
+            rails: [...(it.rails ?? []), { rail: frame.rail, blocked: frame.blocked, score: frame.score }],
           }))
           break
         case "usage":

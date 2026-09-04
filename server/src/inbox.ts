@@ -34,6 +34,7 @@
 import { MAX_ATTEMPTS } from "./budget.js";
 import { db } from "./db.js";
 import type { Tables } from "./db-types.js";
+import type { InboxEmail } from "./types.js";
 import { extractEvents } from "./ingest.js";
 import { commitIngest } from "./pipeline.js";
 
@@ -208,16 +209,7 @@ export function kickInbox(): void {
 
 // ---------- admin inbox (views over the same table) ----------
 
-export interface InboxEmail {
-  key: string;
-  source: string;
-  from: string;
-  subject: string;
-  receivedAt: string;
-  chars: number;
-  processed: boolean;
-  error?: string;
-}
+export type { InboxEmail };
 
 /** Newest emails with their pipeline status. char_count is a generated
  * column, so listings never ship whole newsletter bodies. */

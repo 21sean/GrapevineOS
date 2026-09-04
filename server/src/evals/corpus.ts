@@ -312,15 +312,6 @@ export const CORPUS: CorpusEntry[] = [
   ...BENIGN_TRICKY,
 ];
 
-export const ATTACKS = CORPUS.filter((e) => e.attack);
-export const BENIGN_ENTRIES = CORPUS.filter((e) => !e.attack);
-
-/** Attacks this rail is meant to stop — the set calibration is scored on. */
-export const IN_SCOPE = CORPUS.filter((e) => e.scope === "in");
-
-/** Attacks that are expected to reach the model. Not failures; other layers. */
-export const OUT_OF_SCOPE_ATTACKS = ATTACKS.filter((e) => e.scope === "out");
-
 /** One line per family, for the calibration report and the panel. */
 export const FAMILY_NOTES: Record<AttackFamily, string> = {
   "direct-override": "The canonical case. If this slips, the rail is not working at all.",

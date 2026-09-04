@@ -9,19 +9,11 @@ import {
   type LucideIcon,
 } from "lucide-react"
 
-// Domain shapes shared with the server — one definition for both runtimes.
+// Domain shapes shared with the server: one definition for both runtimes.
+// Everything that crosses the wire lives in shared/types.ts; this file adds
+// only what the browser alone needs (icons, colors, list orderings).
 export * from "../../../shared/types"
-import type {
-  Category,
-  ChatMessage,
-  ChatUsage,
-  CityEvent,
-  LlmProviderId,
-  Reaction,
-} from "../../../shared/types"
-
-/** @deprecated alias kept for existing imports — same union as LlmProviderId. */
-export type ChatProviderId = LlmProviderId
+import type { Category, Reaction } from "../../../shared/types"
 
 // ---------- reactions (the per-user feedback loop) ----------
 
@@ -29,31 +21,6 @@ export const REACTION_META: Record<Reaction, { label: string; blurb: string }> =
   going: { label: "Going", blurb: "boosts this and events like it" },
   went: { label: "Went — great", blurb: "teaches your taste" },
   not_for_me: { label: "Not for me", blurb: "sinks this and events like it" },
-}
-
-/** One row from GET /api/providers — a locally installed, OAuth-authed CLI. */
-export interface CliProviderStatus {
-  id: Exclude<ChatProviderId, "ollama">
-  name: string
-  vendor: string
-  logo: string
-  bin: string
-  installHint: string
-  loginHint: string
-  loginNote: string
-  installed: boolean
-  version: string | null
-  authed: boolean
-  authKind: "subscription" | "api-key" | null
-}
-
-export interface McpInfo {
-  url: string
-  transport: string
-  /** "oauth": sign-in via the consent page; "open": MCP_OPEN=1 dev mode. */
-  auth: "oauth" | "open"
-  /** What goes in the Claude Desktop / claude.ai connector dialog — just the URL. */
-  connectorUrl: string
 }
 
 export interface CategoryMeta {
@@ -73,91 +40,6 @@ export const CATEGORY_META: Record<Category, CategoryMeta> = {
   market: { label: "Markets", color: "#56c7ac", icon: ShoppingBag },
   festival: { label: "Festivals", color: "#edbe54", icon: PartyPopper },
   community: { label: "Community", color: "#8fa3bf", icon: Users },
-}
-
-/** Interest vocabulary shown in the pillbox selector; event tags draw from it. */
-export const INTEREST_TOPICS = [
-  "live music",
-  "jazz",
-  "edm",
-  "comedy",
-  "theater",
-  "art",
-  "immersive",
-  "markets",
-  "vintage",
-  "food trucks",
-  "coffee",
-  "beer",
-  "running",
-  "yoga",
-  "wellness",
-  "outdoors",
-  "beach",
-  "water",
-  "baseball",
-  "family",
-  "fireworks",
-  "parade",
-  "nightlife",
-  "dancing",
-  "networking",
-  "history",
-] as const
-
-export interface Interests {
-  loves: string[]
-  avoids: string[]
-}
-
-// ---------- web discovery (AI web search → verified events) ----------
-
-/** One extracted event candidate with its verification outcome. */
-export interface DiscoveryCandidate {
-  event: CityEvent
-  verdict: "confirmed" | "corrected" | "rejected"
-  confidence: number
-  evidence?: string
-  reason?: string
-  sourceUrl: string
-  corroborations: number
-}
-
-export interface DiscoveryRunResult {
-  query: string
-  searchedAt: string
-  pagesRead: { url: string; title: string }[]
-  pagesSkipped: { url: string; error: string }[]
-  extracted: number
-  verified: DiscoveryCandidate[]
-  rejected: DiscoveryCandidate[]
-  added: number
-  error?: string
-}
-
-export interface User {
-  id: string
-  email: string
-  name: string
-  picture: string
-  createdAt: string
-  lastLoginAt: string
-  prefs?: {
-    filters?: Filters
-    interests?: Interests
-    pinnedIds?: string[]
-    hiddenIds?: string[]
-    mutedVenues?: string[]
-    mutedSources?: string[]
-  }
-}
-
-/** Server view of the signed-in user's calendar sync state. */
-export interface CalendarStatus {
-  signedIn: boolean
-  google: boolean // Google Calendar connected (tokens on file)
-  synced: string[] // event ids saved to "my calendar"
-  feedUrl: string | null // personal ICS feed — subscribe from Apple Calendar
 }
 
 // ---------- in-app Google Calendar (the month/agenda popup) ----------
@@ -218,62 +100,7 @@ export function asEtiquette(c: string): Etiquette {
     : "sky"
 }
 
-export interface GcalAttendee {
-  email: string
-  displayName?: string
-  responseStatus: string // needsAction | accepted | declined | tentative
-  organizer: boolean
-  self: boolean
-}
-
-/** One event from the user's primary Google Calendar, server-shaped. */
-export interface GcalEvent {
-  id: string
-  title: string
-  description: string
-  location: string
-  start: string // ISO datetime, or YYYY-MM-DD when allDay
-  end: string // exclusive end date when allDay (Google convention)
-  allDay: boolean
-  color: string
-  htmlLink: string
-  canEdit: boolean
-  guestsCanModify: boolean
-  organizerEmail: string
-  attendees: GcalAttendee[]
-  recurringEventId?: string
-  /** Set when this Google event is a synced Grapevine save. */
-  grapevineEventId?: string
-}
-
-/** Fields PATCH/POST /api/calendar/google/events accepts. */
-export interface GcalEventPatch {
-  title?: string
-  description?: string
-  location?: string
-  start?: string
-  end?: string
-  allDay?: boolean
-  color?: string
-  guestsCanModify?: boolean
-  attendees?: { email: string; displayName?: string; responseStatus?: string }[]
-}
-
-// ---------- chat history (Ask Grapevine, signed-in users) ----------
-
-/** @deprecated alias kept for existing imports — same shape as ChatMessage. */
-export type ChatMessageRec = ChatMessage
-
-/** A raw newsletter sitting in Cloudflare KV, as shown in the admin inbox. */
-export interface InboxEmail {
-  key: string
-  source: string
-  from: string
-  subject: string
-  receivedAt: string
-  chars: number
-  processed: boolean
-}
+// ---------- the event list ----------
 
 /** Orderings for the event list; "relevance" is the personal buzz score. */
 export type SortKey = "relevance" | "date" | "price-asc" | "price-desc" | "alpha"
@@ -286,117 +113,5 @@ export const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "alpha", label: "Alphabetical" },
 ]
 
-/** Farmers markets are volume: show them with everything, alone, or not at all. */
-export type FarmersFilter = "any" | "only" | "hide"
-
-export interface Filters {
-  categories: Category[] // "only these"; empty = all
-  hideCategories: Category[] // categories to exclude (ignored for any in `categories`)
-  liveOnly: boolean
-  rareOnly: boolean
-  freeOnly: boolean
-  farmers: FarmersFilter
-  hidePromoted: boolean
-  minRating: number
-  /** YYYY-MM-DD city-local window over each event's next occurrence; null = open. */
-  dateFrom: string | null
-  dateTo: string | null
-  /** Max traffic-aware drive time from the user (minutes); null = anywhere. */
-  nearMinutes: number | null
-}
-
-export const NEAR_MINUTES_MIN = 5
-export const NEAR_MINUTES_MAX = 60
-
-export const DEFAULT_FILTERS: Filters = {
-  categories: [],
-  hideCategories: [],
-  liveOnly: false,
-  rareOnly: false,
-  freeOnly: false,
-  farmers: "any",
-  hidePromoted: true,
-  minRating: 0,
-  dateFrom: null,
-  dateTo: null,
-  nearMinutes: null,
-}
-
-const DAY_RE = /^\d{4}-\d{2}-\d{2}$/
-
-/**
- * Coerce stored filters (localStorage v1 or account prefs written by an older
- * client) into the current shape — the legacy boolean `farmersOnly` becomes
- * `farmers: "only"`; freeOnly and the date window default off.
- */
-export function normalizeFilters(raw: unknown): Filters {
-  const r = (raw ?? {}) as Record<string, unknown> & Partial<Filters>
-  const farmers: FarmersFilter =
-    r.farmers === "only" || r.farmers === "hide" || r.farmers === "any"
-      ? r.farmers
-      : r.farmersOnly === true
-        ? "only"
-        : DEFAULT_FILTERS.farmers
-  const day = (v: unknown): string | null =>
-    typeof v === "string" && DAY_RE.test(v) ? v : null
-  const nearMinutes =
-    typeof r.nearMinutes === "number" && Number.isFinite(r.nearMinutes)
-      ? Math.min(NEAR_MINUTES_MAX, Math.max(NEAR_MINUTES_MIN, Math.round(r.nearMinutes)))
-      : null
-  return {
-    ...DEFAULT_FILTERS,
-    ...(Array.isArray(r.categories) && { categories: r.categories as Category[] }),
-    ...(Array.isArray(r.hideCategories) && {
-      hideCategories: r.hideCategories as Category[],
-    }),
-    ...(typeof r.liveOnly === "boolean" && { liveOnly: r.liveOnly }),
-    ...(typeof r.rareOnly === "boolean" && { rareOnly: r.rareOnly }),
-    ...(typeof r.freeOnly === "boolean" && { freeOnly: r.freeOnly }),
-    ...(typeof r.hidePromoted === "boolean" && { hidePromoted: r.hidePromoted }),
-    ...(typeof r.minRating === "number" && { minRating: r.minRating }),
-    dateFrom: day(r.dateFrom),
-    dateTo: day(r.dateTo),
-    farmers,
-    nearMinutes,
-  }
-}
-
 /** A farmers market carries this tag; the "Farmers markets" filter keys off it. */
 export const FARMERS_MARKET_TAG = "farmers market"
-
-// ---------- agent ("Ask Grapevine") ----------
-
-/** Side-effects the agent asks the client to perform (or propose). */
-export type AgentAction =
-  | { kind: "highlight"; eventIds: string[]; fit?: boolean }
-  | { kind: "proposeCalendar"; eventIds: string[]; note?: string }
-  // The agent edited an event server-side (e.g. set_rarity) — the client
-  // swaps in the fresh copy so badges and filters update without a reload.
-  | { kind: "eventPatched"; event: CityEvent }
-  // discover_events committed new catalog rows — refetch so they appear.
-  | { kind: "eventsRefresh"; count: number }
-  // set_filters: reshape the user's live map. Applied immediately with an
-  // undo toast; `reset` clears to defaults before merging the patch.
-  | { kind: "setFilters"; reset?: boolean; patch: Partial<Filters>; note?: string }
-  // save_calendar already wrote server-side — refresh the saved set locally.
-  | { kind: "calendarSaved"; eventIds: string[] }
-  | {
-      kind: "proposeInterests"
-      addLoves: string[]
-      addAvoids: string[]
-      removeLoves: string[]
-      removeAvoids: string[]
-      reason: string
-    }
-
-/** One NDJSON line streamed from POST /api/agent/chat. */
-export type AgentFrame =
-  | { type: "status"; label: string }
-  | { type: "delta"; text: string }
-  | { type: "replace"; text: string }
-  | { type: "tool"; name: string; label: string; state: "start" | "done"; detail?: string }
-  | { type: "action"; action: AgentAction }
-  | { type: "notice"; code: string; message: string }
-  | { type: "usage"; usage: ChatUsage }
-  | { type: "done"; threadId?: string }
-  | { type: "error"; message: string }

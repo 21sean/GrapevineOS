@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { ProviderLogo } from "@/components/admin/ProviderLogo"
 import { api } from "@/lib/api"
 import { useGrapevine } from "@/lib/store"
-import type { ChatProviderId, CliProviderStatus, McpInfo } from "@/lib/types"
+import type { LlmProviderId, CliProviderStatus, McpInfo } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 /**
@@ -44,7 +44,7 @@ export function ProvidersTab() {
 
   async function setProvider(
     role: "chatProvider" | "extractProvider",
-    id: ChatProviderId,
+    id: LlmProviderId,
     label: string,
   ) {
     try {
@@ -60,7 +60,7 @@ export function ProvidersTab() {
     }
   }
 
-  const roleActions = (id: ChatProviderId, label: string, disabled = false) => (
+  const roleActions = (id: LlmProviderId, label: string, disabled = false) => (
     <div className="flex shrink-0 flex-col items-end gap-1">
       {chatActive === id ? (
         <Badge variant="outline" className="text-live">

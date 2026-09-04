@@ -26,6 +26,7 @@ import { eta } from "./mapbox.js";
 import { nextOccurrence } from "./recurrence.js";
 import { store } from "./store.js";
 import type { CityEvent, PushSub } from "./types.js";
+import { webOrigin } from "./urls.js";
 
 const REMINDER_WINDOW_MIN = 45; // "starts soon" lead time
 const TICK_MS = 60_000;
@@ -38,7 +39,7 @@ const LEAVEBY_LEAD_MIN = 10; // fire when ≤10 min until you must leave
 const POSITION_FRESH_MS = 12 * 60 * 60 * 1000; // stale position → city center
 
 function clickBase(): string {
-  return (process.env.PUBLIC_BASE_URL ?? "http://localhost:5174").replace(/\/$/, "");
+  return webOrigin();
 }
 
 let vapidReady: Promise<string> | null = null;

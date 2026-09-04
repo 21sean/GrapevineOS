@@ -7,7 +7,9 @@
  */
 import { calendarEventBody } from "./calendar-body.js";
 import { store } from "./store.js";
-import type { CityEvent, User } from "./types.js";
+import type { CityEvent, GcalEvent, GcalEventPatch, User } from "./types.js";
+
+export type { GcalEvent, GcalEventPatch };
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const REVOKE_URL = "https://oauth2.googleapis.com/revoke";
@@ -166,42 +168,7 @@ interface RawGcalEvent {
 }
 
 /** The shape the web calendar renders — times stay ISO, colors are palette names. */
-export interface GcalEvent {
-  id: string;
-  title: string;
-  description: string;
-  location: string;
-  start: string; // ISO datetime, or YYYY-MM-DD when allDay
-  end: string; // exclusive end date when allDay (Google convention)
-  allDay: boolean;
-  color: string;
-  htmlLink: string;
-  canEdit: boolean;
-  guestsCanModify: boolean;
-  organizerEmail: string;
-  attendees: {
-    email: string;
-    displayName?: string;
-    responseStatus: string;
-    organizer: boolean;
-    self: boolean;
-  }[];
-  recurringEventId?: string;
-}
-
 /** Fields the web can set on create/update; times are ISO (or YYYY-MM-DD all-day). */
-export interface GcalEventPatch {
-  title?: string;
-  description?: string;
-  location?: string;
-  start?: string;
-  end?: string;
-  allDay?: boolean;
-  color?: string;
-  guestsCanModify?: boolean;
-  attendees?: { email: string; displayName?: string; responseStatus?: string }[];
-}
-
 function toWebEvent(r: RawGcalEvent, user: User): GcalEvent {
   const allDay = !!r.start?.date;
   const isOrganizer = !!r.organizer?.self || r.organizer?.email === user.email;

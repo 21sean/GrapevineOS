@@ -20,25 +20,20 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { cliToolsNote, toolLabel } from "./agent/contracts.js";
 import { INTERNAL_MCP_KEY } from "./auth.js";
 import { parseLooseJSON } from "./llm-json.js";
-import { isChatEffort, type ChatEffort, type ChatUsage, type CliProviderId } from "./types.js";
+import {
+  isChatEffort,
+  type ChatEffort,
+  type ChatUsage,
+  type CliProviderId,
+  type CliProviderInfo,
+  type CliProviderStatus,
+} from "./types.js";
+import { apiOrigin } from "./urls.js";
 
-export type { CliProviderId };
-
-export interface CliProviderInfo {
-  id: CliProviderId;
-  name: string;
-  vendor: string;
-  /** models.dev logo id (served via /api/logo/:id) */
-  logo: string;
-  bin: string;
-  installHint: string;
-  /** Command(s) that set up key-less auth. */
-  loginHint: string;
-  /** What account the login uses. */
-  loginNote: string;
-}
+export type { CliProviderId, CliProviderInfo, CliProviderStatus };
 
 export const CLI_PROVIDERS: CliProviderInfo[] = [
   {
@@ -83,12 +78,7 @@ export const CLI_PROVIDERS: CliProviderInfo[] = [
   },
 ];
 
-export interface CliProviderStatus extends CliProviderInfo {
-  installed: boolean;
-  version: string | null;
-  authed: boolean;
-  authKind: "subscription" | "api-key" | null;
-}
+
 
 // ---------------------------------------------------------------------------
 // Shelling out (Windows npm shims are .cmd files, so shell:true there; POSIX
@@ -296,11 +286,7 @@ export function cliSupportsTools(id: CliProviderId): boolean {
   return id === "claude";
 }
 
-/** CLIs whose model + reasoning-effort we can pick per-invocation (via
- *  `--model` / `--effort`). Only Claude Code exposes both today. */
-export function cliSupportsModelChoice(id: CliProviderId): boolean {
-  return id === "claude";
-}
+
 
 export interface CliChatResult {
   text: string;
@@ -414,13 +400,13 @@ function parseClaudeEnvelope(stdout: string): CliChatResult {
   }
 }
 
-/** "mcp__grapevine__search_events" reads as "search_events" in the UI. */
-function toolLabel(name: unknown): string {
+/** "mcp__grapevine__search_events" is the contract's search_events. */
+function mcpToolName(name: unknown): string {
   return String(name ?? "tool").replace(/^mcp__[^_]+__/, "");
 }
 
 /** One identifying argument, so two searches in a row don't look identical. */
-function toolDetail(input: unknown): string | undefined {
+function argHint(input: unknown): string | undefined {
   if (!input || typeof input !== "object") return undefined;
   const o = input as Record<string, unknown>;
   const hint = o.query ?? o.event_id ?? o.id ?? o.near;
@@ -474,9 +460,10 @@ async function claudeStream(
         // Assistant frames repeat as the message grows — dedupe on block id.
         for (const block of message.content ?? []) {
           if (block?.type !== "tool_use" || openTools.has(block.id)) continue;
-          const label = toolLabel(block.name);
+          const name = mcpToolName(block.name);
+          const label = toolLabel(name, (block.input ?? {}) as Record<string, unknown>);
           openTools.set(block.id, label);
-          events.onTool?.({ label, state: "start", detail: toolDetail(block.input) });
+          events.onTool?.({ label, state: "start", detail: argHint(block.input) });
         }
         return;
       }
@@ -517,8 +504,7 @@ async function claudeStream(
 
 /** Where a CLI on this machine reaches the MCP server (same express app). */
 function mcpEndpoint(): string {
-  const base = process.env.MCP_PUBLIC_URL ?? `http://localhost:${process.env.PORT ?? 8787}`;
-  return `${base.replace(/\/$/, "")}/mcp`;
+  return `${apiOrigin()}/mcp`;
 }
 
 export async function cliChat(
@@ -663,7 +649,7 @@ function cliError(bin: string, r: RunResult): Error {
 // JSON tasks — the extraction/rating pipeline through a CLI instead of Ollama
 // ---------------------------------------------------------------------------
 
-export { parseLooseJSON };
+
 
 /**
  * One system+user exchange through a CLI provider, parsed as JSON. Tools stay
@@ -700,27 +686,7 @@ export interface Exchange {
  */
 const MAX_EXCHANGES = 8;
 
-/** Reality check for CLI sessions that get MCP tools: the in-app UI tools the
- * system prompt describes don't exist there — remap to the MCP toolbox. */
-const CLI_TOOLS_NOTE = `Tools in this session: the "grapevine" MCP server is your entire toolbox —
-search_events, get_event, get_eta, list_saved_events, save_event, unsave_event,
-set_event_rarity, discover_events, list_scheduled_searches, schedule_search,
-unschedule_search, update_interests. You have no web search, no shell, and no
-file access, so never claim to have browsed a site directly.
 
-The in-app tools mentioned above (show_on_map, set_filters, propose_calendar,
-save_calendar, search_web, read_page) do NOT exist here: never claim to have
-pinned the map or changed filters. Recommend events in text with the
-[Title](event:id) grammar, use search_events/get_event beyond the digest, and
-get_eta for travel questions.
-
-When the user wants events that aren't in the catalog yet — "find more", "keep
-searching", "add events" — call discover_events. It searches the open web and
-verifies each candidate against its source page before writing. It dry-runs by
-default: report what it found, then call it again with dry_run:false once the
-user confirms. Offer schedule_search when they want an ongoing watch. Writes
-(save_event, unsave_event, update_interests, committing discoveries) land on
-the linked Grapevine account, so only make them when the user asks.`;
 
 /** System prompt + recent exchanges + the new message, as one CLI prompt. */
 export function buildCliPrompt(
@@ -735,7 +701,10 @@ export function buildCliPrompt(
     .join("\n\n");
   return [
     system,
-    opts?.tools ? CLI_TOOLS_NOTE : "",
+    // The reality check for CLI sessions that get MCP tools: the in-app UI
+    // tools the system prompt describes do not exist there. Built from the
+    // contracts, so it names the tools that actually exist.
+    opts?.tools ? cliToolsNote() : "",
     history ? `Conversation so far:\n\n${history}` : "",
     `User: ${message}`,
     "Reply as Grapevine — plain text (with the [Title](event:id) link grammar), no preamble, no code fences.",

@@ -1,15 +1,20 @@
 /**
- * Grapevine as an MCP server — lets Claude (Claude Code, Claude Desktop, or
- * any MCP client) drive this app's tools directly: search events, look up
- * details, ETAs, save to the calendar, tune interests, and run verified
- * web discovery (including managing its scheduled searches).
+ * Grapevine as an MCP server: lets Claude (Claude Code, Claude Desktop, or
+ * any MCP client) drive this app's tools directly. Search events, look up
+ * details and ETAs, save to the calendar, tune interests, and run verified
+ * web discovery, including managing its scheduled searches.
+ *
+ * The tools are the "mcp" surface of agent/contracts.ts: names, descriptions,
+ * schemas and annotations all come from there, and the executors are the
+ * same functions the in-app agent and the REST API call (agent/context.ts),
+ * so the three surfaces cannot drift apart.
  *
  * Built on FastMCP 4: tool schemas are Zod (validated before `execute` runs),
- * and the OAuth 2.1 resource layer — RFC 8414 + RFC 9728 discovery documents
- * and the 401 `WWW-Authenticate` challenge — is FastMCP's, not hand-rolled.
+ * and the OAuth 2.1 resource layer (RFC 8414 + RFC 9728 discovery documents
+ * and the 401 `WWW-Authenticate` challenge) is FastMCP's, not hand-rolled.
  *
  * Transport: Streamable HTTP at POST /mcp, stateless (a fresh session per
- * request — no session bookkeeping, works across server restarts).
+ * request: no session bookkeeping, works across server restarts).
  *
  * Auth is OAuth 2.1 with Supabase Auth as the authorization server (the same
  * one the web app signs in with). The pieces:
@@ -23,47 +28,41 @@
  *     resource metadata.
  *   - Unauthenticated requests get 401 + WWW-Authenticate: Bearer
  *     resource_metadata="…", which is what makes an MCP client open the
- *     browser consent flow on its own — the connector dialog needs nothing
- *     but the /mcp URL.
+ *     browser consent flow on its own; the connector dialog needs nothing but
+ *     the /mcp URL.
  *
  * Headless fallbacks: AGENT_API_KEY as X-Agent-Key/Bearer still works for
  * scripts (and the in-process CLI loopback uses a per-boot internal key);
  * writes on that path act on AGENT_USER_EMAIL, same as /api/ext/v1.
  *
  * Hosting: FastMCP owns its own HTTP listener (mcp-proxy binds the port), so
- * it runs on loopback and this module's Express router reverse-proxies /mcp
- * and the well-known documents to it. That keeps one public origin — MCP
- * clients, the web app, and the REST API all share the server's port.
- *
- * Tool executors are shared with the in-app agent and the ext REST API
- * (agent/context.ts), so all three surfaces stay in lockstep.
+ * it runs on loopback and mcp-proxy.ts reverse-proxies /mcp and the
+ * well-known documents to it. That keeps one public origin: MCP clients, the
+ * web app, and the REST API all share the server's port.
  */
-import http from "node:http";
+import type http from "node:http";
 import { FastMCP, UserError } from "fastmcp";
-import { Router, type Request, type Response } from "express";
-import { z } from "zod";
+import { INTERNAL_MCP_KEY, ISSUER, userFromClaims, verifySupabaseToken } from "./auth.js";
 import {
+  applyInterests,
   anyLngLat,
   boundAgentUser,
   buildCtx,
   getEta,
   getEvent,
-  INTEREST_TOPICS,
-  interestPatchEmpty,
-  mergeInterests,
+  interestsPreview,
   parseInterestPatch,
-  RARITIES,
+  savedEvents,
   searchEvents,
-  searchShape,
   setEventRarity,
-  type SearchParams,
 } from "./agent/context.js";
-import { INTERNAL_MCP_KEY, ISSUER, userFromClaims, verifySupabaseToken } from "./auth.js";
-import { safeEqual } from "./secrets.js";
+import { toolsFor, type ToolArgs, type ToolsOn } from "./agent/contracts.js";
 import { removeEventForUser, saveEventForUser } from "./calendar.js";
-import { clampCadence, runDiscovery, validQuery, wantsCommit } from "./discovery.js";
+import { clampCadence, runDiscovery, runSavedSearch } from "./discovery.js";
+import { safeEqual } from "./secrets.js";
 import { store } from "./store.js";
-import { CATEGORIES, type User } from "./types.js";
+import type { User } from "./types.js";
+import { apiOrigin } from "./urls.js";
 
 export const SERVER_INFO = { name: "grapevine", version: "0.1.0" } as const;
 
@@ -74,144 +73,7 @@ interface McpAuth extends Record<string, unknown> {
   via: "oauth" | "key" | "open";
 }
 
-// ---------------------------------------------------------------------------
-// Tool schemas — Zod, so FastMCP validates arguments before `execute` runs and
-// publishes the JSON Schema clients see in tools/list.
-// ---------------------------------------------------------------------------
-
-const lngLat = z
-  .union([z.tuple([z.number(), z.number()]), z.string()])
-  .describe('[lng, lat] array or "lng,lat" string');
-
-const SCHEMAS = {
-  search_events: z.object({
-    query: z.string().optional().describe("free-text match on title/description/venue/tags"),
-    // Derived from the shared registry — never a hand-copied list.
-    categories: z.array(z.enum(CATEGORIES)).optional(),
-    tags: z.array(z.string()).optional(),
-    date_from: z.string().optional().describe("YYYY-MM-DD (city-local)"),
-    date_to: z.string().optional().describe("YYYY-MM-DD (city-local)"),
-    free_only: z.boolean().optional(),
-    min_rating: z.number().optional().describe("1-5 buzz floor"),
-    exclude_promoted: z.boolean().optional().describe("default true — hides paid placements"),
-    near: z.string().optional().describe('place name or "lng,lat" to sort/filter by distance'),
-    max_km: z.number().optional(),
-    sort: z.enum(["time", "buzz", "distance"]).optional(),
-    limit: z.number().optional().describe("1-20, default 8"),
-  }),
-  get_event: z.object({ id: z.string() }),
-  get_eta: z.object({
-    to_event_id: z.string().optional(),
-    to: lngLat.optional().describe("alternative to to_event_id"),
-    from: lngLat.optional().describe("origin (default: city center)"),
-  }),
-  list_saved_events: z.object({}),
-  save_event: z.object({ event_id: z.string() }),
-  unsave_event: z.object({ event_id: z.string() }),
-  set_event_rarity: z.object({
-    event_id: z.string(),
-    rarity: z.enum(RARITIES),
-  }),
-  discover_events: z.object({
-    query: z
-      .string()
-      .describe('what to look for, e.g. "jazz shows this weekend" (the city is appended automatically)'),
-    dry_run: z
-      .boolean()
-      .optional()
-      .describe("default true — verify and report without writing; false commits verified events"),
-  }),
-  list_scheduled_searches: z.object({}),
-  schedule_search: z.object({
-    query: z.string().describe("3-200 chars"),
-    cadence_hours: z.number().optional().describe("hours between runs, 1-336 (default 24; 168 = weekly)"),
-  }),
-  unschedule_search: z.object({
-    id: z.string().optional(),
-    query: z.string().optional().describe("alternative to id — exact query text, case-insensitive"),
-  }),
-  // Same argument names as the in-app tool; the legacy camelCase spellings
-  // (addLoves, …) are still accepted by parseInterestPatch.
-  update_interests: z.object({
-    add_loves: z.array(z.string()).optional(),
-    add_avoids: z.array(z.string()).optional(),
-    remove_loves: z.array(z.string()).optional(),
-    remove_avoids: z.array(z.string()).optional(),
-  }),
-} as const;
-
-type ToolName = keyof typeof SCHEMAS;
-
-interface ToolSpec {
-  name: ToolName;
-  description: string;
-  /** MCP tool annotations — read-only tools are safe to call unprompted. */
-  readOnly?: boolean;
-}
-
-const TOOLS: ToolSpec[] = [
-  {
-    name: "search_events",
-    readOnly: true,
-    description:
-      "Search upcoming local events (community-sourced, next occurrence per event). Returns id, title, venue, time, price, buzz rating. Use the returned ids with the other tools.",
-  },
-  {
-    name: "get_event",
-    readOnly: true,
-    description:
-      "Full detail for one event: description, address, ticket link, rating rationale, coordinates.",
-  },
-  {
-    name: "get_eta",
-    readOnly: true,
-    description: "Driving ETA to an event (or coordinates), defaulting from the city center.",
-  },
-  {
-    name: "list_saved_events",
-    readOnly: true,
-    description: "Events on the linked Grapevine account's calendar.",
-  },
-  {
-    name: "save_event",
-    description:
-      "Save an event to the linked account's calendar (syncs to Google Calendar when connected).",
-  },
-  {
-    name: "unsave_event",
-    description: "Remove an event from the linked account's calendar.",
-  },
-  {
-    name: "set_event_rarity",
-    description:
-      "Set an event's rarity in the database (applies immediately). rare = one-off or annual specials (parades, fireworks, races, big festivals); notable = uncommon but repeats; common = weekly/regular. Rarity drives the app's Rare finds filter.",
-  },
-  {
-    name: "discover_events",
-    description:
-      "Search the open web for local events and add verified ones to the catalog. Each candidate is verified against the page it came from (dates, venue, a supporting quote) before anything is written; unverified candidates are reported with the rejection reason. Defaults to a dry run — call again with dry_run:false to commit, ideally after the user confirms.",
-  },
-  {
-    name: "list_scheduled_searches",
-    readOnly: true,
-    description:
-      "Saved web-discovery searches the server re-runs automatically, with cadence, last run time, and last result summary.",
-  },
-  {
-    name: "schedule_search",
-    description:
-      "Save a web-discovery search the server re-runs on a schedule (verified events land on the map automatically). Re-saving an existing query updates its cadence.",
-  },
-  {
-    name: "unschedule_search",
-    description:
-      "Delete a scheduled web-discovery search by id (from list_scheduled_searches) or exact query text.",
-  },
-  {
-    name: "update_interests",
-    description: `Tune the linked account's taste profile — writes immediately, so only call it after the user explicitly confirmed the change. Allowed topics: ${INTEREST_TOPICS.join(", ")}.`,
-  },
-];
+type McpTool = ToolsOn<"mcp">;
 
 function ok(payload: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }] };
@@ -234,67 +96,43 @@ async function boundUser(oauthUser: User | null): Promise<User> {
   return bound;
 }
 
-async function callTool(name: ToolName, args: Record<string, any>, oauthUser: User | null) {
+/** The executor behind each MCP tool. Arguments arrive already validated by the contract schema. */
+async function callTool<N extends McpTool>(name: N, args: ToolArgs<N>, oauthUser: User | null) {
   const ctx = await buildCtx();
   switch (name) {
     case "search_events": {
-      const result = await searchEvents(
-        {
-          query: args.query,
-          categories: args.categories,
-          tags: args.tags,
-          date_from: args.date_from,
-          date_to: args.date_to,
-          free_only: args.free_only,
-          min_rating: args.min_rating,
-          exclude_promoted: args.exclude_promoted,
-          near: args.near,
-          max_km: args.max_km,
-          sort: args.sort as SearchParams["sort"],
-          limit: args.limit,
-        },
-        ctx,
-      );
+      const result = await searchEvents(args as ToolArgs<"search_events">, ctx);
       return ok({ city: ctx.settings.city, tz: ctx.settings.tz, ...result });
     }
     case "get_event": {
-      const result = getEvent(String(args.id ?? ""), ctx);
+      const result = getEvent((args as ToolArgs<"get_event">).id, ctx);
       return "error" in result ? fail(String(result.error)) : ok(result);
     }
     case "get_eta": {
-      // Same payload the in-app tool takes ([lng,lat]); "lng,lat" strings
-      // stay accepted for existing clients.
+      const a = args as ToolArgs<"get_eta">;
       const result = await getEta(
-        {
-          to_event_id: args.to_event_id,
-          to: anyLngLat(args.to),
-          from: anyLngLat(args.from),
-        },
+        { to_event_id: a.to_event_id, to: anyLngLat(a.to), from: anyLngLat(a.from) },
         ctx,
       );
       return "error" in result ? fail(String(result.error)) : ok(result);
     }
     case "list_saved_events": {
       const user = await boundUser(oauthUser);
-      const entries = await store.userCalendar(user.id);
-      const events = entries
-        .map((entry) => ctx.byId.get(entry.eventId))
-        .filter((hit): hit is NonNullable<typeof hit> => !!hit)
-        .map(({ e, occ }) => searchShape(e, occ, ctx.settings.tz));
-      return ok({ count: events.length, events });
+      return ok(await savedEvents(user, ctx));
     }
     case "save_event":
     case "unsave_event": {
       const user = await boundUser(oauthUser);
-      const id = String(args.event_id ?? "");
+      const id = (args as ToolArgs<"save_event">).event_id;
       const result =
         name === "save_event"
           ? await saveEventForUser(user, id)
           : await removeEventForUser(user, id);
       return "error" in result ? fail(result.error) : ok(result);
     }
-    case "set_event_rarity": {
-      const result = await setEventRarity(args.event_id, args.rarity, ctx);
+    case "set_rarity": {
+      const a = args as ToolArgs<"set_rarity">;
+      const result = await setEventRarity(a.event_id, a.rarity, ctx);
       if ("error" in result) return fail(result.error);
       return ok({
         id: result.event.id,
@@ -304,9 +142,9 @@ async function callTool(name: ToolName, args: Record<string, any>, oauthUser: Us
       });
     }
     case "discover_events": {
-      const query = validQuery(args.query);
-      if (!query) return fail("query must be 3-200 chars");
-      const result = await runDiscovery({ query, commit: wantsCommit(args) });
+      const a = args as ToolArgs<"discover_events">;
+      const commit = a.dry_run === false;
+      const result = await runDiscovery({ query: a.query, commit });
       if (result.error) return fail(`discovery failed: ${result.error}`);
       // Compact shape: verdicts and evidence stay, page text never leaves.
       const shape = (c: (typeof result.verified)[number]) => ({
@@ -324,7 +162,7 @@ async function callTool(name: ToolName, args: Record<string, any>, oauthUser: Us
       });
       return ok({
         query: result.query,
-        dry_run: !wantsCommit(args),
+        dry_run: !commit,
         pages_read: result.pagesRead,
         extracted: result.extracted,
         added: result.added,
@@ -337,15 +175,32 @@ async function callTool(name: ToolName, args: Record<string, any>, oauthUser: Us
       return ok({ count: searches.length, searches });
     }
     case "schedule_search": {
-      const query = validQuery(args.query);
-      if (!query) return fail("query must be 3-200 chars");
-      const saved = await store.addDiscoverySearch(query, clampCadence(args.cadence_hours));
+      const a = args as ToolArgs<"schedule_search">;
+      const saved = await store.addDiscoverySearch(a.query, clampCadence(a.cadence_hours));
       return ok({ scheduled: true, ...saved });
     }
+    case "update_scheduled_search": {
+      const a = args as ToolArgs<"update_scheduled_search">;
+      if (a.active === undefined && a.cadence_hours === undefined) {
+        return fail("nothing to update: give active and/or cadence_hours");
+      }
+      const updated = await store.updateDiscoverySearch(a.id, {
+        ...(a.active !== undefined && { active: a.active }),
+        ...(a.cadence_hours !== undefined && { cadenceHours: clampCadence(a.cadence_hours) }),
+      });
+      return updated ? ok(updated) : fail("unknown scheduled search");
+    }
+    case "run_scheduled_search": {
+      const a = args as ToolArgs<"run_scheduled_search">;
+      const search = await store.discoverySearchById(a.id);
+      if (!search) return fail("unknown scheduled search");
+      return ok(await runSavedSearch(search));
+    }
     case "unschedule_search": {
-      let id = typeof args.id === "string" ? args.id : "";
-      if (!id && typeof args.query === "string") {
-        const q = args.query.trim().toLowerCase();
+      const a = args as ToolArgs<"unschedule_search">;
+      let id = a.id ?? "";
+      if (!id && a.query) {
+        const q = a.query.trim().toLowerCase();
         id = (await store.discoverySearches()).find((s) => s.query.toLowerCase() === q)?.id ?? "";
       }
       if (!id) return fail("give id or the exact query of a scheduled search");
@@ -353,20 +208,28 @@ async function callTool(name: ToolName, args: Record<string, any>, oauthUser: Us
       return deleted ? ok({ deleted: true, id }) : fail("unknown scheduled search");
     }
     case "update_interests": {
+      // Proposes only, like the in-app tool. The client shows the proposal
+      // and calls apply_interests with confirmed:true once the user agrees.
       const user = await boundUser(oauthUser);
-      const patch = parseInterestPatch(args);
-      if (interestPatchEmpty(patch))
-        return fail(`no valid topics — allowed: ${INTEREST_TOPICS.join(", ")}`);
-      const current = (user.prefs?.interests ?? {}) as { loves?: string[]; avoids?: string[] };
-      const { loves, avoids } = mergeInterests(current, patch);
-      const updated = await store.updateUserPrefs(user.id, { interests: { loves, avoids } });
-      return ok({ interests: updated?.prefs?.interests ?? { loves, avoids } });
+      const preview = await interestsPreview(user, parseInterestPatch(args as Record<string, unknown>));
+      if ("error" in preview) return fail(preview.error);
+      return ok({
+        ...preview,
+        confirmed: false,
+        note: "Nothing written. Show this to the user; call apply_interests with the same arguments and confirmed:true once they agree.",
+      });
+    }
+    case "apply_interests": {
+      const user = await boundUser(oauthUser);
+      const result = await applyInterests(user, parseInterestPatch(args as Record<string, unknown>));
+      if ("error" in result) return fail(result.error);
+      return ok({ ...result, confirmed: true });
     }
   }
 }
 
 // ---------------------------------------------------------------------------
-// Public identity — where MCP clients reach us
+// Public identity: where MCP clients reach us
 // ---------------------------------------------------------------------------
 
 /** "oauth" unless MCP_OPEN=1 restores the old unauthenticated behavior. */
@@ -374,32 +237,21 @@ export function mcpAuthMode(): "oauth" | "open" {
   return process.env.MCP_OPEN === "1" ? "open" : "oauth";
 }
 
-/**
- * The public origin MCP clients connect to. Unlike the old per-request
- * derivation, OAuth needs one stable value: the resource identifier a client
- * validates and sends as RFC 8707 `resource`. Set MCP_PUBLIC_URL whenever the
- * server sits behind a tunnel or reverse proxy.
- */
-function publicBase(): string {
-  const base = process.env.MCP_PUBLIC_URL ?? `http://localhost:${process.env.PORT ?? 8787}`;
-  return base.replace(/\/$/, "");
-}
+export const RESOURCE_METADATA_PATH = "/.well-known/oauth-protected-resource";
+export const AS_METADATA_PATH = "/.well-known/oauth-authorization-server";
+export const MCP_ENDPOINT = "/mcp";
 
-const RESOURCE_METADATA_PATH = "/.well-known/oauth-protected-resource";
-const AS_METADATA_PATH = "/.well-known/oauth-authorization-server";
-const MCP_ENDPOINT = "/mcp";
-
-/** Loopback port FastMCP's own HTTP server binds; Express proxies to it. */
-function internalPort(): number {
+/** Loopback port FastMCP's own HTTP server binds; mcp-proxy.ts forwards to it. */
+export function internalPort(): number {
   const explicit = Number(process.env.MCP_INTERNAL_PORT);
   if (Number.isFinite(explicit) && explicit > 0) return explicit;
   return Number(process.env.PORT ?? 8787) + 1;
 }
 
-const INTERNAL_HOST = "127.0.0.1";
+export const INTERNAL_HOST = "127.0.0.1";
 
 // ---------------------------------------------------------------------------
-// Auth — Supabase JWT first, shared agent key second
+// Auth: Supabase JWT first, shared agent key second
 // ---------------------------------------------------------------------------
 
 /**
@@ -417,8 +269,7 @@ async function authenticate(req: http.IncomingMessage): Promise<McpAuth | undefi
   }
   const agentKey = req.headers["x-agent-key"];
   const given = (Array.isArray(agentKey) ? agentKey[0] : agentKey) ?? bearer;
-  const key = process.env.AGENT_API_KEY;
-  if (safeEqual(given, key) || safeEqual(given, INTERNAL_MCP_KEY)) {
+  if (safeEqual(given, process.env.AGENT_API_KEY) || safeEqual(given, INTERNAL_MCP_KEY)) {
     return { user: null, via: "key" };
   }
   if (mcpAuthMode() === "open") return { user: null, via: "open" }; // explicit MCP_OPEN=1 opt-in
@@ -483,13 +334,13 @@ function buildServer(oauth: {
     name: SERVER_INFO.name,
     version: SERVER_INFO.version,
     instructions:
-      "Grapevine is a live map of local events. Search first, then use the returned ids for detail, travel time, and calendar saves. Writes act on the account the caller signed in with.",
+      "Grapevine is a live map of local events. Search first, then use the returned ids for detail, travel time, and calendar saves. Writes act on the account the caller signed in with; update_interests only proposes, apply_interests with confirmed:true writes.",
     authenticate,
     oauth: {
       enabled: true,
       authorizationServer: oauth.authorizationServer,
       protectedResource: {
-        resource: `${publicBase()}${MCP_ENDPOINT}`,
+        resource: `${apiOrigin()}${MCP_ENDPOINT}`,
         authorizationServers: [ISSUER],
         bearerMethodsSupported: ["header"],
         resourceName: "Grapevine",
@@ -498,18 +349,18 @@ function buildServer(oauth: {
     },
   });
 
-  for (const spec of TOOLS) {
+  for (const spec of toolsFor("mcp")) {
     server.addTool({
       name: spec.name,
       description: spec.description,
       annotations: {
         title: spec.name.replace(/_/g, " "),
-        readOnlyHint: spec.readOnly ?? false,
-        openWorldHint: spec.name === "discover_events",
+        readOnlyHint: spec.effect === "read",
+        openWorldHint: spec.openWorld ?? false,
       },
-      parameters: SCHEMAS[spec.name],
+      parameters: spec.schema,
       execute: (args, { session }) =>
-        callTool(spec.name, args as Record<string, any>, session?.user ?? null),
+        callTool(spec.name as McpTool, args as never, session?.user ?? null),
     });
   }
   return server;
@@ -519,7 +370,7 @@ let server: FastMCP<McpAuth | undefined> | null = null;
 
 /**
  * Boots FastMCP's HTTP listener on loopback. Called once from index.ts after
- * the Express app is listening; the router below proxies to it.
+ * the Express app is listening; mcp-proxy.ts forwards to it.
  */
 export async function startMcpServer(): Promise<void> {
   if (server) return;
@@ -555,82 +406,6 @@ export async function startMcpServer(): Promise<void> {
     },
   });
   console.log(
-    `[grapevine] mcp (fastmcp) on ${publicBase()}${MCP_ENDPOINT} — auth: ${mcpAuthMode()}`,
+    `[grapevine] mcp (fastmcp) on ${apiOrigin()}${MCP_ENDPOINT} — auth: ${mcpAuthMode()}`,
   );
 }
-
-// ---------------------------------------------------------------------------
-// Express front door — one public origin, forwarded to the FastMCP listener
-// ---------------------------------------------------------------------------
-
-/** Headers that describe the hop, not the message. */
-const HOP_BY_HOP = new Set([
-  "connection",
-  "keep-alive",
-  "proxy-authenticate",
-  "proxy-authorization",
-  "te",
-  "trailer",
-  "transfer-encoding",
-  "upgrade",
-]);
-
-/** Pipe one request through to FastMCP, streaming the response back. */
-function forward(req: Request, res: Response, path: string) {
-  const port = internalPort();
-  const headers: Record<string, string | string[]> = {
-    ...(req.headers as Record<string, string | string[]>),
-    host: `${INTERNAL_HOST}:${port}`,
-  };
-  for (const name of HOP_BY_HOP) delete headers[name];
-
-  const upstream = http.request(
-    { host: INTERNAL_HOST, port, method: req.method, path, headers },
-    (up) => {
-      res.status(up.statusCode ?? 502);
-      for (const [name, value] of Object.entries(up.headers)) {
-        if (value !== undefined && !HOP_BY_HOP.has(name)) res.setHeader(name, value);
-      }
-      if (!res.getHeader("access-control-allow-origin")) {
-        res.setHeader("Access-Control-Allow-Origin", "*");
-      }
-      up.pipe(res);
-    },
-  );
-  upstream.on("error", (err) => {
-    if (res.headersSent) return res.end();
-    res.status(503).json({
-      jsonrpc: "2.0",
-      error: { code: -32603, message: `mcp server unavailable: ${String(err).slice(0, 160)}` },
-      id: null,
-    });
-  });
-  // A client that hangs up must not leave a tool call running upstream.
-  res.on("close", () => upstream.destroy());
-  req.pipe(upstream);
-}
-
-export const mcp = Router();
-
-// The MCP endpoint itself. index.ts leaves this path unparsed so the JSON-RPC
-// body streams straight through.
-mcp.all(MCP_ENDPOINT, (req, res) => forward(req, res, req.originalUrl));
-
-/**
- * Discovery documents, served by FastMCP:
- *   - RFC 9728 protected-resource metadata at the bare path and the
- *     /mcp-suffixed variant clients derive from the resource URL's path.
- *   - The /mcp/-prefixed alias: mcp-proxy builds its 401 challenge by
- *     appending the well-known path to the resource identifier, so the
- *     challenge points at <origin>/mcp/.well-known/oauth-protected-resource.
- *     Mapping it back keeps the canonical resource id *and* a URL that
- *     resolves for every client.
- *   - RFC 8414 authorization-server metadata, a compatibility shim for
- *     pre-2025-06-18 clients that fetch it straight from the MCP origin.
- */
-mcp.get(`${MCP_ENDPOINT}${RESOURCE_METADATA_PATH}`, (req, res) =>
-  forward(req, res, `${RESOURCE_METADATA_PATH}${MCP_ENDPOINT}`),
-);
-mcp.get([RESOURCE_METADATA_PATH, `${RESOURCE_METADATA_PATH}${MCP_ENDPOINT}`, AS_METADATA_PATH], (req, res) =>
-  forward(req, res, req.originalUrl),
-);
