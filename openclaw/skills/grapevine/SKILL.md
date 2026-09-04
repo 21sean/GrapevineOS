@@ -195,7 +195,8 @@ Writes to the linked account: confirm with the user first.
 ### list_scheduled_searches
 
 Saved web-discovery searches the server re-runs automatically, with cadence,
-last run time and last result summary.
+last run time and last result summary. In the app this lists the signed-in
+user's own watches.
 
 ```
 GET /api/ext/v1/discovery/searches

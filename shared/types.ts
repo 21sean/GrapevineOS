@@ -152,6 +152,8 @@ export interface DiscoverySearch {
   query: string;
   cadenceHours: number; // hours between runs (1–336)
   active: boolean;
+  /** Owner when a signed-in user scheduled it (a "watch"); null for the operator's. */
+  userId?: string | null;
   createdAt: string; // ISO 8601
   lastRunAt?: string; // ISO 8601 — unset until the first run
   lastStatus?: string; // short human summary of the last run
@@ -892,6 +894,24 @@ export interface GcalEventPatch {
 }
 
 // ---------------------------------------------------------------------------
+// What the chat can do right now (GET /api/agent/capabilities, public)
+// ---------------------------------------------------------------------------
+
+export interface AgentCapabilities {
+  /** Who answers: the local Ollama model or a subscription CLI. */
+  provider: LlmProviderId;
+  /** The Ollama tag when provider is ollama; empty for a CLI, which uses its own default. */
+  model: string;
+  /** Whether the answering model can call tools at all. */
+  tools: boolean;
+  /** The toolbox that provider gets, in the order the agent sees it. */
+  toolbox: { name: string; description: string; effect: "read" | "ui" | "propose" | "write" }[];
+  rails: { mode: GuardrailMode; classifier: "ready" | "failing-open" | "off" };
+  /** Where an MCP client (Claude Desktop, claude.ai) connects to the same tools. */
+  mcp: { url: string; auth: "oauth" | "open" };
+}
+
+// ---------------------------------------------------------------------------
 // The agent stream: what POST /api/agent/chat writes, one JSON line each
 // ---------------------------------------------------------------------------
 
@@ -899,6 +919,8 @@ export interface GcalEventPatch {
 export type AgentAction =
   | { kind: "highlight"; eventIds: string[]; fit?: boolean }
   | { kind: "proposeCalendar"; eventIds: string[]; note?: string }
+  /** propose_watch: a card that schedules a recurring web-discovery search the user owns. */
+  | { kind: "proposeWatch"; query: string; cadenceHours: number; note?: string }
   /** The agent edited an event server-side (set_rarity); the client swaps in
    * the fresh copy so badges and filters update without a reload. */
   | { kind: "eventPatched"; event: CityEvent }

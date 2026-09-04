@@ -178,3 +178,10 @@ export function statusLabel(e: CityEvent, tz: string, now: Date): string {
   if (mins <= 90) return `Starts in ${mins} min`
   return `${dayLabel(occ.start, tz, now)} · ${fmtTime(occ.start, tz)}`
 }
+
+/** "every day", "every 2 days", "every week": a watch cadence in words. */
+export function cadenceLabel(hours: number): string {
+  if (hours % 168 === 0) return hours === 168 ? "every week" : `every ${hours / 168} weeks`
+  if (hours % 24 === 0) return hours === 24 ? "every day" : `every ${hours / 24} days`
+  return hours === 1 ? "every hour" : `every ${hours} hours`
+}

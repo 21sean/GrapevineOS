@@ -401,6 +401,7 @@ export type Database = {
           last_status: string
           query: string
           query_key: string | null
+          user_id: string | null
         }
         Insert: {
           active?: boolean
@@ -411,6 +412,7 @@ export type Database = {
           last_status?: string
           query: string
           query_key?: string | null
+          user_id?: string | null
         }
         Update: {
           active?: boolean
@@ -421,8 +423,17 @@ export type Database = {
           last_status?: string
           query?: string
           query_key?: string | null
+          user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "discovery_searches_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       event_reactions: {
         Row: {

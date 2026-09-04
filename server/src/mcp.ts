@@ -185,6 +185,13 @@ async function callTool<N extends McpTool>(name: N, args: ToolArgs<N>, oauthUser
     }
     case "schedule_search": {
       const a = args as ToolArgs<"schedule_search">;
+      // A person who signed in through OAuth owns what they schedule (a watch,
+      // with the per-account cap); a key-authed script schedules for the map.
+      if (oauthUser) {
+        const result = await store.addWatch(oauthUser.id, a.query, clampCadence(a.cadence_hours), 5);
+        if ("error" in result) return fail(result.error);
+        return ok({ scheduled: true, ...result.watch });
+      }
       const saved = await store.addDiscoverySearch(a.query, clampCadence(a.cadence_hours));
       return ok({ scheduled: true, ...saved });
     }

@@ -28,8 +28,10 @@ import {
 } from "@/components/ui/sheet"
 import { Spinner } from "@/components/ui/spinner"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { CapabilitiesPopover } from "@/components/chat/Capabilities"
 import { ModelEffortPicker } from "@/components/chat/ModelEffortPicker"
 import { CalendarCard, InterestsCard } from "@/components/chat/ProposalCards"
+import { WatchCard } from "@/components/chat/WatchCard"
 import { EVENT_LINK_RE, RichText } from "@/components/chat/RichText"
 import { ThreadHistory } from "@/components/chat/ThreadHistory"
 import { useAgentChat, type ChatItem } from "@/hooks/useAgentChat"
@@ -305,9 +307,10 @@ function Conversation({
           "flex shrink-0 items-center gap-2 py-2 pr-2",
           // The picker row already draws the top divider when it's shown.
           chatProvider === "claude" ? "" : "border-t border-border/60",
-          items.length > 0 || user ? "pl-2" : "pl-4",
+          "pl-2",
         )}
       >
+        <CapabilitiesPopover />
         {user && (
           <Hint label={showHistory ? "Back to chat" : "Chat history"}>
             <Button
@@ -528,6 +531,12 @@ function Message({
       {item.proposals.map((p, i) =>
         p.kind === "calendar" ? (
           <CalendarCard
+            key={i}
+            proposal={p}
+            onState={(s) => chat.setProposalState(itemIdx, i, s)}
+          />
+        ) : p.kind === "watch" ? (
+          <WatchCard
             key={i}
             proposal={p}
             onState={(s) => chat.setProposalState(itemIdx, i, s)}

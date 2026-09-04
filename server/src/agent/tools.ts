@@ -18,7 +18,8 @@
 import { tool } from "@langchain/core/tools";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { saveEventForUser } from "../calendar.js";
-import { runDiscovery, summarizeRejections } from "../discovery.js";
+import { clampCadence, runDiscovery, summarizeRejections } from "../discovery.js";
+import { store } from "../store.js";
 import type { AgentFrame, Filters } from "../types.js";
 import { toolsFor, type ToolArgs, type ToolsOn } from "./contracts.js";
 import {
@@ -155,6 +156,47 @@ export function makeTools(ctx: AgentCtx, chat: ChatContext) {
         ok: true,
         applied: { reset: Boolean(input.reset), ...patch },
         note: "The user's map and list now show only matching events. They see a notice and can undo.",
+      });
+    },
+
+    list_scheduled_searches: async () => {
+      const user = chat.sessionUser;
+      if (!user) {
+        return JSON.stringify({
+          error: "the user is signed out — watches belong to an account; suggest signing in",
+        });
+      }
+      const watches = await store.discoverySearches({ userId: user.id });
+      return JSON.stringify({
+        count: watches.length,
+        watches: watches.map((w) => ({
+          id: w.id,
+          query: w.query,
+          cadence_hours: w.cadenceHours,
+          active: w.active,
+          last_run_at: w.lastRunAt ?? null,
+          last_status: w.lastStatus ?? null,
+        })),
+      });
+    },
+
+    propose_watch: async (input, config) => {
+      const cadenceHours = clampCadence(input.cadence_hours);
+      emit(config, {
+        type: "action",
+        action: {
+          kind: "proposeWatch",
+          query: input.query,
+          cadenceHours,
+          ...(input.note ? { note: input.note.slice(0, 120) } : {}),
+        },
+      });
+      return JSON.stringify({
+        ok: true,
+        proposed: { query: input.query, cadence_hours: cadenceHours },
+        note: chat.sessionUser
+          ? "Watch card shown; the user confirms. Do not claim it is set."
+          : "Watch card shown; the user is signed out and will be asked to sign in first.",
       });
     },
 

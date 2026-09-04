@@ -26,6 +26,7 @@ import { push, startPushScheduler } from "./push.js";
 import { errorHandler, notFound, requestId } from "./request-id.js";
 import { startRetentionSweep } from "./retention.js";
 import { alerts } from "./routes/alerts.js";
+import { capabilities } from "./routes/capabilities.js";
 import { discoveryRouter } from "./routes/discovery.js";
 import { events } from "./routes/events.js";
 import { health } from "./routes/health.js";
@@ -35,6 +36,7 @@ import { mapbox } from "./routes/mapbox.js";
 import { ollama } from "./routes/ollama.js";
 import { providers } from "./routes/providers.js";
 import { settings } from "./routes/settings.js";
+import { watches } from "./routes/watches.js";
 import { validateSecrets } from "./secrets.js";
 import { VERSION } from "./version.js";
 
@@ -63,8 +65,10 @@ app.use(auth);
 // ---------- calendar (saved events, Google sync, ICS feed) ----------
 app.use(calendar);
 
-// ---------- agent ("Ask Grapevine" chat, and the external tools API) ----------
+// ---------- agent ("Ask Grapevine" chat, what it can do, the external tools API) ----------
 app.use(chat);
+app.use(capabilities);
+app.use(watches);
 app.use(ext);
 
 // ---------- MCP server (Grapevine tools for Claude and other MCP clients) ----------

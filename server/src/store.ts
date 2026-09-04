@@ -249,6 +249,7 @@ function rowToDiscoverySearch(r: Tables<"discovery_searches">): DiscoverySearch 
     createdAt: r.created_at,
     lastRunAt: r.last_run_at ?? undefined,
     lastStatus: r.last_status || undefined,
+    userId: r.user_id ?? null,
   };
 }
 
@@ -589,13 +590,55 @@ export const store = {
 
   // ---------- discovery searches (scheduled web searches) ----------
 
-  async discoverySearches(): Promise<DiscoverySearch[]> {
+  /** All saved searches, or one user's watches when `userId` is given. */
+  async discoverySearches(opts: { userId?: string } = {}): Promise<DiscoverySearch[]> {
+    let query = db.from("discovery_searches").select("*");
+    if (opts.userId) query = query.eq("user_id", opts.userId);
+    const { data } = await query.order("created_at", { ascending: true }).throwOnError();
+    return data.map(rowToDiscoverySearch);
+  },
+
+  /**
+   * A user's watch: the same row the operator's searches use, with an owner
+   * and a cap. One row per distinct query on the whole map (the query_key
+   * unique), so a topic somebody else already watches is reported rather than
+   * duplicated: it runs for everyone either way.
+   */
+  async addWatch(
+    userId: string,
+    query: string,
+    cadenceHours: number,
+    max: number,
+  ): Promise<{ watch: DiscoverySearch } | { error: string; code: 409 | 429 }> {
+    const mine = await this.discoverySearches({ userId });
+    const key = query.trim().toLowerCase();
+    const existing = mine.find((w) => w.query.trim().toLowerCase() === key);
+    if (existing) {
+      const updated = await this.updateDiscoverySearch(existing.id, { cadenceHours, active: true });
+      return { watch: updated ?? existing };
+    }
+    if (mine.filter((w) => w.active).length >= max) {
+      return { error: `you already keep ${max} watches; pause or remove one first`, code: 429 };
+    }
+    const { data: taken } = await db
+      .from("discovery_searches")
+      .select("id")
+      .eq("query_key", key)
+      .maybeSingle()
+      .throwOnError();
+    if (taken) {
+      return {
+        error: "that search is already scheduled on this map and runs for everyone",
+        code: 409,
+      };
+    }
     const { data } = await db
       .from("discovery_searches")
-      .select("*")
-      .order("created_at", { ascending: true })
+      .insert({ query: query.trim(), cadence_hours: cadenceHours, active: true, user_id: userId })
+      .select()
+      .single()
       .throwOnError();
-    return data.map(rowToDiscoverySearch);
+    return { watch: rowToDiscoverySearch(data) };
   },
 
   async discoverySearchById(id: string): Promise<DiscoverySearch | undefined> {
@@ -622,30 +665,28 @@ export const store = {
     return rowToDiscoverySearch(data);
   },
 
+  /** With `ownerId`, only that user's row is touched: a watch, not the operator's search. */
   async updateDiscoverySearch(
     id: string,
     patch: Partial<Pick<DiscoverySearch, "cadenceHours" | "active">>,
+    ownerId?: string,
   ): Promise<DiscoverySearch | undefined> {
-    const { data } = await db
+    let query = db
       .from("discovery_searches")
       .update({
         ...(patch.cadenceHours !== undefined && { cadence_hours: patch.cadenceHours }),
         ...(patch.active !== undefined && { active: patch.active }),
       })
-      .eq("id", id)
-      .select()
-      .maybeSingle()
-      .throwOnError();
+      .eq("id", id);
+    if (ownerId) query = query.eq("user_id", ownerId);
+    const { data } = await query.select().maybeSingle().throwOnError();
     return data ? rowToDiscoverySearch(data) : undefined;
   },
 
-  async deleteDiscoverySearch(id: string): Promise<boolean> {
-    const { data } = await db
-      .from("discovery_searches")
-      .delete()
-      .eq("id", id)
-      .select("id")
-      .throwOnError();
+  async deleteDiscoverySearch(id: string, ownerId?: string): Promise<boolean> {
+    let query = db.from("discovery_searches").delete().eq("id", id);
+    if (ownerId) query = query.eq("user_id", ownerId);
+    const { data } = await query.select("id").throwOnError();
     return data.length > 0;
   },
 

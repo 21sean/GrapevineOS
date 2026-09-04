@@ -286,6 +286,25 @@ export const CONTRACTS = {
     label: () => "Drafting a calendar save",
   }),
 
+  propose_watch: contract({
+    name: "propose_watch",
+    description:
+      'Offer to keep watching the web for a topic on the user\'s behalf: a card the user confirms schedules a recurring discovery search (daily by default) whose verified finds land on the map automatically. Use when the user wants to be kept posted ("watch for jazz shows", "keep looking for pop-ups"), not for a one-off question. The user confirms; never claim a watch is set.',
+    schema: z.object({
+      query,
+      cadence_hours: z
+        .number()
+        .min(CADENCE_MIN_HOURS)
+        .max(CADENCE_MAX_HOURS)
+        .describe(`Hours between runs (default ${CADENCE_DEFAULT_HOURS}; 168 = weekly)`)
+        .optional(),
+      note: z.string().describe('Short label for the card, e.g. "Jazz watch"').optional(),
+    }),
+    surfaces: ["graph"],
+    effect: "propose",
+    label: (a) => (a.query ? `Offering a watch: ${clip(a.query, 50)}` : "Offering a watch"),
+  }),
+
   save_calendar: contract({
     name: "save_calendar",
     description:
@@ -368,11 +387,12 @@ export const CONTRACTS = {
   list_scheduled_searches: contract({
     name: "list_scheduled_searches",
     description:
-      "Saved web-discovery searches the server re-runs automatically, with cadence, last run time and last result summary.",
+      "Saved web-discovery searches the server re-runs automatically, with cadence, last run time and last result summary. In the app this lists the signed-in user's own watches.",
     schema: z.object({}),
-    surfaces: ["mcp", "rest"],
+    surfaces: ["graph", "mcp", "rest"],
     effect: "read",
-    label: () => "Listing scheduled searches",
+    label: () => "Listing your watches",
+    detail: (r) => (typeof r.count === "number" ? plural(r.count, "watch") : undefined),
   }),
 
   schedule_search: contract({

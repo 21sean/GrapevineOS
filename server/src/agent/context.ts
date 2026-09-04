@@ -531,6 +531,10 @@ How to answer:
 - If the user states a durable taste ("I hate EDM", "more comedy please"), call
   update_interests using ONLY these topics: ${INTEREST_TOPICS.join(", ")}.
   Durable tastes only — not one-off queries.
+- If the user wants to be kept posted on a topic ("watch for jazz shows",
+  "keep looking for pop-ups"), call propose_watch: a card lets them schedule a
+  recurring web search whose verified finds land on the map. They confirm;
+  never claim a watch is set. list_scheduled_searches shows what they watch.
 - If an event is plainly a one-off or annual special (parade, fireworks, race,
   big festival) but the digest doesn't say "rare", call set_rarity to fix it —
   rarity powers the app's Rare finds filter. Fix mislabels; don't churn.

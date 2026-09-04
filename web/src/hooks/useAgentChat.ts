@@ -28,6 +28,13 @@ export interface ToolRun {
 export type Proposal =
   | { kind: "calendar"; eventIds: string[]; note?: string; state: "pending" | "saved" | "dismissed" }
   | {
+      kind: "watch"
+      query: string
+      cadenceHours: number
+      note?: string
+      state: "pending" | "scheduled" | "dismissed"
+    }
+  | {
       kind: "interests"
       addLoves: string[]
       addAvoids: string[]
@@ -131,6 +138,19 @@ export function useAgentChat() {
               proposals: [
                 ...it.proposals,
                 { kind: "calendar", eventIds: a.eventIds, note: a.note, state: "pending" },
+              ],
+            }))
+          } else if (a.kind === "proposeWatch") {
+            patchLast((it) => ({
+              proposals: [
+                ...it.proposals,
+                {
+                  kind: "watch",
+                  query: a.query,
+                  cadenceHours: a.cadenceHours,
+                  note: a.note,
+                  state: "pending",
+                },
               ],
             }))
           } else if (a.kind === "proposeInterests") {

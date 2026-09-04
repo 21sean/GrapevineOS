@@ -1,5 +1,6 @@
 import { accessToken } from "./supabase"
 import type {
+  AgentCapabilities,
   AgentFrame,
   CalendarStatus,
   ChatMessage,
@@ -588,4 +589,36 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     }).then((r) => json<{ mode: GuardrailMode; threshold: number; note?: string }>(r)),
+
+  // ---------- what the chat can do, and the user's watches ----------
+
+  /** Who answers, which tools it has, whether the rails are on, the MCP URL. Public. */
+  capabilities: () =>
+    fetch("/api/agent/capabilities").then((r) => json<AgentCapabilities>(r)),
+
+  /** The signed-in user's scheduled web searches ("watches") and the cap. */
+  watches: () =>
+    fetch("/api/me/watches").then((r) => json<{ watches: DiscoverySearch[]; max: number }>(r)),
+
+  addWatch: (query: string, cadenceHours: number) =>
+    fetch("/api/me/watches", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, cadence_hours: cadenceHours }),
+    }).then((r) => json<DiscoverySearch>(r)),
+
+  patchWatch: (id: string, patch: { active?: boolean; cadenceHours?: number }) =>
+    fetch(`/api/me/watches/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...(patch.active !== undefined && { active: patch.active }),
+        ...(patch.cadenceHours !== undefined && { cadence_hours: patch.cadenceHours }),
+      }),
+    }).then((r) => json<DiscoverySearch>(r)),
+
+  deleteWatch: (id: string) =>
+    fetch(`/api/me/watches/${encodeURIComponent(id)}`, { method: "DELETE" }).then((r) =>
+      json<{ ok: boolean }>(r),
+    ),
 }

@@ -26,8 +26,10 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { CalendarSync } from "@/components/account/CalendarSync"
+import { ClaudeHandoff } from "@/components/account/ClaudeHandoff"
 import { InboxHistory } from "@/components/account/InboxHistory"
 import { SectionHeader } from "@/components/account/SectionHeader"
+import { Watches } from "@/components/account/Watches"
 import { useClock } from "@/hooks/useClock"
 import { usePush } from "@/hooks/usePush"
 import { api } from "@/lib/api"
@@ -65,6 +67,7 @@ export function AccountDialog({
   const setFilters = useGrapevine((s) => s.setFilters)
   const setInterestsOpen = useGrapevine((s) => s.setInterestsOpen)
   const setAdminOpen = useGrapevine((s) => s.setAdminOpen)
+  const setAskOpen = useGrapevine((s) => s.setAskOpen)
   const signOut = useGrapevine((s) => s.signOut)
   const pinnedIds = useGrapevine((s) => s.pinnedIds)
   const togglePin = useGrapevine((s) => s.togglePin)
@@ -270,6 +273,9 @@ export function AccountDialog({
           <CalendarSync
             onOpenCalendar={() => handOff(() => setCalendarOpen(true))}
           />
+
+          {/* watches: the scheduled web searches this account keeps */}
+          <Watches onOpenChat={() => handOff(() => setAskOpen(true))} />
 
           {/* notifications (per-browser Web Push) — folded by default */}
           <section>
@@ -514,6 +520,9 @@ export function AccountDialog({
               )}
             </div>
           </section>
+
+          {/* the same tools from Claude, on a schedule */}
+          <ClaudeHandoff />
 
           {/* inbox history */}
           <InboxHistory
