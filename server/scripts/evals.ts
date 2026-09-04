@@ -26,13 +26,22 @@ const values = (name: string) =>
   argv.flatMap((a, i) => (a === `--${name}` && argv[i + 1] ? [argv[i + 1]] : []));
 
 const c = process.stdout.isTTY
-  ? { dim: "\x1b[2m", red: "\x1b[31m", green: "\x1b[32m", yellow: "\x1b[33m", bold: "\x1b[1m", off: "\x1b[0m" }
+  ? {
+      dim: "\x1b[2m",
+      red: "\x1b[31m",
+      green: "\x1b[32m",
+      yellow: "\x1b[33m",
+      bold: "\x1b[1m",
+      off: "\x1b[0m",
+    }
   : { dim: "", red: "", green: "", yellow: "", bold: "", off: "" };
 
 if (flag("list")) {
   for (const s of SUITES) {
     const cases = await Promise.resolve(s.cases()).catch(() => []);
-    console.log(`${s.id.padEnd(12)} ${String(cases.length).padStart(3)} cases  ${c.dim}${s.what}${c.off}`);
+    console.log(
+      `${s.id.padEnd(12)} ${String(cases.length).padStart(3)} cases  ${c.dim}${s.what}${c.off}`,
+    );
   }
   process.exit(0);
 }
@@ -56,7 +65,11 @@ const run = await runEvals({
     if (frame.type === "case") {
       const r = frame.result;
       const mark =
-        r.status === "pass" ? `${c.green}pass${c.off}` : r.status === "skipped" ? `${c.yellow}skip${c.off}` : `${c.red}FAIL${c.off}`;
+        r.status === "pass"
+          ? `${c.green}pass${c.off}`
+          : r.status === "skipped"
+            ? `${c.yellow}skip${c.off}`
+            : `${c.red}FAIL${c.off}`;
       console.log(`  ${mark}  ${r.name}`);
       if (r.status !== "pass" || process.env.EVALS_VERBOSE) {
         console.log(`        ${c.dim}${r.detail}${c.off}`);
@@ -78,9 +91,12 @@ if (json) {
     stamped.failed ? `${c.red}${stamped.failed} failed${c.off}` : "",
     stamped.skipped ? `${c.yellow}${stamped.skipped} skipped${c.off}` : "",
   ].filter(Boolean);
-  console.log(`\n${bits.join(", ")} in ${(stamped.ms / 1000).toFixed(1)}s  ${c.dim}case set ${stamped.caseSetHash}${c.off}`);
+  console.log(
+    `\n${bits.join(", ")} in ${(stamped.ms / 1000).toFixed(1)}s  ${c.dim}case set ${stamped.caseSetHash}${c.off}`,
+  );
   for (const s of stamped.suites) {
-    if (s.status === "skipped" && s.skipReason) console.log(`${c.yellow}skipped${c.off} ${s.title}: ${s.skipReason}`);
+    if (s.status === "skipped" && s.skipReason)
+      console.log(`${c.yellow}skipped${c.off} ${s.title}: ${s.skipReason}`);
   }
   if (stamped.regressions?.length) {
     console.log(`\n${c.red}regressed since the last comparable run:${c.off}`);

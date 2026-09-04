@@ -82,7 +82,10 @@ export async function ensureTesters(): Promise<Tester[]> {
   const { data: existing } = await db
     .from("users")
     .select("id, email")
-    .in("email", owners.map((t) => t.email))
+    .in(
+      "email",
+      owners.map((t) => t.email),
+    )
     .throwOnError();
   const byEmail = new Map(existing.map((u) => [u.email, u.id]));
 

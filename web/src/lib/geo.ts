@@ -24,7 +24,10 @@ function inRing(pt: [number, number], ring: [number, number][]): boolean {
 }
 
 /** Inside the outer ring and outside every hole, for any of the polygons. */
-export function pointInPolygons(pt: [number, number], polygons: PolygonRings[]): boolean {
+export function pointInPolygons(
+  pt: [number, number],
+  polygons: PolygonRings[]
+): boolean {
   for (const rings of polygons) {
     if (!rings.length) continue
     if (!inRing(pt, rings[0])) continue

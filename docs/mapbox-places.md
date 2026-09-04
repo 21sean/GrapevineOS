@@ -17,17 +17,17 @@ The Details endpoint returns a Place record for a `mapbox_id`: a global set of
 over 250 million POIs. Grapevine renders a projection of it under each event,
 in the detail panel:
 
-| Field on the record | Where it shows up |
-|---|---|
-| `name`, `primary_category`, `attributes.price_level` | venue heading and subtitle |
-| `opening_hours` (OSM format) | "Open now, until 2 AM" |
-| `photos[]` | photo strip (venue's own site, not a promoter's poster) |
-| `attributes.accommodation_*` | accessibility list |
-| `attributes.feature_*`, `attributes.service_*` | amenity badges |
-| `telemetry.activity_score` | the busy-times chart |
-| `score.popularity` | "Well known locally" |
-| `phone`, `website` | call and venue-site buttons |
-| `permanently_closed` | closure warning |
+| Field on the record                                  | Where it shows up                                       |
+| ---------------------------------------------------- | ------------------------------------------------------- |
+| `name`, `primary_category`, `attributes.price_level` | venue heading and subtitle                              |
+| `opening_hours` (OSM format)                         | "Open now, until 2 AM"                                  |
+| `photos[]`                                           | photo strip (venue's own site, not a promoter's poster) |
+| `attributes.accommodation_*`                         | accessibility list                                      |
+| `attributes.feature_*`, `attributes.service_*`       | amenity badges                                          |
+| `telemetry.activity_score`                           | the busy-times chart                                    |
+| `score.popularity`                                   | "Well known locally"                                    |
+| `phone`, `website`                                   | call and venue-site buttons                             |
+| `permanently_closed`                                 | closure warning                                         |
 
 `telemetry.activity_score` is the interesting one. It is hourly busyness on a
 0 to 100 scale, keyed `mon` through `sun` with 24 entries each, in local time,
@@ -87,10 +87,10 @@ are two hops:
 How far a candidate may sit from the event depends on how much its name proves,
 because an event's coordinates are corroboration rather than truth:
 
-| Candidate name vs the venue | Accepted within |
-|---|---|
+| Candidate name vs the venue      | Accepted within     |
+| -------------------------------- | ------------------- |
 | exact, or one contains the other | 25 km (metro scale) |
-| unrelated | 500 m |
+| unrelated                        | 500 m               |
 
 Candidates are then ranked name-first, distance-second, so a nearby exact match
 still beats a far one.
@@ -111,10 +111,10 @@ for them, and letting them roam would put a POI across town on the card.
 Both hops are cached in Postgres, in two tables that also carry the geocoding
 cache (`supabase/migrations/20260729170913_places_cache.sql`):
 
-| Table | Key | Holds |
-|---|---|---|
+| Table           | Key             | Holds                                                                                                                                        |
+| --------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `place_lookups` | `(kind, query)` | `kind='geocode'`: lng/lat for a venue string (this was `geocode_cache`). `kind='poi'`: the Search Box `mapbox_id` for a venue near an event. |
-| `place_details` | `mapbox_id` | The projected record the card renders. |
+| `place_details` | `mapbox_id`     | The projected record the card renders.                                                                                                       |
 
 Keying details by `mapbox_id` rather than by query is the point: two events at
 the same bar, spelled two different ways, resolve to one id and share one
@@ -128,7 +128,7 @@ or a remembered miss. Concurrent opens of the same cold venue are deduped in
 process, so a link doing the rounds buys the record once.
 
 Retention: hits live forever — both the resolution (venues don't move) and the
-record itself. Only *misses* are purged, after 90 days, so a transient Mapbox
+record itself. Only _misses_ are purged, after 90 days, so a transient Mapbox
 failure can't pin a venue as unresolvable and a POI that gains a record later
 is picked up.
 

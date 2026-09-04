@@ -134,9 +134,7 @@ export async function runEvals(opts: RunOptions = {}): Promise<EvalRun> {
   const startedAt = new Date();
   const t0 = Date.now();
 
-  const chosen = opts.only?.length
-    ? SUITES.filter((s) => opts.only!.includes(s.id))
-    : SUITES;
+  const chosen = opts.only?.length ? SUITES.filter((s) => opts.only!.includes(s.id)) : SUITES;
 
   try {
     const results: EvalSuiteResult[] = [];
@@ -153,14 +151,21 @@ export async function runEvals(opts: RunOptions = {}): Promise<EvalRun> {
         cases = await suite.cases();
       } catch (err) {
         const why = err instanceof Error ? err.message : String(err);
-        const result = summarize(suite, [], Date.now() - suiteStart, safeDetail(`cases failed to build: ${why}`));
+        const result = summarize(
+          suite,
+          [],
+          Date.now() - suiteStart,
+          safeDetail(`cases failed to build: ${why}`),
+        );
         results.push(result);
         emit({ type: "suite-done", result });
         continue;
       }
       shape.push({ id: suite.id, caseIds: cases.map((c) => c.id) });
 
-      const unavailable = suite.available ? await suite.available().catch((err) => safeDetail(String(err))) : null;
+      const unavailable = suite.available
+        ? await suite.available().catch((err) => safeDetail(String(err)))
+        : null;
       if (unavailable) {
         const result = summarize(suite, [], Date.now() - suiteStart, unavailable);
         results.push(result);
@@ -190,7 +195,8 @@ export async function runEvals(opts: RunOptions = {}): Promise<EvalRun> {
       ms: Date.now() - t0,
       // A skipped suite never makes the run green: an unrun check is unknown,
       // and "unknown" must not be allowed to look like "fine".
-      status: failed > 0 ? "fail" : results.some((s) => s.status === "skipped") ? "skipped" : "pass",
+      status:
+        failed > 0 ? "fail" : results.some((s) => s.status === "skipped") ? "skipped" : "pass",
       passed,
       failed,
       skipped,

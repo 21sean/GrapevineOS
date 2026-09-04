@@ -41,7 +41,10 @@ function shareLink(e: GcalEvent): string {
 
 const STATUS_META: Record<string, { label: string; className?: string }> = {
   accepted: { label: "Going", className: "border-live/50 text-live" },
-  declined: { label: "Declined", className: "border-destructive/50 text-destructive" },
+  declined: {
+    label: "Declined",
+    className: "border-destructive/50 text-destructive",
+  },
   tentative: { label: "Maybe" },
   needsAction: { label: "Invited" },
 }
@@ -69,7 +72,7 @@ export function InviteDialog({
 
   async function patchAttendees(
     attendees: GcalAttendee[],
-    success: string,
+    success: string
   ): Promise<void> {
     setBusy(true)
     try {
@@ -108,9 +111,14 @@ export function InviteDialog({
     void patchAttendees(
       [
         ...event.attendees,
-        { email: addr, responseStatus: "needsAction", organizer: false, self: false },
+        {
+          email: addr,
+          responseStatus: "needsAction",
+          organizer: false,
+          self: false,
+        },
       ],
-      `Invite sent to ${addr}`,
+      `Invite sent to ${addr}`
     )
   }
 
@@ -121,7 +129,9 @@ export function InviteDialog({
     try {
       onChanged(await api.gcalUpdate(event.id, { guestsCanModify }))
       toast.success(
-        guestsCanModify ? "Guests can now edit this event" : "Guests can view only",
+        guestsCanModify
+          ? "Guests can now edit this event"
+          : "Guests can view only"
       )
     } catch (err) {
       toast.error("Couldn't change sharing", {
@@ -162,10 +172,18 @@ export function InviteDialog({
             onValueChange={setMode}
           >
             <TabsList className="w-full">
-              <TabsTrigger value="edit" className="flex-1" disabled={!canManage || busy}>
+              <TabsTrigger
+                value="edit"
+                className="flex-1"
+                disabled={!canManage || busy}
+              >
                 Can edit
               </TabsTrigger>
-              <TabsTrigger value="view" className="flex-1" disabled={!canManage || busy}>
+              <TabsTrigger
+                value="view"
+                className="flex-1"
+                disabled={!canManage || busy}
+              >
                 View only
               </TabsTrigger>
             </TabsList>
@@ -175,7 +193,11 @@ export function InviteDialog({
             <InputGroupAddon>
               <LinkIcon />
             </InputGroupAddon>
-            <InputGroupInput readOnly value={link} className="font-mono text-xs" />
+            <InputGroupInput
+              readOnly
+              value={link}
+              className="font-mono text-xs"
+            />
             <InputGroupAddon align="inline-end">
               <InputGroupButton size="sm" variant="secondary" onClick={copy}>
                 {copied ? <CheckIcon data-icon="inline-start" /> : null}
@@ -219,7 +241,7 @@ export function InviteDialog({
                   onRemove={() =>
                     void patchAttendees(
                       event.attendees.filter((x) => x.email !== a.email),
-                      `Removed ${a.email}`,
+                      `Removed ${a.email}`
                     )
                   }
                 />
@@ -227,8 +249,8 @@ export function InviteDialog({
             </div>
           ) : (
             <p className="text-center text-xs text-muted-foreground">
-              No guests yet — invite someone by email, and Google Calendar
-              sends them the invitation.
+              No guests yet — invite someone by email, and Google Calendar sends
+              them the invitation.
             </p>
           )}
 
@@ -267,7 +289,9 @@ function GuestRow({
       <div className="min-w-0 flex-1">
         <p className="truncate text-[13px] font-medium">{name}</p>
         {attendee.displayName && (
-          <p className="truncate text-xs text-muted-foreground">{attendee.email}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {attendee.email}
+          </p>
         )}
       </div>
       <Badge variant="outline" className={status.className}>

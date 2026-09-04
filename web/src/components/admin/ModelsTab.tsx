@@ -59,29 +59,53 @@ export function ModelsTab() {
   const settings = useGrapevine((s) => s.settings)
   const setSettings = useGrapevine((s) => s.setSettings)
 
-  const [health, setHealth] = useState<{ ok: boolean; url: string; version: string | null } | null>(null)
+  const [health, setHealth] = useState<{
+    ok: boolean
+    url: string
+    version: string | null
+  } | null>(null)
   const [installed, setInstalled] = useState<Installed[] | null>(null)
   const [catalog, setCatalog] = useState<Catalog | null>(null)
   const [system, setSystem] = useState<Hardware | null>(null)
   const [selectedTag, setSelectedTag] = useState("")
-  const [pulling, setPulling] = useState<{ tag: string; pct: number; status: string } | null>(null)
+  const [pulling, setPulling] = useState<{
+    tag: string
+    pct: number
+    status: string
+  } | null>(null)
 
   const refresh = useCallback(() => {
-    api.ollamaHealth().then(setHealth).catch(() => setHealth(null))
-    api.ollamaModels().then(setInstalled).catch(() => setInstalled([]))
+    api
+      .ollamaHealth()
+      .then(setHealth)
+      .catch(() => setHealth(null))
+    api
+      .ollamaModels()
+      .then(setInstalled)
+      .catch(() => setInstalled([]))
   }, [])
 
   useEffect(() => {
     refresh()
-    api.catalog().then(setCatalog).catch(() => setCatalog([]))
-    api.system().then(setSystem).catch(() => setSystem(null))
+    api
+      .catalog()
+      .then(setCatalog)
+      .catch(() => setCatalog([]))
+    api
+      .system()
+      .then(setSystem)
+      .catch(() => setSystem(null))
   }, [refresh])
 
   const chatModels = (installed ?? []).filter(
-    (m) => !m.capabilities.length || m.capabilities.includes("completion"),
+    (m) => !m.capabilities.length || m.capabilities.includes("completion")
   )
-  const installedTags = new Set((installed ?? []).map((m) => m.name.replace(/:latest$/, "")))
-  const selected = catalog?.flatMap((c) => c.models).find((m) => m.tag === selectedTag)
+  const installedTags = new Set(
+    (installed ?? []).map((m) => m.name.replace(/:latest$/, ""))
+  )
+  const selected = catalog
+    ?.flatMap((c) => c.models)
+    .find((m) => m.tag === selectedTag)
 
   async function setActive(model: string) {
     const next = await api.saveSettings({ model })
@@ -92,11 +116,15 @@ export function ModelsTab() {
   async function pull(tag: string) {
     setPulling({ tag, pct: -1, status: "starting" })
     try {
-      await api.pullModel(tag, (pct, status) => setPulling({ tag, pct, status }))
+      await api.pullModel(tag, (pct, status) =>
+        setPulling({ tag, pct, status })
+      )
       toast.success(`Pulled ${tag}`)
       refresh()
     } catch (err) {
-      toast.error(`Pull failed for ${tag}`, { description: String(err).slice(0, 140) })
+      toast.error(`Pull failed for ${tag}`, {
+        description: String(err).slice(0, 140),
+      })
     } finally {
       setPulling(null)
     }
@@ -109,7 +137,7 @@ export function ModelsTab() {
           <span
             className={cn(
               "size-2 rounded-full",
-              health?.ok ? "bg-live" : "bg-destructive",
+              health?.ok ? "bg-live" : "bg-destructive"
             )}
           />
           {health?.ok
@@ -119,7 +147,12 @@ export function ModelsTab() {
             {health?.url}
           </span>
         </span>
-        <Button variant="ghost" size="icon-sm" aria-label="Refresh" onClick={refresh}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Refresh"
+          onClick={refresh}
+        >
           <RefreshCwIcon />
         </Button>
       </div>
@@ -179,7 +212,9 @@ export function ModelsTab() {
           <Select value={selectedTag} onValueChange={setSelectedTag}>
             <SelectTrigger id="catalog-model" className="w-full">
               <SelectValue
-                placeholder={catalog ? "Browse the catalog" : "Loading catalog…"}
+                placeholder={
+                  catalog ? "Browse the catalog" : "Loading catalog…"
+                }
               />
             </SelectTrigger>
             <SelectContent>
@@ -200,7 +235,7 @@ export function ModelsTab() {
                               aria-label={FIT[fit].label}
                               className={cn(
                                 "size-2 shrink-0 rounded-full",
-                                FIT[fit].dot,
+                                FIT[fit].dot
                               )}
                             />
                           )}
@@ -223,7 +258,10 @@ export function ModelsTab() {
                             </Badge>
                           )}
                           {installedTags.has(m.tag) && (
-                            <Badge variant="outline" className="text-[10px] text-live">
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] text-live"
+                            >
                               installed
                             </Badge>
                           )}

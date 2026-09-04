@@ -124,18 +124,20 @@ const INVISIBLES = /[\u200b-\u200d\u2060\ufeff\u00ad]/g;
  * drop style/script blocks and tags, then decode the entities newsletters
  * actually use so "&amp;" and "&#8212;" don't reach the extraction LLM. */
 export function stripHtml(html: string): string {
-  return html
-    .replace(/<(style|script)[\s\S]*?<\/\1\s*>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => safeCodePoint(parseInt(hex, 16)))
-    .replace(/&#(\d+);/g, (_, dec: string) => safeCodePoint(parseInt(dec, 10)))
-    .replace(/&([a-z]+);/gi, (m, name: string) => NAMED_ENTITIES[name.toLowerCase()] ?? m)
-    // After entity decoding, so literal U+200B and a decoded "&zwnj;" are
-    // removed by the same pass, and before the whitespace collapse so the
-    // spacer runs they were padding actually fold into one space.
-    .replace(INVISIBLES, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  return (
+    html
+      .replace(/<(style|script)[\s\S]*?<\/\1\s*>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => safeCodePoint(parseInt(hex, 16)))
+      .replace(/&#(\d+);/g, (_, dec: string) => safeCodePoint(parseInt(dec, 10)))
+      .replace(/&([a-z]+);/gi, (m, name: string) => NAMED_ENTITIES[name.toLowerCase()] ?? m)
+      // After entity decoding, so literal U+200B and a decoded "&zwnj;" are
+      // removed by the same pass, and before the whitespace collapse so the
+      // spacer runs they were padding actually fold into one space.
+      .replace(INVISIBLES, "")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
 }
 
 /**
@@ -156,9 +158,7 @@ export async function emailKey(
     "SHA-256",
     new TextEncoder().encode(`${p.to}|${p.from}|${p.subject}|${p.text}`),
   );
-  const hex = [...new Uint8Array(digest)]
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
   return `${source}_${hex.slice(0, 32)}`;
 }
 
@@ -260,7 +260,10 @@ async function buildPayload(
     text = "[body unavailable: message failed MIME parsing]";
   } else {
     // prefer plaintext; fall back to stripped HTML
-    text = truncate((parsed.text ?? (parsed.html ? stripHtml(parsed.html) : "")).trim(), MAX_BODY_CHARS);
+    text = truncate(
+      (parsed.text ?? (parsed.html ? stripHtml(parsed.html) : "")).trim(),
+      MAX_BODY_CHARS,
+    );
   }
 
   return {
@@ -293,7 +296,7 @@ export async function handleEmail(
       // Both stores down: throw so Cloudflare answers the sender with a
       // transient failure and the message is redelivered later — the
       // message-derived key keeps that redelivery idempotent.
-      throw new Error(`insert failed (${err}); dead-letter failed (${kvErr})`);
+      throw new Error(`insert failed (${err}); dead-letter failed (${kvErr})`, { cause: kvErr });
     }
   }
 

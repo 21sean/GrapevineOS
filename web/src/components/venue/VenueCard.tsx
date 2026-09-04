@@ -49,7 +49,9 @@ export function VenueCard({
   if (!venue) return null
 
   const zone = venue.tz ?? tz
-  const open = venue.openingHours ? openState(venue.openingHours, zone, now) : null
+  const open = venue.openingHours
+    ? openState(venue.openingHours, zone, now)
+    : null
   const website = safeHttpUrl(venue.website)
 
   // Map the occurrence onto the venue's own week for the busyness chart.
@@ -70,13 +72,15 @@ export function VenueCard({
       }
     : undefined
 
-  const subtitle = [venue.category, venue.priceLevel].filter(Boolean).join(" · ")
+  const subtitle = [venue.category, venue.priceLevel]
+    .filter(Boolean)
+    .join(" · ")
 
   return (
     <div
       className={cn(
         "flex flex-col gap-3 rounded-lg border border-border/60 bg-card/60 p-3",
-        className,
+        className
       )}
     >
       <div className="flex items-baseline justify-between gap-2">
@@ -84,7 +88,9 @@ export function VenueCard({
           The venue
         </span>
         {venue.popularity !== undefined && venue.popularity >= 0.7 && (
-          <span className="text-xs text-muted-foreground">Well known locally</span>
+          <span className="text-xs text-muted-foreground">
+            Well known locally
+          </span>
         )}
       </div>
 
@@ -126,7 +132,7 @@ export function VenueCard({
             <span
               className={cn(
                 "size-1.5 rounded-full",
-                open.open ? "bg-live" : "bg-muted-foreground/50",
+                open.open ? "bg-live" : "bg-muted-foreground/50"
               )}
             />
             <span className={open.open ? "text-live" : "text-muted-foreground"}>
@@ -151,7 +157,11 @@ export function VenueCard({
       </div>
 
       {venue.activity && (
-        <BusyTimes activity={venue.activity} day={startLocal?.day ?? 0} span={span} />
+        <BusyTimes
+          activity={venue.activity}
+          day={startLocal?.day ?? 0}
+          span={span}
+        />
       )}
 
       {venue.accessibility.length > 0 && (

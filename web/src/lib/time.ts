@@ -20,7 +20,11 @@ export function hasEnded(e: CityEvent, now: Date, tz?: string): boolean {
   return new Date(nextOccurrence(e, now, tz).end) < now
 }
 
-export function minutesUntilStart(e: CityEvent, now: Date, tz?: string): number {
+export function minutesUntilStart(
+  e: CityEvent,
+  now: Date,
+  tz?: string
+): number {
   const { start } = nextOccurrence(e, now, tz)
   return Math.round((new Date(start).getTime() - now.getTime()) / 60000)
 }
@@ -48,7 +52,7 @@ export function lightPresetForTime(now: Date, tz: string): LightPreset {
       timeZone: tz,
       hour: "numeric",
       hourCycle: "h23",
-    }).format(now),
+    }).format(now)
   )
   if (hour >= 5 && hour < 7) return "dawn"
   if (hour >= 7 && hour < 18) return "day"
@@ -56,9 +60,13 @@ export function lightPresetForTime(now: Date, tz: string): LightPreset {
   return "night"
 }
 
-function fmt(iso: string, tz: string, opts: Intl.DateTimeFormatOptions): string {
+function fmt(
+  iso: string,
+  tz: string,
+  opts: Intl.DateTimeFormatOptions
+): string {
   return new Intl.DateTimeFormat("en-US", { timeZone: tz, ...opts }).format(
-    new Date(iso),
+    new Date(iso)
   )
 }
 
@@ -107,9 +115,10 @@ export function weekendRange(today: string): { from: string; to: string } {
 
 /** "2026-07-11" → "Jul 11" for date-window pills and chips. */
 export function fmtDay(day: string): string {
-  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(
-    new Date(`${day}T12:00:00`),
-  )
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(new Date(`${day}T12:00:00`))
 }
 
 /**
@@ -120,7 +129,7 @@ export function fmtDay(day: string): string {
 export function relativeTime(
   iso: string,
   now: Date,
-  style: "long" | "short" = "long",
+  style: "long" | "short" = "long"
 ): string {
   const long = style === "long"
   const mins = Math.round((now.getTime() - new Date(iso).getTime()) / 60000)
@@ -174,14 +183,18 @@ export function statusLabel(e: CityEvent, tz: string, now: Date): string {
   const occ = nextOccurrence(e, now, tz)
   if (new Date(occ.start) <= now && now <= new Date(occ.end)) return "Live now"
   if (new Date(occ.end) < now) return "Ended"
-  const mins = Math.round((new Date(occ.start).getTime() - now.getTime()) / 60000)
+  const mins = Math.round(
+    (new Date(occ.start).getTime() - now.getTime()) / 60000
+  )
   if (mins <= 90) return `Starts in ${mins} min`
   return `${dayLabel(occ.start, tz, now)} · ${fmtTime(occ.start, tz)}`
 }
 
 /** "every day", "every 2 days", "every week": a watch cadence in words. */
 export function cadenceLabel(hours: number): string {
-  if (hours % 168 === 0) return hours === 168 ? "every week" : `every ${hours / 168} weeks`
-  if (hours % 24 === 0) return hours === 24 ? "every day" : `every ${hours / 24} days`
+  if (hours % 168 === 0)
+    return hours === 168 ? "every week" : `every ${hours / 168} weeks`
+  if (hours % 24 === 0)
+    return hours === 24 ? "every day" : `every ${hours / 24} days`
   return hours === 1 ? "every hour" : `every ${hours} hours`
 }

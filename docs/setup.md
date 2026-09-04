@@ -105,7 +105,7 @@ All app data lives in a Supabase Postgres project (free tier): `events`,
   Postgres connections, nothing to pool, free-tier friendly.
 - **Housekeeping**: nightly pg_cron purges keep storage flat: raw emails
   (30d), push-send dedupe keys (60d), ingest logs (180d), and cached Mapbox
-  *misses* (90d, so transient failures heal). Mapbox hits — geocodes and
+  _misses_ (90d, so transient failures heal). Mapbox hits — geocodes and
   venue records alike — are kept permanently.
 - **Types**: `server/src/db-types.ts` is generated. Regenerate after schema
   changes with `npm run db:types` from `server/`; it reads the project ref

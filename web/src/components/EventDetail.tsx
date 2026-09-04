@@ -1,4 +1,8 @@
-import { useEffect, useState, type PointerEvent as ReactPointerEvent } from "react"
+import {
+  useEffect,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react"
 import {
   CalendarCheckIcon,
   CalendarPlusIcon,
@@ -99,7 +103,7 @@ function ReactionRow({ eventId }: { eventId: string }) {
               reaction === value &&
                 (value === "not_for_me"
                   ? "border-destructive/40 text-destructive"
-                  : "border-live/40 text-live"),
+                  : "border-live/40 text-live")
             )}
           >
             <Icon data-icon="inline-start" />
@@ -270,7 +274,11 @@ export function EventDetail() {
     const url = new URL(window.location.origin + window.location.pathname)
     url.searchParams.set("event", event.id)
     const link = url.toString()
-    const data = { title: event.title, text: `${event.title} — ${event.venue}`, url: link }
+    const data = {
+      title: event.title,
+      text: `${event.title} — ${event.venue}`,
+      url: link,
+    }
     if (navigator.canShare?.(data)) {
       try {
         await navigator.share(data)
@@ -298,7 +306,7 @@ export function EventDetail() {
     const onMove = (ev: PointerEvent) => {
       const next = Math.min(
         DETAIL_MAX,
-        Math.max(DETAIL_MIN, startW + startX - ev.clientX),
+        Math.max(DETAIL_MIN, startW + startX - ev.clientX)
       )
       setDetailWidth(next)
     }
@@ -324,7 +332,9 @@ export function EventDetail() {
       {event.imageUrl && (
         <div
           className="relative -mb-2 h-44 shrink-0 overflow-hidden"
-          style={event.imageColor ? { backgroundColor: event.imageColor } : undefined}
+          style={
+            event.imageColor ? { backgroundColor: event.imageColor } : undefined
+          }
         >
           <img
             src={event.imageUrl}
@@ -368,11 +378,13 @@ export function EventDetail() {
           className={cn(
             "flex items-center justify-between rounded-lg border border-border/60 bg-card/60 px-3 py-2",
             // live events warm to lantern-gold, same signal as the map markers
-            live && "border-live/30 bg-live/10",
+            live && "border-live/30 bg-live/10"
           )}
         >
           <span className="flex items-center gap-2 text-sm">
-            {live && <span className="size-2 animate-pulse rounded-full bg-live" />}
+            {live && (
+              <span className="size-2 animate-pulse rounded-full bg-live" />
+            )}
             {statusLabel(event, tz, now)}
           </span>
           <span className="font-mono text-xs text-muted-foreground">
@@ -535,7 +547,9 @@ export function EventDetail() {
           </Button>
         ) : (
           <Alert>
-            <AlertTitle>{event.free ? "Free · just show up" : event.price}</AlertTitle>
+            <AlertTitle>
+              {event.free ? "Free · just show up" : event.price}
+            </AlertTitle>
             <AlertDescription>
               No advance tickets needed for this one.
             </AlertDescription>
@@ -556,9 +570,7 @@ export function EventDetail() {
                   Mute venue
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>
-                Hide every event at {event.venue}
-              </TooltipContent>
+              <TooltipContent>Hide every event at {event.venue}</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -590,10 +602,10 @@ export function EventDetail() {
             : { width: detailWidth, maxWidth: "min(40rem, calc(100vw - 2rem))" }
         }
         className={cn(
-          "glass gap-0 bg-background/70 overflow-hidden",
+          "glass gap-0 overflow-hidden bg-background/70",
           isMobile
             ? "max-h-[86svh] rounded-t-2xl border-b-0 pb-[env(safe-area-inset-bottom)]"
-            : "rounded-xl data-[side=right]:inset-y-3 data-[side=right]:right-3 data-[side=right]:h-auto data-[side=right]:border",
+            : "rounded-xl data-[side=right]:inset-y-3 data-[side=right]:right-3 data-[side=right]:h-auto data-[side=right]:border"
         )}
       >
         {/* category wash: the panel is lit by the same hue as its map marker */}

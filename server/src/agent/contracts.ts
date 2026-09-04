@@ -123,10 +123,7 @@ export const CONTRACTS = {
       date_to: z.string().describe("YYYY-MM-DD inclusive, city-local").optional(),
       free_only: z.boolean().optional(),
       min_rating: z.number().describe("1-5 local-buzz floor").optional(),
-      exclude_promoted: z
-        .boolean()
-        .describe("Default true: drop paid placements")
-        .optional(),
+      exclude_promoted: z.boolean().describe("Default true: drop paid placements").optional(),
       near: z
         .string()
         .describe('A venue or neighborhood name, "lng,lat", or "user" for the user\'s location')
@@ -213,7 +210,9 @@ export const CONTRACTS = {
       query,
       dry_run: z
         .boolean()
-        .describe("Default true: verify and report, write nothing. false commits the verified events.")
+        .describe(
+          "Default true: verify and report, write nothing. false commits the verified events.",
+        )
         .optional(),
     }),
     surfaces: ["graph", "mcp", "rest"],
@@ -265,7 +264,10 @@ export const CONTRACTS = {
         .nullable()
         .describe("YYYY-MM-DD inclusive: only events on or before; null clears")
         .optional(),
-      note: z.string().describe('Short label shown to the user, e.g. "Free this weekend"').optional(),
+      note: z
+        .string()
+        .describe('Short label shown to the user, e.g. "Free this weekend"')
+        .optional(),
     }),
     surfaces: ["graph"],
     effect: "ui",
@@ -337,7 +339,8 @@ export const CONTRACTS = {
 
   unsave_event: contract({
     name: "unsave_event",
-    description: "Remove one event from the linked account's calendar. Confirm with the user first.",
+    description:
+      "Remove one event from the linked account's calendar. Confirm with the user first.",
     schema: z.object({ event_id: z.string() }),
     surfaces: ["mcp", "rest"],
     effect: "write",
@@ -355,7 +358,8 @@ export const CONTRACTS = {
     surfaces: ["graph", "mcp", "rest"],
     effect: "write",
     label: (a) => (a.rarity ? `Marking as ${String(a.rarity)}` : "Updating rarity"),
-    detail: (r) => (r.ok || r.changed !== undefined ? String(r.rarity ?? "") || undefined : undefined),
+    detail: (r) =>
+      r.ok || r.changed !== undefined ? String(r.rarity ?? "") || undefined : undefined,
   }),
 
   update_interests: contract({
@@ -405,7 +409,9 @@ export const CONTRACTS = {
         .number()
         .min(CADENCE_MIN_HOURS)
         .max(CADENCE_MAX_HOURS)
-        .describe(`Hours between runs, ${CADENCE_MIN_HOURS}-${CADENCE_MAX_HOURS} (default ${CADENCE_DEFAULT_HOURS}; 168 = weekly)`)
+        .describe(
+          `Hours between runs, ${CADENCE_MIN_HOURS}-${CADENCE_MAX_HOURS} (default ${CADENCE_DEFAULT_HOURS}; 168 = weekly)`,
+        )
         .optional(),
     }),
     surfaces: ["mcp", "rest"],
@@ -517,7 +523,11 @@ export function parseArgs<N extends ToolName>(
 function unwrap(t: z.ZodType): z.ZodType {
   let cur: z.ZodType = t;
   for (;;) {
-    if (cur instanceof z.ZodOptional || cur instanceof z.ZodNullable || cur instanceof z.ZodDefault) {
+    if (
+      cur instanceof z.ZodOptional ||
+      cur instanceof z.ZodNullable ||
+      cur instanceof z.ZodDefault
+    ) {
       cur = cur.unwrap() as z.ZodType;
       continue;
     }
@@ -544,7 +554,8 @@ export function coerceQuery(
       continue;
     }
     const inner = unwrap(field);
-    if (inner instanceof z.ZodBoolean) out[key] = ["1", "true", "yes"].includes(value.toLowerCase());
+    if (inner instanceof z.ZodBoolean)
+      out[key] = ["1", "true", "yes"].includes(value.toLowerCase());
     else if (inner instanceof z.ZodNumber) out[key] = Number(value);
     else if (inner instanceof z.ZodArray)
       out[key] = value

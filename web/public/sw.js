@@ -8,7 +8,9 @@
  */
 
 self.addEventListener("install", () => self.skipWaiting())
-self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()))
+self.addEventListener("activate", (event) =>
+  event.waitUntil(self.clients.claim())
+)
 
 self.addEventListener("push", (event) => {
   let data = {}
@@ -24,7 +26,7 @@ self.addEventListener("push", (event) => {
       icon: "/grapevine.svg",
       badge: "/grapevine.svg",
       data: { url: data.url || "/" },
-    }),
+    })
   )
 })
 
@@ -43,6 +45,6 @@ self.addEventListener("notificationclick", (event) => {
           }
         }
         return self.clients.openWindow(url)
-      }),
+      })
   )
 })

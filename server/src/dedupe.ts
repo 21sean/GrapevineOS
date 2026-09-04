@@ -34,9 +34,28 @@ import type { CityEvent } from "./types.js";
  * chance for two genuinely different events to look alike.
  */
 const TITLE_NOISE = new Set([
-  "a", "an", "the", "and", "at", "in", "of", "on", "for", "with", "vs",
-  "featuring", "feat", "presents", "presented", "by", "live", "tour", "show",
-  "event", "the2026", "2026",
+  "a",
+  "an",
+  "the",
+  "and",
+  "at",
+  "in",
+  "of",
+  "on",
+  "for",
+  "with",
+  "vs",
+  "featuring",
+  "feat",
+  "presents",
+  "presented",
+  "by",
+  "live",
+  "tour",
+  "show",
+  "event",
+  "the2026",
+  "2026",
 ]);
 
 /** Identity-bearing lowercase words in a title. */
@@ -74,21 +93,43 @@ const VENUE_NOISE = new Set(["the", "at", "a", "an"]);
  * wrongly merging - the safe direction for this predicate to fail.
  */
 const VENUE_ALIASES: Record<string, string> = {
-  first: "1", "1st": "1", second: "2", "2nd": "2", third: "3", "3rd": "3",
-  fourth: "4", "4th": "4", fifth: "5", "5th": "5", sixth: "6", "6th": "6",
-  seventh: "7", "7th": "7", eighth: "8", "8th": "8", ninth: "9", "9th": "9",
-  tenth: "10", "10th": "10",
-  street: "st", avenue: "ave", av: "ave", boulevard: "blvd", road: "rd",
-  drive: "dr", parkway: "pkwy", square: "sq",
-  centre: "ctr", center: "ctr", theatre: "theater",
+  first: "1",
+  "1st": "1",
+  second: "2",
+  "2nd": "2",
+  third: "3",
+  "3rd": "3",
+  fourth: "4",
+  "4th": "4",
+  fifth: "5",
+  "5th": "5",
+  sixth: "6",
+  "6th": "6",
+  seventh: "7",
+  "7th": "7",
+  eighth: "8",
+  "8th": "8",
+  ninth: "9",
+  "9th": "9",
+  tenth: "10",
+  "10th": "10",
+  street: "st",
+  avenue: "ave",
+  av: "ave",
+  boulevard: "blvd",
+  road: "rd",
+  drive: "dr",
+  parkway: "pkwy",
+  square: "sq",
+  centre: "ctr",
+  center: "ctr",
+  theatre: "theater",
   amphitheatre: "amphitheater",
 };
 
 function normVenue(v: string | undefined): string {
   const words = (v ?? "").toLowerCase().match(/[a-z0-9]+/g) ?? [];
-  const kept = words
-    .filter((w) => !VENUE_NOISE.has(w))
-    .map((w) => VENUE_ALIASES[w] ?? w);
+  const kept = words.filter((w) => !VENUE_NOISE.has(w)).map((w) => VENUE_ALIASES[w] ?? w);
   return (kept.length ? kept : words).join(" ");
 }
 

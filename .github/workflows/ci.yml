@@ -1,0 +1,43 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Everything that needs no model and no database: types, lint, formatting,
+# the unit tests, the generated skill file, and the five offline eval suites.
+# The placeholder credentials satisfy modules that read the environment at
+# import; nothing in this job can reach a real project.
+env:
+  SUPABASE_URL: https://ci.supabase.co
+  SUPABASE_SECRET_KEY: ci-placeholder
+  MAPBOX_SECRET_TOKEN: ci-placeholder
+  GUARDRAILS: "off"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test
+      - run: npm run contracts:check
+      - name: Offline evals
+        run: >
+          npm run evals -- --json
+          --suite personas --suite dedupe --suite recurrence --suite jsonld --suite hours
+          > evals.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: evals
+          path: evals.json

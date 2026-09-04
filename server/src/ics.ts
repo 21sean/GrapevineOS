@@ -29,7 +29,10 @@ function esc(s: string): string {
 
 /** ISO 8601 (any offset) → UTC basic format: 20260704T193000Z */
 function utc(iso: string): string {
-  return new Date(iso).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+  return new Date(iso)
+    .toISOString()
+    .replace(/[-:]/g, "")
+    .replace(/\.\d{3}Z$/, "Z");
 }
 
 // ---------------------------------------------------------------------------
@@ -37,7 +40,12 @@ function utc(iso: string): string {
 // ---------------------------------------------------------------------------
 
 interface Wall {
-  y: number; mo: number; d: number; hh: number; mi: number; ss: number;
+  y: number;
+  mo: number;
+  d: number;
+  hh: number;
+  mi: number;
+  ss: number;
 }
 
 const wallFmtCache = new Map<string, Intl.DateTimeFormat>();
@@ -47,8 +55,12 @@ function wallInTz(ms: number, tz: string): Wall {
   if (!f) {
     f = new Intl.DateTimeFormat("en-US", {
       timeZone: tz,
-      year: "numeric", month: "2-digit", day: "2-digit",
-      hour: "2-digit", minute: "2-digit", second: "2-digit",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
       hourCycle: "h23",
     });
     wallFmtCache.set(tz, f);
@@ -58,8 +70,12 @@ function wallInTz(ms: number, tz: string): Wall {
     Number(parts.find((p) => p.type === t)?.value ?? 0);
   const hh = get("hour");
   return {
-    y: get("year"), mo: get("month"), d: get("day"),
-    hh: hh === 24 ? 0 : hh, mi: get("minute"), ss: get("second"),
+    y: get("year"),
+    mo: get("month"),
+    d: get("day"),
+    hh: hh === 24 ? 0 : hh,
+    mi: get("minute"),
+    ss: get("second"),
   };
 }
 

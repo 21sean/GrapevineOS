@@ -3,7 +3,12 @@ import { FlaskConicalIcon, MailPlusIcon, SparklesIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field"
 import {
   Select,
   SelectContent,
@@ -62,7 +67,9 @@ export function IngestTab() {
         toast.info("No events found in that email")
       }
     } catch (err) {
-      toast.error("Extraction failed", { description: String(err).slice(0, 180) })
+      toast.error("Extraction failed", {
+        description: String(err).slice(0, 180),
+      })
     } finally {
       setBusy(false)
     }
@@ -74,11 +81,15 @@ export function IngestTab() {
     try {
       const res = await api.commitEvents(chosen)
       await refreshEvents()
-      toast.success(`Added ${res.added} event${res.added === 1 ? "" : "s"} to the map`)
+      toast.success(
+        `Added ${res.added} event${res.added === 1 ? "" : "s"} to the map`
+      )
       setPreview(null)
       setText("")
     } catch (err) {
-      toast.error("Couldn't save events", { description: String(err).slice(0, 140) })
+      toast.error("Couldn't save events", {
+        description: String(err).slice(0, 140),
+      })
     }
   }
 
@@ -148,7 +159,10 @@ export function IngestTab() {
               geocoded and rated. Uncheck any you don't want.
             </span>
             {preview.map((e) => (
-              <div key={e.id} className="flex items-start gap-3 rounded-lg border p-3">
+              <div
+                key={e.id}
+                className="flex items-start gap-3 rounded-lg border p-3"
+              >
                 <Switch
                   checked={included.has(e.id)}
                   onCheckedChange={(on) => {
@@ -177,7 +191,9 @@ export function IngestTab() {
                       {CATEGORY_META[e.category]?.label ?? e.category}
                     </Badge>
                     <StarRating rating={e.rating} showNumber />
-                    {e.promoted && <Badge variant="destructive">promoted</Badge>}
+                    {e.promoted && (
+                      <Badge variant="destructive">promoted</Badge>
+                    )}
                     <span className="font-mono text-xs text-muted-foreground">
                       {e.price}
                     </span>

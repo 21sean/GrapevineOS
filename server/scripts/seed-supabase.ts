@@ -13,13 +13,7 @@ import path from "node:path";
 import { db } from "../src/db.js";
 import { eventKey } from "../src/store.js";
 import { normalizeRRule } from "../src/recurrence.js";
-import type {
-  CalendarEntry,
-  CityEvent,
-  IngestRecord,
-  Settings,
-  Source,
-} from "../src/types.js";
+import type { CalendarEntry, CityEvent, IngestRecord, Settings, Source } from "../src/types.js";
 
 const DATA_DIR = path.resolve(import.meta.dirname, "seed-data");
 

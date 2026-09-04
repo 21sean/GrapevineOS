@@ -86,7 +86,14 @@ export function BusyTimes({
         <span className="font-mono text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
           Busy times
         </span>
-        <span className={cn("text-xs", level !== null && level >= 0.45 ? "text-live" : "text-muted-foreground")}>
+        <span
+          className={cn(
+            "text-xs",
+            level !== null && level >= 0.45
+              ? "text-live"
+              : "text-muted-foreground"
+          )}
+        >
           {headline}
         </span>
       </div>
@@ -103,7 +110,7 @@ export function BusyTimes({
             style={{ height: `${Math.max(6, (b.value / peak) * 100)}%` }}
             className={cn(
               "flex-1 rounded-[2px] transition-colors",
-              b.lit ? "bg-live" : "bg-muted-foreground/25",
+              b.lit ? "bg-live" : "bg-muted-foreground/25"
             )}
           />
         ))}

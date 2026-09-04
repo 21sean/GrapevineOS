@@ -37,7 +37,7 @@ type State = GrapevineState
 function memoSelector<T>(
   deps: (s: State) => unknown[],
   compute: (s: State) => T,
-  keepPrev?: (prev: T, next: T) => boolean,
+  keepPrev?: (prev: T, next: T) => boolean
 ): (s: State) => T {
   let lastDeps: unknown[] | undefined
   let value!: T
@@ -62,7 +62,7 @@ const sameIdSet = (a: ReadonlySet<string>, b: ReadonlySet<string>) => {
 
 const selectHidden = memoSelector(
   (s) => [s.hiddenIds],
-  (s) => new Set(s.hiddenIds),
+  (s) => new Set(s.hiddenIds)
 )
 
 /** Muted venues/sources as lowercase sets, ready for isMuted. */
@@ -71,7 +71,7 @@ const selectMuted = memoSelector(
   (s): Muted => ({
     venues: new Set(s.mutedVenues.map((v) => v.trim().toLowerCase())),
     sources: new Set(s.mutedSources.map((v) => v.trim().toLowerCase())),
-  }),
+  })
 )
 
 /**
@@ -86,12 +86,15 @@ const selectNearTest = memoSelector(
     if (s.filters.nearMinutes === null || !s.nearZone) return undefined
     const origin = s.userPos ?? s.settings?.center
     if (!origin) return undefined
-    if (s.nearZone.key !== nearZoneKey(s.filters.nearMinutes, origin)) return undefined
+    if (s.nearZone.key !== nearZoneKey(s.filters.nearMinutes, origin))
+      return undefined
     const { polygons, circle } = s.nearZone
-    if (polygons?.length) return (e) => pointInPolygons([e.lng, e.lat], polygons)
-    if (circle) return (e) => haversineKm([e.lng, e.lat], circle.center) <= circle.km
+    if (polygons?.length)
+      return (e) => pointInPolygons([e.lng, e.lat], polygons)
+    if (circle)
+      return (e) => haversineKm([e.lng, e.lat], circle.center) <= circle.km
     return undefined
-  },
+  }
 )
 
 /** Cache identity for one (radius, origin) pair — shared with useNearZone. */
@@ -100,7 +103,10 @@ export function nearZoneKey(minutes: number, origin: [number, number]): string {
   return `${minutes}|${r(origin[0])},${r(origin[1])}`
 }
 
-const sameAffinity = (a: ReadonlyMap<string, number>, b: ReadonlyMap<string, number>) => {
+const sameAffinity = (
+  a: ReadonlyMap<string, number>,
+  b: ReadonlyMap<string, number>
+) => {
   if (a.size !== b.size) return false
   for (const [k, v] of b) if (a.get(k) !== v) return false
   return true
@@ -116,9 +122,12 @@ export const selectTagAffinity = memoSelector(
   (s) => [s.events, s.reactions],
   (s) => {
     const byId = new Map(s.events.map((e) => [e.id, e]))
-    return tagAffinity(byId, Object.entries(s.reactions)) as ReadonlyMap<string, number>
+    return tagAffinity(byId, Object.entries(s.reactions)) as ReadonlyMap<
+      string,
+      number
+    >
   },
-  sameAffinity,
+  sameAffinity
 )
 
 /** Filtered + relevance-ranked events: the map's markers, the list's base. */
@@ -146,9 +155,9 @@ export const selectVisible = memoSelector(
       selectHidden(s),
       { reactions: s.reactions, tagAffinity: selectTagAffinity(s) },
       selectMuted(s),
-      selectNearTest(s),
+      selectNearTest(s)
     ),
-  sameList,
+  sameList
 )
 
 /** Visible events narrowed by the search box. */
@@ -159,14 +168,19 @@ export const selectSearched = memoSelector(
     const q = s.searchQuery.trim()
     return q ? base.filter((e) => matchesSearch(e, q)) : base
   },
-  sameList,
+  sameList
 )
 
 /** The list as rendered: searched, sorted by the chosen key, pins on top. */
 export const selectOrdered = memoSelector(
   (s) => [selectSearched(s), s.sortBy, s.pinnedIds, s.now, s.settings?.tz],
   (s) => {
-    const sorted = sortEvents(selectSearched(s), s.sortBy, s.now, s.settings?.tz)
+    const sorted = sortEvents(
+      selectSearched(s),
+      s.sortBy,
+      s.now,
+      s.settings?.tz
+    )
     if (sorted.length === 0 || s.pinnedIds.length === 0) return sorted
     const pinned = new Set(s.pinnedIds)
     return [
@@ -174,17 +188,20 @@ export const selectOrdered = memoSelector(
       ...sorted.filter((e) => !pinned.has(e.id)),
     ]
   },
-  sameList,
+  sameList
 )
 
 /** What the carousel tours: live first, else starting soon. */
 export const selectTour = memoSelector(
   (s) => [selectVisible(s), s.now, s.settings?.tz],
   (s) => carouselEvents(selectVisible(s), s.now, s.settings?.tz),
-  sameList,
+  sameList
 )
 
-const sameLineMap = (a: ReadonlyMap<string, string>, b: ReadonlyMap<string, string>) => {
+const sameLineMap = (
+  a: ReadonlyMap<string, string>,
+  b: ReadonlyMap<string, string>
+) => {
   if (a.size !== b.size) return false
   for (const [k, v] of b) if (a.get(k) !== v) return false
   return true
@@ -213,7 +230,7 @@ export const selectBookedLines = memoSelector(
     }
     return lines
   },
-  sameLineMap,
+  sameLineMap
 )
 
 /**
@@ -223,7 +240,14 @@ export const selectBookedLines = memoSelector(
  * answer.
  */
 export const selectRendered = memoSelector(
-  (s) => [selectVisible(s), s.events, s.agentHighlight?.ids, s.calendar, s.now, s.settings?.tz],
+  (s) => [
+    selectVisible(s),
+    s.events,
+    s.agentHighlight?.ids,
+    s.calendar,
+    s.now,
+    s.settings?.tz,
+  ],
   (s) => {
     const visible = selectVisible(s)
     const ids = s.agentHighlight?.ids
@@ -231,11 +255,11 @@ export const selectRendered = memoSelector(
     if (!ids?.length && !booked.size) return visible
     const shown = new Set(visible.map((e) => e.id))
     const extras = s.events.filter(
-      (e) => !shown.has(e.id) && (ids?.includes(e.id) || booked.has(e.id)),
+      (e) => !shown.has(e.id) && (ids?.includes(e.id) || booked.has(e.id))
     )
     return extras.length ? [...visible, ...extras] : visible
   },
-  sameList,
+  sameList
 )
 
 export interface WeekDay {
@@ -292,14 +316,17 @@ export const selectWeekPicks = memoSelector(
           .map(([, e]) => e),
       }))
     return days
-  },
+  }
 )
 
 /** Ids of events live right now, across all events (not just visible). */
 export const selectLiveIds = memoSelector(
   (s) => [s.events, s.now, s.settings?.tz],
-  (s) => new Set(s.events.filter((e) => isLive(e, s.now, s.settings?.tz)).map((e) => e.id)),
-  sameIdSet,
+  (s) =>
+    new Set(
+      s.events.filter((e) => isLive(e, s.now, s.settings?.tz)).map((e) => e.id)
+    ),
+  sameIdSet
 )
 
 /**
@@ -316,7 +343,7 @@ export const selectLiveCount = memoSelector(
     let n = 0
     for (const e of selectVisible(s)) if (live.has(e.id)) n++
     return n
-  },
+  }
 )
 
 /** Basemap lighting the clock would pick right now, ignoring any override. */
@@ -328,4 +355,6 @@ export const selectAutoLightPreset = (s: State): LightPreset =>
  * timezone, unless the user pinned light or dark in the map-layers panel.
  */
 export const selectLightPreset = (s: State): LightPreset =>
-  s.mapTheme === "auto" ? selectAutoLightPreset(s) : MAP_THEME_PRESET[s.mapTheme]
+  s.mapTheme === "auto"
+    ? selectAutoLightPreset(s)
+    : MAP_THEME_PRESET[s.mapTheme]

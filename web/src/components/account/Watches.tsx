@@ -16,7 +16,10 @@ import type { DiscoverySearch } from "@/lib/types"
  * paused or deleted here.
  */
 export function Watches({ onOpenChat }: { onOpenChat: () => void }) {
-  const [state, setState] = useState<{ watches: DiscoverySearch[]; max: number } | null>(null)
+  const [state, setState] = useState<{
+    watches: DiscoverySearch[]
+    max: number
+  } | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(
@@ -28,7 +31,7 @@ export function Watches({ onOpenChat }: { onOpenChat: () => void }) {
           setError(null)
         })
         .catch((err) => setError(String(err).slice(0, 120))),
-    [],
+    []
   )
   useEffect(() => {
     void refresh()
@@ -77,26 +80,38 @@ export function Watches({ onOpenChat }: { onOpenChat: () => void }) {
       ) : watches.length === 0 ? (
         <p className="mt-2 text-xs text-muted-foreground">
           Nothing watched yet. Ask Grapevine to{" "}
-          <button type="button" onClick={onOpenChat} className="underline underline-offset-2">
+          <button
+            type="button"
+            onClick={onOpenChat}
+            className="underline underline-offset-2"
+          >
             “watch for jazz shows”
           </button>{" "}
-          and confirm the card. The server re-searches the web on a schedule, verifies what it
-          finds against the source page, and puts real events on the map.
+          and confirm the card. The server re-searches the web on a schedule,
+          verifies what it finds against the source page, and puts real events
+          on the map.
         </p>
       ) : (
         <div className="mt-2 flex flex-col divide-y divide-border overflow-hidden rounded-lg border">
           {watches.map((w) => (
-            <div key={w.id} className="flex items-center gap-3 py-2 pr-1.5 pl-3">
+            <div
+              key={w.id}
+              className="flex items-center gap-3 py-2 pr-1.5 pl-3"
+            >
               <Switch
                 checked={w.active}
                 onCheckedChange={(on) => void toggle(w, on)}
                 aria-label={`${w.active ? "Pause" : "Resume"} ${w.query}`}
               />
               <div className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-[13px] font-medium">{w.query}</span>
+                <span className="truncate text-[13px] font-medium">
+                  {w.query}
+                </span>
                 <span className="truncate font-mono text-[11px] text-muted-foreground">
                   {cadenceLabel(w.cadenceHours)}
-                  {w.lastRunAt ? ` · last run ${new Date(w.lastRunAt).toLocaleDateString()}` : " · not run yet"}
+                  {w.lastRunAt
+                    ? ` · last run ${new Date(w.lastRunAt).toLocaleDateString()}`
+                    : " · not run yet"}
                   {w.lastStatus ? ` · ${w.lastStatus}` : ""}
                 </span>
               </div>

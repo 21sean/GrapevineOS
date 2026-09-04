@@ -25,12 +25,7 @@ import {
 } from "@langchain/core/language_models/chat_models";
 import { AIMessage, AIMessageChunk, type BaseMessage } from "@langchain/core/messages";
 import { ChatGenerationChunk, type ChatResult } from "@langchain/core/outputs";
-import {
-  buildCliPrompt,
-  cliChat,
-  cliSupportsTools,
-  type CliProviderId,
-} from "../providers.js";
+import { buildCliPrompt, cliChat, cliSupportsTools, type CliProviderId } from "../providers.js";
 import type { AgentFrame, ChatEffort } from "../types.js";
 
 export interface CliChatModelFields extends BaseChatModelParams {
@@ -134,8 +129,10 @@ export class CliChatModel extends BaseChatModel<BaseChatModelCallOptions> {
     options: this["ParsedCallOptions"],
     runManager?: CallbackManagerForLLMRun,
   ): Promise<ChatResult> {
-    const { text: answer, usage } = await this.run(messages, options.signal, (chunk) =>
-      void runManager?.handleLLMNewToken(chunk),
+    const { text: answer, usage } = await this.run(
+      messages,
+      options.signal,
+      (chunk) => void runManager?.handleLLMNewToken(chunk),
     );
     if (usage) this.frames?.({ type: "usage", usage });
     return { generations: [{ text: answer, message: new AIMessage(answer) }] };

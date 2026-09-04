@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+package-lock.json
+# generated
+server/src/db-types.ts
+openclaw/skills/grapevine/SKILL.md
+# vendored
+observability/langfuse/docker-compose.yml
+.agents/
+# python and data
+server/redteam/.venv/
+server/scripts/langfuse/managed-templates.json
+server/scripts/seed-data/
+supabase/

@@ -74,7 +74,9 @@ async function main() {
   );
   console.log(`scope rule: ${SCOPE_RULE}`);
   console.log("");
-  console.log(`AUC (in scope): ${area === null ? "n/a" : area.toFixed(4)}   threshold-independent separation`);
+  console.log(
+    `AUC (in scope): ${area === null ? "n/a" : area.toFixed(4)}   threshold-independent separation`,
+  );
   console.log("");
 
   console.log(`at the configured threshold ${threshold.toFixed(2)}:`);
@@ -90,9 +92,7 @@ async function main() {
   console.log("by attack family (in-scope recall; out-of-scope shown for context):");
   for (const f of byFamily(scored, threshold).sort((a, b) => b.recall - a.recall)) {
     const flag = f.inScope === 0 ? "n/a " : f.recall >= 0.75 ? "ok  " : "WEAK";
-    const outNote = f.outOfScope
-      ? `  +${f.outOfScopeDetected}/${f.outOfScope} out-of-scope`
-      : "";
+    const outNote = f.outOfScope ? `  +${f.outOfScopeDetected}/${f.outOfScope} out-of-scope` : "";
     console.log(
       `  ${flag} ${f.family.padEnd(20)} ${String(f.inScopeDetected).padStart(2)}/${String(f.inScope).padEnd(2)} caught  scores ${f.minScore.toFixed(3)}-${f.maxScore.toFixed(3)}${outNote}`,
     );

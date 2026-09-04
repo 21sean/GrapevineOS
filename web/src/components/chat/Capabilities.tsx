@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react"
 import { WrenchIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import { Spinner } from "@/components/ui/spinner"
 import { api } from "@/lib/api"
 import type { AgentCapabilities } from "@/lib/types"
@@ -78,7 +82,9 @@ export function CapabilitiesPopover() {
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 text-sm">
         {failed ? (
-          <p className="text-xs text-muted-foreground">Couldn't reach the server.</p>
+          <p className="text-xs text-muted-foreground">
+            Couldn't reach the server.
+          </p>
         ) : !caps ? (
           <Spinner className="mx-auto size-4" />
         ) : (
@@ -105,8 +111,13 @@ export function CapabilitiesPopover() {
                   <ul className="mt-1 flex flex-col gap-1">
                     {tools.map((t) => (
                       <li key={t.name} className="leading-snug">
-                        <span className="font-mono text-xs">{t.name.replace(/_/g, " ")}</span>
-                        <span className="text-xs text-muted-foreground"> {gist(t.description)}</span>
+                        <span className="font-mono text-xs">
+                          {t.name.replace(/_/g, " ")}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {" "}
+                          {gist(t.description)}
+                        </span>
                       </li>
                     ))}
                   </ul>
@@ -114,7 +125,8 @@ export function CapabilitiesPopover() {
               )
             })}
             <p className="text-xs text-muted-foreground">
-              The same tools are available to Claude over MCP; see Account for the connector.
+              The same tools are available to Claude over MCP; see Account for
+              the connector.
             </p>
           </div>
         )}

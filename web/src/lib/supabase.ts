@@ -16,7 +16,7 @@ const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined
 if (!url || !key) {
   console.warn(
     "[grapevine] VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY are not set — " +
-      "sign-in is disabled. Copy web/.env.example to web/.env.local and fill them in.",
+      "sign-in is disabled. Copy web/.env.example to web/.env.local and fill them in."
   )
 }
 
@@ -42,9 +42,10 @@ export type OAuthProvider = "google" | "github"
  */
 export async function signInWithProvider(
   provider: OAuthProvider,
-  redirectTo: string = window.location.origin,
+  redirectTo: string = window.location.origin
 ): Promise<void> {
-  if (!supabase) throw new Error("Sign-in isn't configured (missing Supabase env)")
+  if (!supabase)
+    throw new Error("Sign-in isn't configured (missing Supabase env)")
   const { error } = await supabase.auth.signInWithOAuth({
     provider,
     options: { redirectTo },
@@ -61,7 +62,8 @@ export const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events"
  * the fresh session, and hands it to the server (which vaults it).
  */
 export async function connectGoogleCalendar(): Promise<void> {
-  if (!supabase) throw new Error("Sign-in isn't configured (missing Supabase env)")
+  if (!supabase)
+    throw new Error("Sign-in isn't configured (missing Supabase env)")
   const { error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {

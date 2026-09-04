@@ -310,7 +310,7 @@ const EVENTS: NewEvent[] = [
     id: "beat-farmers-hootenanny-bellyup-jul11",
     title: "15th Annual Beat Farmers Hootenanny",
     description:
-      "Annual tribute to San Diego roots-rock legends the Beat Farmers, this year marking 40 years of \"Van Go\". The Farmers & friends. Evening show (times est.).",
+      'Annual tribute to San Diego roots-rock legends the Beat Farmers, this year marking 40 years of "Van Go". The Farmers & friends. Evening show (times est.).',
     category: "music",
     tags: ["live music", "roots rock", "local legends", "nightlife"],
     venue: "Belly Up Tavern",
@@ -365,7 +365,7 @@ const EVENTS: NewEvent[] = [
     id: "beethoven-by-the-bay-jul12",
     title: "Beethoven by the Bay — San Diego Symphony",
     description:
-      "Egmont Overture, the \"Emperor\" Concerto with pianist Parker Van Ostrand, and Symphony No. 4, outdoors at The Shell.",
+      'Egmont Overture, the "Emperor" Concerto with pianist Parker Van Ostrand, and Symphony No. 4, outdoors at The Shell.',
     category: "music",
     tags: ["classical", "symphony", "outdoors", "waterfront"],
     venue: "The Rady Shell at Jacobs Park",

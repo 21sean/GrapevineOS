@@ -114,8 +114,11 @@ async function signIn(): Promise<void> {
 }
 
 function unwrap<T>(payload: unknown, label: string): T {
-  const entry = (payload as { result?: { data?: { json?: T } }; error?: { json?: { message?: string } } }[])[0];
-  if (entry?.error) throw new Error(`${label} failed: ${entry.error.json?.message ?? JSON.stringify(entry.error)}`);
+  const entry = (
+    payload as { result?: { data?: { json?: T } }; error?: { json?: { message?: string } } }[]
+  )[0];
+  if (entry?.error)
+    throw new Error(`${label} failed: ${entry.error.json?.message ?? JSON.stringify(entry.error)}`);
   return entry?.result?.data?.json as T;
 }
 

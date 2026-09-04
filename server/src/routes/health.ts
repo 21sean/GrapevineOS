@@ -28,7 +28,11 @@ async function probe<T>(fn: () => Promise<T>, ms: number): Promise<Probe<T>> {
     const value = await Promise.race([fn(), deadline]);
     return { ok: true, ms: Date.now() - t0, value };
   } catch (err) {
-    return { ok: false, ms: Date.now() - t0, error: String((err as Error)?.message ?? err).slice(0, 200) };
+    return {
+      ok: false,
+      ms: Date.now() - t0,
+      error: String((err as Error)?.message ?? err).slice(0, 200),
+    };
   } finally {
     clearTimeout(timer);
   }
@@ -65,8 +69,7 @@ health.get("/readyz", async (_req, res) => {
     }, 2_500),
     guardConfig(),
   ]);
-  const classifier =
-    guard.mode === "off" ? "off" : classifierReady() ? "ready" : "failing-open";
+  const classifier = guard.mode === "off" ? "off" : classifierReady() ? "ready" : "failing-open";
   const ready = database.ok && checkpointer.ok && !shuttingDown();
   res.status(ready ? 200 : 503).json({
     ready,

@@ -32,14 +32,19 @@ console.log("live coverage:");
 for (const url of SOURCES) {
   const host = new URL(url).hostname.replace(/^www\./, "");
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(20_000), headers: { "user-agent": UA } });
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(20_000),
+      headers: { "user-agent": UA },
+    });
     if (!res.ok) {
       console.log(`  ${host.padEnd(24)} http ${res.status}`);
       continue;
     }
     const n = extractJsonLdEvents(await res.text(), url).length;
     if (n) withMarkup++;
-    console.log(`  ${host.padEnd(24)} ${String(n).padStart(3)} events${n ? "  <- free, exact" : ""}`);
+    console.log(
+      `  ${host.padEnd(24)} ${String(n).padStart(3)} events${n ? "  <- free, exact" : ""}`,
+    );
   } catch (err) {
     console.log(`  ${host.padEnd(24)} ${String((err as Error)?.message ?? err).slice(0, 40)}`);
   }

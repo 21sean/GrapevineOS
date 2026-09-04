@@ -57,7 +57,7 @@ export function scoreEvent(
   interests: Interests,
   now: Date,
   tz?: string,
-  taste?: Taste,
+  taste?: Taste
 ): number {
   const terms = interestTerms(e)
 
@@ -79,7 +79,10 @@ export function scoreEvent(
   if (reaction) s += REACTION_SELF_BOOST[reaction]
   if (taste?.tagAffinity) {
     // capped like loves, so a pile of reactions can't drown the buzz backbone
-    const learned = terms.reduce((sum, t) => sum + (taste.tagAffinity!.get(t) ?? 0), 0)
+    const learned = terms.reduce(
+      (sum, t) => sum + (taste.tagAffinity!.get(t) ?? 0),
+      0
+    )
     s += Math.max(-3, Math.min(3, learned))
   }
   return s
@@ -122,7 +125,7 @@ export function matchesFilters(
   e: CityEvent,
   f: Filters,
   now: Date,
-  tz?: string,
+  tz?: string
 ): boolean {
   if (hasEnded(e, now, tz)) return false
   if (f.hidePromoted && e.promoted) return false
@@ -133,7 +136,8 @@ export function matchesFilters(
   if (f.farmers === "hide" && isFarmersMarket(e)) return false
   if (f.minRating > 0 && e.rating < f.minRating) return false
   if (f.categories.length && !f.categories.includes(e.category)) return false
-  if (f.hideCategories.length && f.hideCategories.includes(e.category)) return false
+  if (f.hideCategories.length && f.hideCategories.includes(e.category))
+    return false
   if (f.dateFrom || f.dateTo) {
     // window over the next occurrence, city-local — same rule the agent's
     // search_events uses server-side
@@ -181,7 +185,7 @@ export function sortEvents(
   events: CityEvent[],
   sort: SortKey,
   now: Date,
-  tz?: string,
+  tz?: string
 ): CityEvent[] {
   if (sort === "relevance") return events
   const sorted = [...events]
@@ -189,7 +193,9 @@ export function sortEvents(
     // next occurrence, not anchor start — recurring events sort by when
     // they actually happen next. Keyed once per event, not per comparison.
     const startMs = new Map(
-      events.map((e) => [e, Date.parse(nextOccurrence(e, now, tz).start)] as const),
+      events.map(
+        (e) => [e, Date.parse(nextOccurrence(e, now, tz).start)] as const
+      )
     )
     sorted.sort((a, b) => startMs.get(a)! - startMs.get(b)!)
   } else if (sort === "alpha") {
@@ -221,7 +227,7 @@ export function visibleEvents(
   // "Near me" membership for the resolved isochrone; undefined = zone not
   // ready yet (or filter off), which deliberately filters nothing — better
   // a beat of "everything" than a flash of empty while the zone loads.
-  near?: (e: CityEvent) => boolean,
+  near?: (e: CityEvent) => boolean
 ): CityEvent[] {
   // Score each event once, then sort by the cached number — scoring inside
   // the comparator would re-run isLive/nextOccurrence O(n log n) times.
@@ -244,12 +250,12 @@ export function visibleEvents(
 export function carouselEvents(
   visible: CityEvent[],
   now: Date,
-  tz?: string,
+  tz?: string
 ): CityEvent[] {
   const live = visible.filter((e) => isLive(e, now, tz))
   if (live.length >= 2) return live.slice(0, 7)
   const soon = visible.filter(
-    (e) => !isLive(e, now, tz) && minutesUntilStart(e, now, tz) <= 24 * 60,
+    (e) => !isLive(e, now, tz) && minutesUntilStart(e, now, tz) <= 24 * 60
   )
   return [...live, ...soon].slice(0, 7)
 }

@@ -79,8 +79,6 @@ export const CLI_PROVIDERS: CliProviderInfo[] = [
   },
 ];
 
-
-
 // ---------------------------------------------------------------------------
 // Shelling out (Windows npm shims are .cmd files, so shell:true there; POSIX
 // spawns the binary directly so multiline args — Copilot takes its prompt as
@@ -220,11 +218,7 @@ function detectAuth(id: CliProviderId): Pick<CliProviderStatus, "authed" | "auth
       return { authed: false, authKind: null };
     }
     case "copilot": {
-      if (
-        process.env.COPILOT_GITHUB_TOKEN ||
-        process.env.GH_TOKEN ||
-        process.env.GITHUB_TOKEN
-      )
+      if (process.env.COPILOT_GITHUB_TOKEN || process.env.GH_TOKEN || process.env.GITHUB_TOKEN)
         return { authed: true, authKind: "api-key" };
       // `copilot login` prefers the OS credential store but falls back to
       // plain files under COPILOT_HOME (default ~/.copilot); gh CLI logins
@@ -262,9 +256,7 @@ export async function detectProviders(force = false): Promise<CliProviderStatus[
         /* not installed / not on PATH */
       }
       // Stale credential files shouldn't report an uninstalled CLI as ready.
-      const auth = installed
-        ? detectAuth(p.id)
-        : ({ authed: false, authKind: null } as const);
+      const auth = installed ? detectAuth(p.id) : ({ authed: false, authKind: null } as const);
       return { ...p, installed, version, ...auth };
     }),
   );
@@ -287,8 +279,6 @@ const CLI_TIMEOUT_MS = llmPolicy("claude").timeoutMs;
 export function cliSupportsTools(id: CliProviderId): boolean {
   return id === "claude";
 }
-
-
 
 export interface CliChatResult {
   text: string;
@@ -373,8 +363,7 @@ function extractCliUsage(
   const fresh = num(usageBlock?.input_tokens) ?? num(busiest?.inputTokens);
   const outputTokens = num(usageBlock?.output_tokens) ?? num(busiest?.outputTokens);
   if (fresh === undefined && outputTokens === undefined) return undefined;
-  const cacheRead =
-    num(usageBlock?.cache_read_input_tokens) ?? num(busiest?.cacheReadInputTokens);
+  const cacheRead = num(usageBlock?.cache_read_input_tokens) ?? num(busiest?.cacheReadInputTokens);
   const cacheWrite =
     num(usageBlock?.cache_creation_input_tokens) ?? num(busiest?.cacheCreationInputTokens);
 
@@ -528,9 +517,7 @@ export async function cliChat(
       // with tools on, --mcp-config points back at Grapevine's own /mcp via a
       // temp file (inline JSON quoting is fragile under shell:true on
       // Windows) and --allowedTools mcp__grapevine pre-approves only ours.
-      const dir = tools
-        ? await mkdtemp(path.join(os.tmpdir(), "grapevine-claude-"))
-        : null;
+      const dir = tools ? await mkdtemp(path.join(os.tmpdir(), "grapevine-claude-")) : null;
       let mcpArgs: string[] = ["--strict-mcp-config"];
       if (dir) {
         const cfgFile = path.join(dir, "mcp.json");
@@ -597,7 +584,9 @@ export async function cliChat(
           ["exec", "--skip-git-repo-check", "--output-last-message", outFile, "-"],
           { stdin: prompt, timeoutMs: CLI_TIMEOUT_MS, signal },
         );
-        const answer = await readFile(outFile, "utf8").then((s) => s.trim()).catch(() => "");
+        const answer = await readFile(outFile, "utf8")
+          .then((s) => s.trim())
+          .catch(() => "");
         if (answer) return { text: answer };
         if (r.code !== 0) throw cliError("codex", r);
         return { text: r.stdout.trim() };
@@ -651,8 +640,6 @@ function cliError(bin: string, r: RunResult): Error {
 // JSON tasks — the extraction/rating pipeline through a CLI instead of Ollama
 // ---------------------------------------------------------------------------
 
-
-
 /**
  * One system+user exchange through a CLI provider, parsed as JSON. Tools stay
  * off — extraction is a pure text-in/JSON-out task, so there's no reason to
@@ -687,8 +674,6 @@ export interface Exchange {
  * re-reads.
  */
 const MAX_EXCHANGES = 8;
-
-
 
 /** System prompt + recent exchanges + the new message, as one CLI prompt. */
 export function buildCliPrompt(

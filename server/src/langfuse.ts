@@ -38,7 +38,10 @@ const warnedSites = new Set<string>();
 function warnOnce(site: string, err: unknown): void {
   if (warnedSites.has(site)) return;
   warnedSites.add(site);
-  log.warn({ site, err: String(err).slice(0, 200) }, "langfuse: giving up on this site after an error");
+  log.warn(
+    { site, err: String(err).slice(0, 200) },
+    "langfuse: giving up on this site after an error",
+  );
 }
 
 /**

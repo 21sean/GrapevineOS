@@ -94,8 +94,21 @@ export type { DiscoveryCandidate, DiscoveryRunResult };
 // ---------------------------------------------------------------------------
 
 const STOPWORDS = new Set([
-  "the", "and", "for", "with", "from", "this", "that", "your", "free",
-  "event", "events", "night", "day", "festival", "annual",
+  "the",
+  "and",
+  "for",
+  "with",
+  "from",
+  "this",
+  "that",
+  "your",
+  "free",
+  "event",
+  "events",
+  "night",
+  "day",
+  "festival",
+  "annual",
 ]);
 
 /**
@@ -179,8 +192,7 @@ function hardReject(
   const end = Date.parse(e.end);
   if (!Number.isFinite(start) || !Number.isFinite(end)) return "unparseable date";
   const dayMs = 86_400_000;
-  if (!e.recurrence && Math.max(start, end) < now.getTime() - dayMs)
-    return "event is in the past";
+  if (!e.recurrence && Math.max(start, end) < now.getTime() - dayMs) return "event is in the past";
   if (start > now.getTime() + MAX_DAYS_OUT * dayMs)
     return `start is more than ${MAX_DAYS_OUT} days out`;
   if (!e.venue.trim()) return "no venue";
@@ -374,7 +386,10 @@ async function materializeJsonLd(
     const { precise: _precise, ...c } = candidate;
     let { lng, lat } = c;
     if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
-      const hit = await geocode([c.venue, c.address, settings.city].filter(Boolean).join(", "), settings.center);
+      const hit = await geocode(
+        [c.venue, c.address, settings.city].filter(Boolean).join(", "),
+        settings.center,
+      );
       if (!hit) continue; // no location, no marker
       lng = hit.lng;
       lat = hit.lat;
@@ -553,8 +568,12 @@ export async function runDiscovery(opts: {
       const reason = hardReject(e, page.text, now, !structured);
       if (reason) {
         result.rejected.push({
-          event: e, verdict: "rejected", confidence: 0, reason,
-          sourceUrl: page.url, corroborations: 1,
+          event: e,
+          verdict: "rejected",
+          confidence: 0,
+          reason,
+          sourceUrl: page.url,
+          corroborations: 1,
         });
       } else {
         survivors.push(e);
@@ -603,9 +622,12 @@ export async function runDiscovery(opts: {
       // Verification unavailable ≠ verified: fail closed, keep the reason.
       for (const e of survivors) {
         result.rejected.push({
-          event: e, verdict: "rejected", confidence: 0,
+          event: e,
+          verdict: "rejected",
+          confidence: 0,
           reason: `verifier failed: ${String(err).slice(0, 120)}`,
-          sourceUrl: page.url, corroborations: corroborationsOf(e),
+          sourceUrl: page.url,
+          corroborations: corroborationsOf(e),
         });
       }
       continue;
@@ -616,10 +638,13 @@ export async function runDiscovery(opts: {
       const v = verdicts.get(index);
       if (!v || v.verdict === "unsupported") {
         result.rejected.push({
-          event: e, verdict: "rejected", confidence: v?.confidence ?? 0,
+          event: e,
+          verdict: "rejected",
+          confidence: v?.confidence ?? 0,
           reason: v ? "source page does not support this event" : "verifier returned no verdict",
           ...(v?.evidence && { evidence: v.evidence }),
-          sourceUrl: page.url, corroborations,
+          sourceUrl: page.url,
+          corroborations,
         });
         return;
       }
@@ -639,20 +664,26 @@ export async function runDiscovery(opts: {
       const required = Math.max(0.3, bar - 0.15 * supports);
       if (v.confidence < required) {
         result.rejected.push({
-          event: e, verdict: "rejected", confidence: v.confidence,
+          event: e,
+          verdict: "rejected",
+          confidence: v.confidence,
           reason:
             `confidence ${v.confidence.toFixed(2)} below ${required.toFixed(2)} ` +
             `(date on page: ${dateSupport ? "yes" : "no"}, quote on page: ` +
             `${evidenceSupport ? "yes" : "no"}, sources: ${corroborations})`,
           ...(v.evidence && { evidence: v.evidence }),
-          sourceUrl: page.url, corroborations,
+          sourceUrl: page.url,
+          corroborations,
         });
         return;
       }
       result.verified.push({
-        event, verdict: v.verdict, confidence: v.confidence,
+        event,
+        verdict: v.verdict,
+        confidence: v.confidence,
         ...(v.evidence && { evidence: v.evidence }),
-        sourceUrl: page.url, corroborations,
+        sourceUrl: page.url,
+        corroborations,
       });
     });
   }

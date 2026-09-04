@@ -2,13 +2,40 @@
   "name": "grapevine",
   "private": true,
   "version": "0.1.0",
-  "description": "Grapevine — real-time map of the local events actually worth going to",
+  "description": "Grapevine: a real-time map of the local events actually worth going to, with an agent built in",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "server",
+    "web",
+    "workers/email-ingest"
+  ],
   "scripts": {
-    "dev": "concurrently -n api,web -c yellow,cyan \"npm --prefix server run dev\" \"npm --prefix web run dev\"",
-    "build": "npm --prefix web run build",
-    "typecheck": "npm --prefix web run typecheck && npm --prefix server run typecheck"
+    "dev": "concurrently -n api,web -c yellow,cyan \"npm run dev -w server\" \"npm run dev -w web\"",
+    "build": "npm run build -w web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "contracts:check": "npm run contracts:check -w server",
+    "evals": "npm run evals -w server --"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "@eslint/js": "^10.0.1",
+    "concurrently": "^9.1.2",
+    "eslint": "^10.8.0",
+    "globals": "^17.8.0",
+    "prettier": "^3.9.6",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.65.0",
+    "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "deepeval": {
+      "@langchain/core": "^1.2.3"
+    }
   }
 }

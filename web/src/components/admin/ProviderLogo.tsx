@@ -8,7 +8,13 @@ const cache = new Map<string, string>()
  * models.dev logos are currentColor SVGs, so they're inlined (not <img>)
  * to inherit the theme's foreground color on the dark UI.
  */
-export function ProviderLogo({ id, className }: { id: string; className?: string }) {
+export function ProviderLogo({
+  id,
+  className,
+}: {
+  id: string
+  className?: string
+}) {
   const [svg, setSvg] = useState(cache.get(id) ?? "")
 
   useEffect(() => {

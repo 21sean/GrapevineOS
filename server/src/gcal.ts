@@ -88,11 +88,7 @@ function gcalBody(e: CityEvent, tz: string) {
 }
 
 /** Creates the event on the user's primary calendar; returns Google's id. */
-export async function insertGoogleEvent(
-  user: User,
-  event: CityEvent,
-  tz: string,
-): Promise<string> {
+export async function insertGoogleEvent(user: User, event: CityEvent, tz: string): Promise<string> {
   const token = await accessToken(user);
   const res = await fetch(EVENTS_URL, {
     method: "POST",
@@ -236,11 +232,7 @@ function patchToBody(patch: GcalEventPatch, tz: string): Record<string, unknown>
  * Events on the user's primary calendar inside [from, to). Recurring series
  * come back expanded into single occurrences, ordered by start.
  */
-export async function listGoogleEvents(
-  user: User,
-  from: string,
-  to: string,
-): Promise<GcalEvent[]> {
+export async function listGoogleEvents(user: User, from: string, to: string): Promise<GcalEvent[]> {
   const token = await accessToken(user);
   const params = new URLSearchParams({
     timeMin: new Date(from).toISOString(),
@@ -255,9 +247,7 @@ export async function listGoogleEvents(
   });
   if (!res.ok) throw await gcalError(res, "list");
   const body = (await res.json()) as { items?: RawGcalEvent[] };
-  return (body.items ?? [])
-    .filter((r) => r.status !== "cancelled")
-    .map((r) => toWebEvent(r, user));
+  return (body.items ?? []).filter((r) => r.status !== "cancelled").map((r) => toWebEvent(r, user));
 }
 
 /**

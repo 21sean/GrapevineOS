@@ -40,36 +40,78 @@ const COLLAPSE: { id: string; name: string; note: string; a: CityEvent; b: CityE
     id: "bare-vs-qualified-team",
     name: "Bare vs. fully-qualified team name",
     note: "Two sources, one ballgame: the schedule page drops the city, the ticket page keeps it.",
-    a: ev({ title: "Padres vs. San Francisco Giants", start: "2026-08-02T13:10:00-07:00", venue: "Petco Park" }),
-    b: ev({ title: "San Diego Padres vs. San Francisco Giants", start: "2026-08-02T13:10:00-07:00", venue: "Petco Park" }),
+    a: ev({
+      title: "Padres vs. San Francisco Giants",
+      start: "2026-08-02T13:10:00-07:00",
+      venue: "Petco Park",
+    }),
+    b: ev({
+      title: "San Diego Padres vs. San Francisco Giants",
+      start: "2026-08-02T13:10:00-07:00",
+      venue: "Petco Park",
+    }),
   },
   {
     id: "festival-plus-descriptor",
     name: "Festival name vs. name plus descriptor",
     note: "One street fair, two rows, because a listing appended its own subtitle.",
-    a: ev({ title: "Hillcrest CityFest", start: "2026-08-09T12:00:00-07:00", venue: "5th Avenue, Hillcrest" }),
-    b: ev({ title: "Hillcrest CityFest Summer Block Party", start: "2026-08-09T12:00:00-07:00", venue: "5th Avenue Hillcrest" }),
+    a: ev({
+      title: "Hillcrest CityFest",
+      start: "2026-08-09T12:00:00-07:00",
+      venue: "5th Avenue, Hillcrest",
+    }),
+    b: ev({
+      title: "Hillcrest CityFest Summer Block Party",
+      start: "2026-08-09T12:00:00-07:00",
+      venue: "5th Avenue Hillcrest",
+    }),
   },
   {
     id: "show-plus-guest",
     name: "Show vs. show with guest artist",
     note: "Venue spellings differ too, so this pair also exercises the venue normalizer.",
-    a: ev({ title: "Stayin' Alive: The Bee Gees & Beyond", start: "2026-08-08T19:30:00-07:00", venue: "The Rady Shell at Jacobs Park" }),
-    b: ev({ title: "Stayin' Alive: The Bee Gees & Beyond with RAJATON", start: "2026-08-08T19:30:00-07:00", venue: "Rady Shell @ Jacobs Park" }),
+    a: ev({
+      title: "Stayin' Alive: The Bee Gees & Beyond",
+      start: "2026-08-08T19:30:00-07:00",
+      venue: "The Rady Shell at Jacobs Park",
+    }),
+    b: ev({
+      title: "Stayin' Alive: The Bee Gees & Beyond with RAJATON",
+      start: "2026-08-08T19:30:00-07:00",
+      venue: "Rady Shell @ Jacobs Park",
+    }),
   },
   {
     id: "recurring-exhibit-extended-title",
     name: "Recurring exhibit, one title extended",
     note: "Both carry the same RRULE, so the series clause must not block the collapse.",
-    a: ev({ title: "Comic-Con Museum: Doctor Who Worlds of Wonder", start: "2026-08-02T10:00:00-07:00", venue: "Comic-Con Museum", recurrence: "FREQ=WEEKLY;BYDAY=SU,MO,TU,TH,FR,SA" }),
-    b: ev({ title: "Comic-Con Museum: Doctor Who Worlds of Wonder and Lucha Libre Exhibits", start: "2026-08-02T10:00:00-07:00", venue: "Comic-Con Museum", recurrence: "FREQ=WEEKLY;BYDAY=SU,MO,TU,TH,FR,SA" }),
+    a: ev({
+      title: "Comic-Con Museum: Doctor Who Worlds of Wonder",
+      start: "2026-08-02T10:00:00-07:00",
+      venue: "Comic-Con Museum",
+      recurrence: "FREQ=WEEKLY;BYDAY=SU,MO,TU,TH,FR,SA",
+    }),
+    b: ev({
+      title: "Comic-Con Museum: Doctor Who Worlds of Wonder and Lucha Libre Exhibits",
+      start: "2026-08-02T10:00:00-07:00",
+      venue: "Comic-Con Museum",
+      recurrence: "FREQ=WEEKLY;BYDAY=SU,MO,TU,TH,FR,SA",
+    }),
   },
   {
     id: "written-ordinal-venue",
     name: "Written-out ordinal vs. numeral in the venue",
     note: "Missed on the first live run: this exact pair reached the database as two rows.",
-    a: ev({ title: "Hillcrest CityFest", start: "2026-08-09T12:00:00-07:00", venue: "Fifth Avenue, Hillcrest" }),
-    b: ev({ title: "Hillcrest CityFest Summer Block Party", start: "2026-08-09T12:00:00-07:00", venue: "5th Avenue, Hillcrest" }),
+    a: ev({
+      title: "Hillcrest CityFest",
+      start: "2026-08-09T12:00:00-07:00",
+      venue: "Fifth Avenue, Hillcrest",
+    }),
+    b: ev({
+      title: "Hillcrest CityFest Summer Block Party",
+      start: "2026-08-09T12:00:00-07:00",
+      venue: "5th Avenue, Hillcrest",
+    }),
   },
   {
     id: "same-instant-different-offset",
@@ -114,7 +156,12 @@ const KEEP_APART: { id: string; name: string; note: string; a: CityEvent; b: Cit
     name: "One-off must not merge into a weekly series",
     note: "Merging these would delete a whole recurring series or pin it to one night.",
     a: ev({ title: "Trivia Night", start: "2026-08-02T19:00:00-07:00", venue: "Bar X" }),
-    b: ev({ title: "Trivia Night Special", start: "2026-08-02T19:00:00-07:00", venue: "Bar X", recurrence: "FREQ=WEEKLY;BYDAY=SU" }),
+    b: ev({
+      title: "Trivia Night Special",
+      start: "2026-08-02T19:00:00-07:00",
+      venue: "Bar X",
+      recurrence: "FREQ=WEEKLY;BYDAY=SU",
+    }),
   },
   {
     id: "blank-venue",
@@ -127,8 +174,16 @@ const KEEP_APART: { id: string; name: string; note: string; a: CityEvent; b: Cit
     id: "headliner-vs-support",
     name: "Headliner vs. support act at the same show",
     note: "Both are real listings a user might be looking for by name.",
-    a: ev({ title: "Death Cab for Cutie", start: "2026-08-04T19:00:00-07:00", venue: "The Rady Shell" }),
-    b: ev({ title: "Nation of Language", start: "2026-08-04T19:00:00-07:00", venue: "The Rady Shell" }),
+    a: ev({
+      title: "Death Cab for Cutie",
+      start: "2026-08-04T19:00:00-07:00",
+      venue: "The Rady Shell",
+    }),
+    b: ev({
+      title: "Nation of Language",
+      start: "2026-08-04T19:00:00-07:00",
+      venue: "The Rady Shell",
+    }),
   },
 ];
 
@@ -161,7 +216,10 @@ export const dedupeSuite: EvalSuite = {
       note,
       run: () => {
         expect(nearDuplicate(a, b), "not detected as a duplicate");
-        expect(nearDuplicate(b, a), "detected in one direction only — the predicate is not symmetric");
+        expect(
+          nearDuplicate(b, a),
+          "detected in one direction only — the predicate is not symmetric",
+        );
         return "collapsed, both directions";
       },
     })),
@@ -200,7 +258,11 @@ export const dedupeSuite: EvalSuite = {
         const forward = collapseNearDuplicates([poor, rich]).events[0];
         const reversed = collapseNearDuplicates([rich, poor]).events[0];
         expectEq(reversed.title, forward.title, "title after reversing the input");
-        expectEq(reversed.description, forward.description, "description after reversing the input");
+        expectEq(
+          reversed.description,
+          forward.description,
+          "description after reversing the input",
+        );
         return "same merged record either way round";
       },
     },

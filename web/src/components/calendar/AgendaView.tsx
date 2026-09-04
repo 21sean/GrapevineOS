@@ -56,8 +56,8 @@ export function AgendaView({
           </EmptyMedia>
           <EmptyTitle>Nothing scheduled</EmptyTitle>
           <EmptyDescription>
-            Your Google Calendar is clear for the next {AGENDA_DAYS} days.
-            Save something from the map, or add an event with “New event”.
+            Your Google Calendar is clear for the next {AGENDA_DAYS} days. Save
+            something from the map, or add an event with “New event”.
           </EmptyDescription>
         </EmptyHeader>
       </Empty>
@@ -71,7 +71,7 @@ export function AgendaView({
           <h3
             className={cn(
               "font-mono text-[11px] tracking-[0.14em] uppercase",
-              sameDay(day, now) ? "text-live" : "text-muted-foreground",
+              sameDay(day, now) ? "text-live" : "text-muted-foreground"
             )}
           >
             {new Intl.DateTimeFormat("en-US", {
@@ -114,7 +114,7 @@ function AgendaCard({
       className={cn(
         "flex w-full flex-col gap-1 rounded-lg border px-3.5 py-2.5 text-left transition-opacity hover:opacity-85",
         meta.chip,
-        ended && "opacity-55 [&>*]:line-through",
+        ended && "opacity-55 [&>*]:line-through"
       )}
     >
       <span className="flex items-center gap-2">

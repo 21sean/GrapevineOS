@@ -28,7 +28,11 @@ const THEME_OPTIONS = [
   { value: "auto", label: "Auto", icon: SunMoonIcon },
   { value: "light", label: "Light", icon: SunIcon },
   { value: "dark", label: "Dark", icon: MoonIcon },
-] as const satisfies readonly { value: MapTheme; label: string; icon: LucideIcon }[]
+] as const satisfies readonly {
+  value: MapTheme
+  label: string
+  icon: LucideIcon
+}[]
 
 /**
  * Map layers control: a floating glass button on the map that opens a popover
@@ -183,7 +187,7 @@ function LayerRow({
     <label
       className={cn(
         "flex cursor-pointer items-center justify-between gap-3 rounded-md px-1.5 py-1.5 transition-colors hover:bg-accent/60",
-        !checked && "opacity-60",
+        !checked && "opacity-60"
       )}
     >
       <span className="flex min-w-0 items-center gap-2.5">

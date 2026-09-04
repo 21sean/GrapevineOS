@@ -16,7 +16,9 @@ import type { InboxEmail } from "@/lib/types"
  */
 export function InboxTab() {
   const refreshEvents = useGrapevine((s) => s.refreshEvents)
-  const inboxDomain = useGrapevine((s) => s.settings?.inboxDomain ?? "example.com")
+  const inboxDomain = useGrapevine(
+    (s) => s.settings?.inboxDomain ?? "example.com"
+  )
 
   const [emails, setEmails] = useState<InboxEmail[] | null>(null)
   const [configured, setConfigured] = useState(true)
@@ -52,12 +54,15 @@ export function InboxTab() {
       })
       setEmails(
         (cur) =>
-          cur?.map((e) => (e.key === email.key ? { ...e, processed: true } : e)) ??
-          cur,
+          cur?.map((e) =>
+            e.key === email.key ? { ...e, processed: true } : e
+          ) ?? cur
       )
       if (res.added > 0) void refreshEvents()
     } catch (err) {
-      toast.error("Reprocess failed", { description: String(err).slice(0, 140) })
+      toast.error("Reprocess failed", {
+        description: String(err).slice(0, 140),
+      })
     } finally {
       setBusyKey(null)
     }

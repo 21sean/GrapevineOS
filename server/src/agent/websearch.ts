@@ -20,8 +20,7 @@ export interface WebHit {
 }
 
 export type WebSearchResult =
-  | { provider: "searxng" | "duckduckgo"; count: number; results: WebHit[] }
-  | { error: string };
+  { provider: "searxng" | "duckduckgo"; count: number; results: WebHit[] } | { error: string };
 
 const SEARCH_TIMEOUT_MS = 12_000;
 const PAGE_TIMEOUT_MS = 12_000;
@@ -196,7 +195,13 @@ export type ReadPageResult =
 export function blockedHost(hostname: string): boolean {
   const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (h === "localhost" || h.endsWith(".local") || h.endsWith(".internal")) return true;
-  if (h === "::" || h === "::1" || h.startsWith("fe80:") || h.startsWith("fc") || h.startsWith("fd"))
+  if (
+    h === "::" ||
+    h === "::1" ||
+    h.startsWith("fe80:") ||
+    h.startsWith("fc") ||
+    h.startsWith("fd")
+  )
     return true;
   // Any IPv4-mapped IPv6 literal — the URL parser serializes ::ffff:127.0.0.1
   // to ::ffff:7f00:1, so match the whole class rather than the dotted form;

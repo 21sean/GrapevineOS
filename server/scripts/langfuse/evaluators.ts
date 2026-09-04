@@ -344,13 +344,11 @@ const GRAPEVINE_TOPICS: { label: string; definition: string }[] = [
   },
   {
     label: "festivals_and_holidays",
-    definition:
-      "multi-day festivals, parades, fireworks, and seasonal or holiday programming.",
+    definition: "multi-day festivals, parades, fireworks, and seasonal or holiday programming.",
   },
   {
     label: "logistics_and_transport",
-    definition:
-      "getting there and back: travel time, parking, walkability, timing between stops.",
+    definition: "getting there and back: travel time, parking, walkability, timing between stops.",
   },
   {
     label: "app_and_map",

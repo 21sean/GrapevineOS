@@ -15,7 +15,8 @@ const at = (iso: string) => new Date(iso);
 /** 2026-07-29 is a Wednesday; UTC keeps the assertions unambiguous. */
 const WED = "2026-07-29";
 
-const ZOO = "Mo 09:00-18:00; Tu 09:00-18:00; We 09:00-18:00; Th 09:00-18:00; Fr 09:00-21:00; Sa 09:00-20:00; Su 09:00-17:00";
+const ZOO =
+  "Mo 09:00-18:00; Tu 09:00-18:00; We 09:00-18:00; Th 09:00-18:00; Fr 09:00-21:00; Sa 09:00-20:00; Su 09:00-17:00";
 
 export const hoursSuite: EvalSuite = {
   id: "hours",
@@ -30,11 +31,27 @@ export const hoursSuite: EvalSuite = {
       note: "The four shapes that cover most of the corpus.",
       run: () => {
         expectEq(parseOpeningHours("24/7")?.[0], [{ from: 0, to: 1440 }], "24/7 on Sunday");
-        expectEq(parseOpeningHours("Mo-Fr 09:00-17:00")?.[0], [{ from: 540, to: 1020 }], "weekday range");
-        expectEq(parseOpeningHours("Mo-Fr 09:00-17:00")?.[5], [], "weekday range must exclude Saturday");
+        expectEq(
+          parseOpeningHours("Mo-Fr 09:00-17:00")?.[0],
+          [{ from: 540, to: 1020 }],
+          "weekday range",
+        );
+        expectEq(
+          parseOpeningHours("Mo-Fr 09:00-17:00")?.[5],
+          [],
+          "weekday range must exclude Saturday",
+        );
         expectEq(parseOpeningHours("Sa,Su 10:00-14:00")?.[6], [{ from: 600, to: 840 }], "day list");
-        expectEq(parseOpeningHours("09:00-17:00")?.[3], [{ from: 540, to: 1020 }], "bare times apply to every day");
-        expectEq(parseOpeningHours("Fr-Mo 10:00-14:00")?.[0], [{ from: 600, to: 840 }], "range wrapping past Sunday");
+        expectEq(
+          parseOpeningHours("09:00-17:00")?.[3],
+          [{ from: 540, to: 1020 }],
+          "bare times apply to every day",
+        );
+        expectEq(
+          parseOpeningHours("Fr-Mo 10:00-14:00")?.[0],
+          [{ from: 600, to: 840 }],
+          "range wrapping past Sunday",
+        );
         return "6 shapes parsed";
       },
     },
@@ -43,13 +60,24 @@ export const hoursSuite: EvalSuite = {
       name: "Late-night spans, split shifts, and explicit closures",
       note: "A span past midnight that stopped at 1440 would close every bar at midnight.",
       run: () => {
-        expectEq(parseOpeningHours("Fr 20:00-02:00")?.[4], [{ from: 1200, to: 1560 }], "span past midnight");
+        expectEq(
+          parseOpeningHours("Fr 20:00-02:00")?.[4],
+          [{ from: 1200, to: 1560 }],
+          "span past midnight",
+        );
         expectEq(
           parseOpeningHours("Sa 09:00-12:00,18:00-22:00")?.[5],
-          [{ from: 540, to: 720 }, { from: 1080, to: 1320 }],
+          [
+            { from: 540, to: 720 },
+            { from: 1080, to: 1320 },
+          ],
           "two spans in one day",
         );
-        expectEq(parseOpeningHours("Mo-Su 09:00-17:00; Su off")?.[6], [], "a later rule clears the day");
+        expectEq(
+          parseOpeningHours("Mo-Su 09:00-17:00; Su off")?.[6],
+          [],
+          "a later rule clears the day",
+        );
         return "spans and overrides applied in order";
       },
     },
@@ -58,7 +86,11 @@ export const hoursSuite: EvalSuite = {
       name: "Per-day rules (the real San Diego Zoo string)",
       note: "Seven rules in one string, with a different Friday.",
       run: () => {
-        expectEq(parseOpeningHours(ZOO)?.[4], [{ from: 540, to: 1260 }], "Thursday of the zoo string");
+        expectEq(
+          parseOpeningHours(ZOO)?.[4],
+          [{ from: 540, to: 1260 }],
+          "Thursday of the zoo string",
+        );
         return "9 AM to 9 PM on the late day";
       },
     },
@@ -77,7 +109,11 @@ export const hoursSuite: EvalSuite = {
       id: "state-mid-shift",
       name: "Open mid-shift, reporting the closing time",
       run: () => {
-        expectEq(openState("Mo-Fr 09:00-17:00", "UTC", at(`${WED}T12:00:00Z`)), { open: true, at: "5 PM" }, "midday");
+        expectEq(
+          openState("Mo-Fr 09:00-17:00", "UTC", at(`${WED}T12:00:00Z`)),
+          { open: true, at: "5 PM" },
+          "midday",
+        );
         return "open until 5 PM";
       },
     },
@@ -111,7 +147,11 @@ export const hoursSuite: EvalSuite = {
       name: "Last night's late span is still open after midnight",
       note: "1 AM on Thursday belongs to Wednesday's 20:00-02:00 shift.",
       run: () => {
-        expectEq(openState("We 20:00-02:00", "UTC", at("2026-07-30T01:00:00Z")), { open: true, at: "2 AM" }, "1 AM");
+        expectEq(
+          openState("We 20:00-02:00", "UTC", at("2026-07-30T01:00:00Z")),
+          { open: true, at: "2 AM" },
+          "1 AM",
+        );
         expectEq(
           openState("We 20:00-02:00", "UTC", at("2026-07-30T03:00:00Z")),
           { open: false, at: "8 PM", laterInWeek: true },
@@ -124,7 +164,11 @@ export const hoursSuite: EvalSuite = {
       id: "state-always-open",
       name: "24/7 is always open",
       run: () => {
-        expectEq(openState("24/7", "UTC", at(`${WED}T03:00:00Z`)), { open: true, at: "12 AM" }, "3 AM");
+        expectEq(
+          openState("24/7", "UTC", at(`${WED}T03:00:00Z`)),
+          { open: true, at: "12 AM" },
+          "3 AM",
+        );
         return "open at 3 AM";
       },
     },
@@ -133,7 +177,11 @@ export const hoursSuite: EvalSuite = {
       name: "Unparseable hours and unknown zones give null, not a guess",
       run: () => {
         expectEq(openState("PH off", "UTC", at(`${WED}T12:00:00Z`)), null, "unparseable spec");
-        expectEq(openState("Mo-Fr 09:00-17:00", "Not/AZone", at(`${WED}T12:00:00Z`)), null, "unknown timezone");
+        expectEq(
+          openState("Mo-Fr 09:00-17:00", "Not/AZone", at(`${WED}T12:00:00Z`)),
+          null,
+          "unknown timezone",
+        );
         return "both declined";
       },
     },

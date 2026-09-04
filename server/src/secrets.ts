@@ -47,7 +47,10 @@ export function validateSecrets(env: NodeJS.ProcessEnv = process.env): void {
  * comparison is fixed-length and a length mismatch cannot short-circuit it.
  * Missing on either side is never equal.
  */
-export function safeEqual(given: string | undefined | null, expected: string | undefined | null): boolean {
+export function safeEqual(
+  given: string | undefined | null,
+  expected: string | undefined | null,
+): boolean {
   if (!given || !expected) return false;
   const a = createHash("sha256").update(given).digest();
   const b = createHash("sha256").update(expected).digest();

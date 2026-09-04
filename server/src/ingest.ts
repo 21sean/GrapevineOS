@@ -73,11 +73,19 @@ Rules:
       : ""
   }`;
 
-export interface ExtractedEvent extends CityEvent {}
+export type ExtractedEvent = CityEvent;
 
 export function slugId(title: string, start: string): string {
-  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
-  const hash = crypto.createHash("sha1").update(title + start).digest("hex").slice(0, 6);
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 40);
+  const hash = crypto
+    .createHash("sha1")
+    .update(title + start)
+    .digest("hex")
+    .slice(0, 6);
   return `${slug}-${hash}`;
 }
 

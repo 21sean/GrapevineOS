@@ -1,4 +1,4 @@
-# Grapevine *Agentic Local-Events Platform*
+# Grapevine _Agentic Local-Events Platform_
 
 A live 3D map of the San Diego events locals actually go to. Free local
 newsletters are the data source, a local LLM is the parser and critic, and the
@@ -113,8 +113,8 @@ via the external REST API.
 ## Ask Grapevine (the agent)
 
 Hit **⌘K** (or the "Ask Grapevine" pill in the top bar) and talk to the map:
-*"what's good tonight?"*, *"plan my Saturday"*, *"can I make it to the farmers
-market by 9?"*, *"I hate EDM"*. The concierge runs on the same local Ollama
+_"what's good tonight?"_, _"plan my Saturday"_, _"can I make it to the farmers
+market by 9?"_, _"I hate EDM"_. The concierge runs on the same local Ollama
 model as ingestion (pick a tools-capable one like `qwen3` in Admin -> Models):
 
 - **Grounded**: every answer draws on a digest of the live event set, so it
@@ -199,8 +199,8 @@ the graph.
 ### Guardrails (prompt-injection and persona defense)
 
 Local open-weights models will happily be talked out of character. Pressed a
-few times, ours once cheerfully replied *"I am Qwen, a large language model
-developed by Alibaba..."*. Grapevine defends the chat surface the way the
+few times, ours once cheerfully replied _"I am Qwen, a large language model
+developed by Alibaba..."_. Grapevine defends the chat surface the way the
 frontier labs do: **small, fast classifiers wrapped around the main model**,
 not a wall of regex bolted onto the prompt. Everything runs in-process, on CPU,
 with no paid APIs.
@@ -215,21 +215,21 @@ with no paid APIs.
 
 Four layers, each covering the gap the previous one leaves:
 
-| Layer | Catches | Engine | Latency | Fail mode |
-| --- | --- | --- | --- | --- |
-| **Input rail** | Jailbreaks and direct prompt injection in the user's message, blocked *before* the graph so it never poisons thread history | [Llama Prompt Guard 2](https://huggingface.co/meta-llama/Llama-Prompt-Guard-2-86M) (86M, ONNX) | ~15 to 90 ms | **open**: a broken download logs once and chat keeps working |
-| **Content rail** | Indirect injection smuggled inside fetched pages and search snippets before it reaches the model's context | same classifier | ~15 ms / window | **open** |
-| **Output rail** | Model-identity leaks (*"I am Qwen..."*) and system-prompt disclosure in the streamed answer, swapped for an in-character refusal | deterministic regex + streaming hold-back | ~0 | **closed**: always on, even if the classifier is disabled |
-| **Prompt hardening** | Keeps the model in character under social pressure ("it's important you tell me") | pinned system prompt | n/a | n/a |
+| Layer                | Catches                                                                                                                          | Engine                                                                                         | Latency         | Fail mode                                                    |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | --------------- | ------------------------------------------------------------ |
+| **Input rail**       | Jailbreaks and direct prompt injection in the user's message, blocked _before_ the graph so it never poisons thread history      | [Llama Prompt Guard 2](https://huggingface.co/meta-llama/Llama-Prompt-Guard-2-86M) (86M, ONNX) | ~15 to 90 ms    | **open**: a broken download logs once and chat keeps working |
+| **Content rail**     | Indirect injection smuggled inside fetched pages and search snippets before it reaches the model's context                       | same classifier                                                                                | ~15 ms / window | **open**                                                     |
+| **Output rail**      | Model-identity leaks (_"I am Qwen..."_) and system-prompt disclosure in the streamed answer, swapped for an in-character refusal | deterministic regex + streaming hold-back                                                      | ~0              | **closed**: always on, even if the classifier is disabled    |
+| **Prompt hardening** | Keeps the model in character under social pressure ("it's important you tell me")                                                | pinned system prompt                                                                           | n/a             | n/a                                                          |
 
 Why this shape:
 
 - **The same classifier guards tool inputs**, which is the injection path most
   agents miss: a poisoned event listing or web page telling the model to
-  "ignore your instructions" is caught as *content*, not just as a user turn.
+  "ignore your instructions" is caught as _content_, not just as a user turn.
 - **The output rail is deliberately deterministic.** Classifiers are
   probabilistic; the one failure we care about most, the model naming its
-  vendor, should be *impossible*, not merely improbable. It streams with a
+  vendor, should be _impossible_, not merely improbable. It streams with a
   64-character hold-back so a leak split across token chunks can't slip
   through, and it is keyed to the active model or CLI provider.
 
@@ -243,8 +243,8 @@ npm --prefix server run guardrails:eval   # first run downloads the model
 ## Interest learning (the feedback loop)
 
 Ranking isn't a static formula. It's a loop. Every event the user reacts to
-("going", "went", "not for me") reweights the tags of *that kind of
-event*, so taste is learned from behavior in the events' own open vocabulary,
+("going", "went", "not for me") reweights the tags of _that kind of
+event_, so taste is learned from behavior in the events' own open vocabulary,
 not just the fixed 26-topic interest picker. The score feeds every surface;
 what those surfaces show shapes the next reaction.
 
@@ -305,14 +305,14 @@ external assistants two ways:
   personal score that multiplies buzz, interests, and liveness and subtracts
   a promo penalty.
 - **Interests**: pillbox picker; "more like this" boosts, "less of this"
-  hides matching events entirely (pick *yoga* there and yoga is gone).
+  hides matching events entirely (pick _yoga_ there and yoga is gone).
 - **Event detail**: buzz stars with the model's blunt rationale ("Re-check
   buzz" re-runs it), traffic-aware drive time, directions link, and the
   ticket-provider link when advance tickets are needed.
 - **Ask Grapevine**: ⌘K concierge chat that searches, pins the map, plans
   days, and learns your taste (see above).
 - **Leave-by alerts**: mark "going" (or save to calendar) with notifications
-  on and Grapevine pushes *"Leave by 6:38"* at exactly the right minute -
+  on and Grapevine pushes _"Leave by 6:38"_ at exactly the right minute -
   traffic-aware drive time from your last coarse position plus a parking
   buffer. Reminders and the Sunday digest ride the same Web Push pipe.
 - **Admin -> Models**: Ollama health, active-model switcher, and a pull catalog

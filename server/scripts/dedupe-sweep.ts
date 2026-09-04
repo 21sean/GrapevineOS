@@ -35,9 +35,7 @@ for (let i = 0; i < events.length; i++) {
     if (dropped.has(events[j].id)) continue;
     if (!nearDuplicate(events[i], events[j])) continue;
     const [keep, drop] =
-      richness(events[i]) >= richness(events[j])
-        ? [events[i], events[j]]
-        : [events[j], events[i]];
+      richness(events[i]) >= richness(events[j]) ? [events[i], events[j]] : [events[j], events[i]];
     dropped.add(drop.id);
     pairs.push({ keep, drop });
   }
@@ -62,10 +60,14 @@ const deletable = pairs.filter((p) => !referenced.has(p.drop.id));
 const held = pairs.filter((p) => referenced.has(p.drop.id));
 
 for (const { keep, drop } of deletable) {
-  console.log(`  keep  ${keep.title}\n  drop  ${drop.title}\n        ${drop.venue} · ${drop.start}\n`);
+  console.log(
+    `  keep  ${keep.title}\n  drop  ${drop.title}\n        ${drop.venue} · ${drop.start}\n`,
+  );
 }
 for (const { keep, drop } of held) {
-  console.log(`  HELD  ${drop.title}\n        duplicate of "${keep.title}" but saved or reacted to — left alone\n`);
+  console.log(
+    `  HELD  ${drop.title}\n        duplicate of "${keep.title}" but saved or reacted to — left alone\n`,
+  );
 }
 console.log(
   `${pairs.length} near-duplicate pair${pairs.length === 1 ? "" : "s"}` +

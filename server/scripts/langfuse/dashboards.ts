@@ -75,9 +75,9 @@ const BASE = process.env.LANGFUSE_BASE_URL ?? "http://localhost:3000";
 const PROJECT = "grapevine-local";
 const AUTH =
   "Basic " +
-  Buffer.from(
-    `${process.env.LANGFUSE_PUBLIC_KEY}:${process.env.LANGFUSE_SECRET_KEY}`,
-  ).toString("base64");
+  Buffer.from(`${process.env.LANGFUSE_PUBLIC_KEY}:${process.env.LANGFUSE_SECRET_KEY}`).toString(
+    "base64",
+  );
 
 const DRY_RUN = process.argv.includes("--dry-run");
 
@@ -86,14 +86,29 @@ const DRY_RUN = process.argv.includes("--dry-run");
 // ---------------------------------------------------------------------------
 
 type Agg =
-  | "sum" | "avg" | "count" | "max" | "min"
-  | "p50" | "p75" | "p90" | "p95" | "p99"
-  | "histogram" | "uniq";
+  | "sum"
+  | "avg"
+  | "count"
+  | "max"
+  | "min"
+  | "p50"
+  | "p75"
+  | "p90"
+  | "p95"
+  | "p99"
+  | "histogram"
+  | "uniq";
 
 type ChartType =
-  | "LINE_TIME_SERIES" | "AREA_TIME_SERIES" | "BAR_TIME_SERIES"
-  | "HORIZONTAL_BAR" | "VERTICAL_BAR" | "PIE"
-  | "NUMBER" | "HISTOGRAM" | "PIVOT_TABLE";
+  | "LINE_TIME_SERIES"
+  | "AREA_TIME_SERIES"
+  | "BAR_TIME_SERIES"
+  | "HORIZONTAL_BAR"
+  | "VERTICAL_BAR"
+  | "PIE"
+  | "NUMBER"
+  | "HISTOGRAM"
+  | "PIVOT_TABLE";
 
 type ChartConfig = {
   type: ChartType;
@@ -185,7 +200,10 @@ const TRAFFIC: Board = {
       filters: [],
       chartType: "NUMBER",
       chartConfig: { type: "NUMBER" },
-      x: 0, y: 0, width: 4, height: 4,
+      x: 0,
+      y: 0,
+      width: 4,
+      height: 4,
     },
     {
       name: "Conversations started",
@@ -196,7 +214,10 @@ const TRAFFIC: Board = {
       filters: [],
       chartType: "NUMBER",
       chartConfig: { type: "NUMBER" },
-      x: 4, y: 0, width: 4, height: 4,
+      x: 4,
+      y: 0,
+      width: 4,
+      height: 4,
     },
     {
       name: "Traces recorded",
@@ -207,7 +228,10 @@ const TRAFFIC: Board = {
       filters: [],
       chartType: "NUMBER",
       chartConfig: { type: "NUMBER" },
-      x: 8, y: 0, width: 4, height: 4,
+      x: 8,
+      y: 0,
+      width: 4,
+      height: 4,
     },
     {
       name: "Visitor turns over time",
@@ -218,7 +242,10 @@ const TRAFFIC: Board = {
       filters: [{ column: "isRootObservation", operator: "=", value: true, type: "boolean" }],
       chartType: "BAR_TIME_SERIES",
       chartConfig: { type: "BAR_TIME_SERIES" },
-      x: 0, y: 4, width: 8, height: 6,
+      x: 0,
+      y: 4,
+      width: 8,
+      height: 6,
     },
     {
       // Was a PIE. Langfuse pies carry no legend and no slice labels, so four
@@ -231,7 +258,10 @@ const TRAFFIC: Board = {
       filters: [],
       chartType: "HORIZONTAL_BAR",
       chartConfig: { type: "HORIZONTAL_BAR", row_limit: 10, show_value_labels: true },
-      x: 8, y: 4, width: 4, height: 6,
+      x: 8,
+      y: 4,
+      width: 4,
+      height: 6,
     },
     {
       name: "Turns by visitor",
@@ -245,7 +275,10 @@ const TRAFFIC: Board = {
       ],
       chartType: "HORIZONTAL_BAR",
       chartConfig: { type: "HORIZONTAL_BAR", row_limit: 12, show_value_labels: true },
-      x: 0, y: 10, width: 6, height: 6,
+      x: 0,
+      y: 10,
+      width: 6,
+      height: 6,
     },
     {
       name: "Traces by tag",
@@ -257,7 +290,10 @@ const TRAFFIC: Board = {
       filters: [CONCIERGE_ONLY],
       chartType: "HORIZONTAL_BAR",
       chartConfig: { type: "HORIZONTAL_BAR", row_limit: 12, show_value_labels: true },
-      x: 6, y: 10, width: 6, height: 6,
+      x: 6,
+      y: 10,
+      width: 6,
+      height: 6,
     },
     {
       name: "Tool calls by name",
@@ -268,7 +304,10 @@ const TRAFFIC: Board = {
       filters: [],
       chartType: "VERTICAL_BAR",
       chartConfig: { type: "VERTICAL_BAR", row_limit: 15 },
-      x: 0, y: 16, width: 6, height: 6,
+      x: 0,
+      y: 16,
+      width: 6,
+      height: 6,
     },
     {
       // The environment dimension used to be here too. Every session lives in
@@ -289,7 +328,10 @@ const TRAFFIC: Board = {
         row_limit: 12,
         defaultSort: { column: "count_count", order: "DESC" },
       },
-      x: 6, y: 16, width: 6, height: 9,
+      x: 6,
+      y: 16,
+      width: 6,
+      height: 9,
     },
   ],
 };
@@ -308,7 +350,10 @@ const COST: Board = {
       filters: [],
       chartType: "NUMBER",
       chartConfig: { type: "NUMBER" },
-      x: 0, y: 0, width: 4, height: 4,
+      x: 0,
+      y: 0,
+      width: 4,
+      height: 4,
     },
     {
       name: "Tokens consumed",
@@ -319,7 +364,10 @@ const COST: Board = {
       filters: [],
       chartType: "NUMBER",
       chartConfig: { type: "NUMBER" },
-      x: 4, y: 0, width: 4, height: 4,
+      x: 4,
+      y: 0,
+      width: 4,
+      height: 4,
     },
     {
       name: "Generations billed",
@@ -330,7 +378,10 @@ const COST: Board = {
       filters: [{ column: "type", operator: "=", value: "GENERATION", type: "string" }],
       chartType: "NUMBER",
       chartConfig: { type: "NUMBER" },
-      x: 8, y: 0, width: 4, height: 4,
+      x: 8,
+      y: 0,
+      width: 4,
+      height: 4,
     },
     {
       name: "Spend over time",
@@ -341,7 +392,10 @@ const COST: Board = {
       filters: [],
       chartType: "BAR_TIME_SERIES",
       chartConfig: { type: "BAR_TIME_SERIES" },
-      x: 0, y: 4, width: 6, height: 6,
+      x: 0,
+      y: 4,
+      width: 6,
+      height: 6,
     },
     {
       // Was a PIE with no legend. The GENERATION filter also drops the
@@ -354,7 +408,10 @@ const COST: Board = {
       filters: [notEmpty("providedModelName")],
       chartType: "HORIZONTAL_BAR",
       chartConfig: { type: "HORIZONTAL_BAR", row_limit: 12, show_value_labels: true },
-      x: 6, y: 4, width: 6, height: 6,
+      x: 6,
+      y: 4,
+      width: 6,
+      height: 6,
     },
     {
       // Was a stacked bar, which drew input + output + total and so stood at
@@ -371,7 +428,10 @@ const COST: Board = {
       filters: [],
       chartType: "LINE_TIME_SERIES",
       chartConfig: { type: "LINE_TIME_SERIES" },
-      x: 0, y: 10, width: 6, height: 6,
+      x: 0,
+      y: 10,
+      width: 6,
+      height: 6,
     },
     {
       // Was three bars - input, output and their own sum - whose value labels
@@ -387,7 +447,10 @@ const COST: Board = {
       filters: [],
       chartType: "LINE_TIME_SERIES",
       chartConfig: { type: "LINE_TIME_SERIES" },
-      x: 6, y: 10, width: 6, height: 6,
+      x: 6,
+      y: 10,
+      width: 6,
+      height: 6,
     },
     {
       name: "Costliest conversations",
@@ -398,7 +461,10 @@ const COST: Board = {
       filters: [notEmpty("sessionId")],
       chartType: "HORIZONTAL_BAR",
       chartConfig: { type: "HORIZONTAL_BAR", row_limit: 10, show_value_labels: true },
-      x: 0, y: 16, width: 6, height: 6,
+      x: 0,
+      y: 16,
+      width: 6,
+      height: 6,
     },
     {
       // The type dimension only ever read GENERATION here, so it bought a
@@ -420,7 +486,10 @@ const COST: Board = {
         row_limit: 12,
         defaultSort: { column: "sum_totalCost", order: "DESC" },
       },
-      x: 6, y: 16, width: 6, height: 9,
+      x: 6,
+      y: 16,
+      width: 6,
+      height: 9,
     },
   ],
 };
@@ -439,18 +508,25 @@ const QUALITY: Board = {
       filters: [],
       chartType: "NUMBER",
       chartConfig: { type: "NUMBER" },
-      x: 0, y: 0, width: 4, height: 4,
+      x: 0,
+      y: 0,
+      width: 4,
+      height: 4,
     },
     {
       name: "Categorical labels recorded",
-      description: "Human and judge labels, including the annotation queue's reply-quality verdicts.",
+      description:
+        "Human and judge labels, including the annotation queue's reply-quality verdicts.",
       view: "scores-categorical",
       dimensions: [],
       metrics: [{ measure: "count", agg: "count" }],
       filters: [],
       chartType: "NUMBER",
       chartConfig: { type: "NUMBER" },
-      x: 4, y: 0, width: 4, height: 4,
+      x: 4,
+      y: 0,
+      width: 4,
+      height: 4,
     },
     {
       name: "Pass or fail checks",
@@ -461,7 +537,10 @@ const QUALITY: Board = {
       filters: [],
       chartType: "NUMBER",
       chartConfig: { type: "NUMBER" },
-      x: 8, y: 0, width: 4, height: 4,
+      x: 8,
+      y: 0,
+      width: 4,
+      height: 4,
     },
     {
       // Scoped to the four conversation judge metrics so every line shares a
@@ -476,7 +555,10 @@ const QUALITY: Board = {
       ],
       chartType: "LINE_TIME_SERIES",
       chartConfig: { type: "LINE_TIME_SERIES" },
-      x: 0, y: 4, width: 12, height: 6,
+      x: 0,
+      y: 4,
+      width: 12,
+      height: 6,
     },
     {
       name: "Score volume by name",
@@ -487,7 +569,10 @@ const QUALITY: Board = {
       filters: [],
       chartType: "HORIZONTAL_BAR",
       chartConfig: { type: "HORIZONTAL_BAR", row_limit: 15, show_value_labels: true },
-      x: 0, y: 10, width: 4, height: 6,
+      x: 0,
+      y: 10,
+      width: 4,
+      height: 6,
     },
     {
       // Was a PIE with no legend.
@@ -499,7 +584,10 @@ const QUALITY: Board = {
       filters: [],
       chartType: "HORIZONTAL_BAR",
       chartConfig: { type: "HORIZONTAL_BAR", row_limit: 10, show_value_labels: true },
-      x: 4, y: 10, width: 4, height: 6,
+      x: 4,
+      y: 10,
+      width: 4,
+      height: 6,
     },
     {
       // Was a PIE of every categorical label at once, which put tool-choice's
@@ -513,7 +601,10 @@ const QUALITY: Board = {
       filters: [{ column: "name", operator: "=", value: "reply-quality", type: "string" }],
       chartType: "HORIZONTAL_BAR",
       chartConfig: { type: "HORIZONTAL_BAR", row_limit: 10, show_value_labels: true },
-      x: 8, y: 10, width: 4, height: 6,
+      x: 8,
+      y: 10,
+      width: 4,
+      height: 6,
     },
     {
       // Replaces "Experiment scores over time", a line chart that could not
@@ -524,8 +615,8 @@ const QUALITY: Board = {
       name: "Experiment run scorecard",
       renameFrom: "Experiment scores over time",
       description:
-        "Mean quality score and sample count for every dataset experiment run. Grouped by the run's "
-        + "trace name because experimentName is not an allowed widget dimension on the score views.",
+        "Mean quality score and sample count for every dataset experiment run. Grouped by the run's " +
+        "trace name because experimentName is not an allowed widget dimension on the score views.",
       view: "scores-numeric",
       dimensions: [{ field: "name" }, { field: "traceName" }],
       metrics: [
@@ -547,7 +638,10 @@ const QUALITY: Board = {
         row_limit: 12,
         defaultSort: { column: "avg_value", order: "DESC" },
       },
-      x: 0, y: 16, width: 12, height: 10,
+      x: 0,
+      y: 16,
+      width: 12,
+      height: 10,
     },
     {
       // p95-latency-ms runs 783 to 3316 and dragged the Total row's mean to
@@ -555,8 +649,8 @@ const QUALITY: Board = {
       // the table is on the same scale.
       name: "Judge scorecard",
       description:
-        "Count, mean and tail for every 0-to-1 numeric score name and source. The millisecond "
-        + "latency score is excluded so the table shares one scale.",
+        "Count, mean and tail for every 0-to-1 numeric score name and source. The millisecond " +
+        "latency score is excluded so the table shares one scale.",
       view: "scores-numeric",
       dimensions: [{ field: "name" }, { field: "source" }],
       metrics: [
@@ -574,7 +668,10 @@ const QUALITY: Board = {
         row_limit: 10,
         defaultSort: { column: "count_count", order: "DESC" },
       },
-      x: 0, y: 26, width: 12, height: 11,
+      x: 0,
+      y: 26,
+      width: 12,
+      height: 11,
     },
   ],
 };
@@ -595,7 +692,10 @@ const GUARDRAILS: Board = {
       ],
       chartType: "NUMBER",
       chartConfig: { type: "NUMBER" },
-      x: 0, y: 0, width: 6, height: 4,
+      x: 0,
+      y: 0,
+      width: 6,
+      height: 4,
     },
     {
       name: "Guardrail scans",
@@ -606,7 +706,10 @@ const GUARDRAILS: Board = {
       filters: [{ column: "type", operator: "=", value: "GUARDRAIL", type: "string" }],
       chartType: "NUMBER",
       chartConfig: { type: "NUMBER" },
-      x: 6, y: 0, width: 6, height: 4,
+      x: 6,
+      y: 0,
+      width: 6,
+      height: 4,
     },
     {
       name: "Rail score distribution",
@@ -625,7 +728,10 @@ const GUARDRAILS: Board = {
       ],
       chartType: "HISTOGRAM",
       chartConfig: { type: "HISTOGRAM", bins: 20 },
-      x: 0, y: 4, width: 6, height: 6,
+      x: 0,
+      y: 4,
+      width: 6,
+      height: 6,
     },
     {
       name: "Rail scans over time",
@@ -636,7 +742,10 @@ const GUARDRAILS: Board = {
       filters: [{ column: "type", operator: "=", value: "GUARDRAIL", type: "string" }],
       chartType: "AREA_TIME_SERIES",
       chartConfig: { type: "AREA_TIME_SERIES" },
-      x: 6, y: 4, width: 6, height: 6,
+      x: 6,
+      y: 4,
+      width: 6,
+      height: 6,
     },
     {
       name: "Errors and warnings over time",
@@ -649,7 +758,10 @@ const GUARDRAILS: Board = {
       ],
       chartType: "BAR_TIME_SERIES",
       chartConfig: { type: "BAR_TIME_SERIES" },
-      x: 0, y: 10, width: 6, height: 6,
+      x: 0,
+      y: 10,
+      width: 6,
+      height: 6,
     },
     {
       // Was a PIE. One slice held 98 percent of the scans, so the donut was a
@@ -662,7 +774,10 @@ const GUARDRAILS: Board = {
       filters: [{ column: "type", operator: "=", value: "GUARDRAIL", type: "string" }],
       chartType: "HORIZONTAL_BAR",
       chartConfig: { type: "HORIZONTAL_BAR", row_limit: 10, show_value_labels: true },
-      x: 6, y: 10, width: 6, height: 6,
+      x: 6,
+      y: 10,
+      width: 6,
+      height: 6,
     },
     {
       name: "Verdict labels by check",
@@ -673,7 +788,10 @@ const GUARDRAILS: Board = {
       filters: [],
       chartType: "VERTICAL_BAR",
       chartConfig: { type: "VERTICAL_BAR", row_limit: 12 },
-      x: 0, y: 16, width: 6, height: 6,
+      x: 0,
+      y: 16,
+      width: 6,
+      height: 6,
     },
     {
       name: "Answer latency p95 over time",
@@ -684,7 +802,10 @@ const GUARDRAILS: Board = {
       filters: [{ column: "type", operator: "=", value: "GENERATION", type: "string" }],
       chartType: "LINE_TIME_SERIES",
       chartConfig: { type: "LINE_TIME_SERIES" },
-      x: 6, y: 16, width: 6, height: 6,
+      x: 6,
+      y: 16,
+      width: 6,
+      height: 6,
     },
     {
       // The type dimension doubled the table with a subtotal row per step and
@@ -705,7 +826,10 @@ const GUARDRAILS: Board = {
         row_limit: 15,
         defaultSort: { column: "p95_latency", order: "DESC" },
       },
-      x: 0, y: 22, width: 12, height: 10,
+      x: 0,
+      y: 22,
+      width: 12,
+      height: 10,
     },
   ],
 };
@@ -718,12 +842,13 @@ const BOARDS = [TRAFFIC, COST, QUALITY, GUARDRAILS];
  * the six original tiles, which occupy rows 0 to 13.
  */
 const CONCIERGE_HEALTH = "Concierge health";
-const CONCIERGE_EXTRAS: { widget: string; x: number; y: number; width: number; height: number }[] = [
-  { widget: "Unique visitors", x: 0, y: 14, width: 4, height: 4 },
-  { widget: "Spend to date", x: 4, y: 14, width: 4, height: 4 },
-  { widget: "Errors and warnings", x: 8, y: 14, width: 4, height: 4 },
-  { widget: "Slowest steps", x: 0, y: 18, width: 12, height: 10 },
-];
+const CONCIERGE_EXTRAS: { widget: string; x: number; y: number; width: number; height: number }[] =
+  [
+    { widget: "Unique visitors", x: 0, y: 14, width: 4, height: 4 },
+    { widget: "Spend to date", x: 4, y: 14, width: 4, height: 4 },
+    { widget: "Errors and warnings", x: 8, y: 14, width: 4, height: 4 },
+    { widget: "Slowest steps", x: 0, y: 18, width: 12, height: 10 },
+  ];
 
 // ---------------------------------------------------------------------------
 // REST helpers
@@ -818,30 +943,77 @@ function toMetricsQuery(w: Widget, from: string, to: string) {
  */
 const CREATABLE_FILTER_COLUMNS: Record<Widget["view"], string[]> = {
   observations: [
-    "environment", "type", "name", "level", "version", "userId", "sessionId", "tags",
-    "release", "traceName", "traceRelease", "traceVersion", "providedModelName",
-    "observationModelName", "promptName", "promptVersion", "toolNames", "calledToolNames",
-    "metadata", "isRootObservation",
+    "environment",
+    "type",
+    "name",
+    "level",
+    "version",
+    "userId",
+    "sessionId",
+    "tags",
+    "release",
+    "traceName",
+    "traceRelease",
+    "traceVersion",
+    "providedModelName",
+    "observationModelName",
+    "promptName",
+    "promptVersion",
+    "toolNames",
+    "calledToolNames",
+    "metadata",
+    "isRootObservation",
   ],
   "scores-numeric": [
-    "name", "source", "value", "dataType", "tags", "environment", "userId", "sessionId",
-    "metadata", "traceName", "observationName", "traceRelease", "traceVersion",
+    "name",
+    "source",
+    "value",
+    "dataType",
+    "tags",
+    "environment",
+    "userId",
+    "sessionId",
+    "metadata",
+    "traceName",
+    "observationName",
+    "traceRelease",
+    "traceVersion",
   ],
   "scores-categorical": [
-    "name", "source", "stringValue", "dataType", "tags", "environment", "userId", "sessionId",
-    "metadata", "traceName", "observationName", "traceRelease", "traceVersion",
+    "name",
+    "source",
+    "stringValue",
+    "dataType",
+    "tags",
+    "environment",
+    "userId",
+    "sessionId",
+    "metadata",
+    "traceName",
+    "observationName",
+    "traceRelease",
+    "traceVersion",
   ],
   "scores-boolean": [
-    "name", "source", "booleanValue", "dataType", "tags", "environment", "userId", "sessionId",
-    "metadata", "traceName", "observationName", "traceRelease", "traceVersion",
+    "name",
+    "source",
+    "booleanValue",
+    "dataType",
+    "tags",
+    "environment",
+    "userId",
+    "sessionId",
+    "metadata",
+    "traceName",
+    "observationName",
+    "traceRelease",
+    "traceVersion",
   ],
 };
 
 function unstorableFilters(w: Widget): string[] {
   const allowed = new Set(CREATABLE_FILTER_COLUMNS[w.view]);
-  return w.filters
-    .map((f) => String(f.column))
-    .filter((column) => !allowed.has(column));
+  return w.filters.map((f) => String(f.column)).filter((column) => !allowed.has(column));
 }
 
 type Verdict = { ok: boolean; populated: boolean; detail: string };
@@ -877,7 +1049,8 @@ async function validate(w: Widget, from: string, to: string): Promise<Verdict> {
     headers: { authorization: AUTH },
   });
   const body = await res.text();
-  if (!res.ok) return { ok: false, populated: false, detail: `${res.status} ${body.slice(0, 220)}` };
+  if (!res.ok)
+    return { ok: false, populated: false, detail: `${res.status} ${body.slice(0, 220)}` };
   const rows = (JSON.parse(body).data ?? []) as Record<string, unknown>[];
 
   // A grouped chart with no time axis must never contain an unlabelled bucket:
@@ -947,7 +1120,14 @@ async function listAll<T>(path: string): Promise<T[]> {
 }
 
 const DEFINITION_FIELDS = [
-  "name", "description", "view", "dimensions", "metrics", "filters", "chartType", "chartConfig",
+  "name",
+  "description",
+  "view",
+  "dimensions",
+  "metrics",
+  "filters",
+  "chartType",
+  "chartConfig",
 ] as const;
 
 function definitionOf(w: Widget | StoredWidget) {
@@ -972,7 +1152,7 @@ async function ensureWidgets(boards: Board[], from: string, to: string) {
   for (const board of boards) {
     console.log(`\n${board.name}`);
     for (const tile of board.tiles) {
-      const { x, y, width, height, renameFrom, ...widget } = tile;
+      const { x: _x, y: _y, width: _w, height: _h, renameFrom, ...widget } = tile;
       const verdict = await validate(widget, from, to);
       if (!verdict.ok) {
         refused.push(`${widget.name}: ${verdict.detail}`);
@@ -1049,7 +1229,8 @@ function assertLayout(
 ) {
   for (let i = 0; i < tiles.length; i++) {
     const a = tiles[i];
-    if (a.x < 0 || a.x + a.width > 12) throw new Error(`${name}: tile ${i} runs off the 12-column grid`);
+    if (a.x < 0 || a.x + a.width > 12)
+      throw new Error(`${name}: tile ${i} runs off the 12-column grid`);
     for (let j = i + 1; j < tiles.length; j++) {
       const b = tiles[j];
       const overlaps =

@@ -17,11 +17,12 @@ import type { Category, Reaction } from "../../../shared/types"
 
 // ---------- reactions (the per-user feedback loop) ----------
 
-export const REACTION_META: Record<Reaction, { label: string; blurb: string }> = {
-  going: { label: "Going", blurb: "boosts this and events like it" },
-  went: { label: "Went — great", blurb: "teaches your taste" },
-  not_for_me: { label: "Not for me", blurb: "sinks this and events like it" },
-}
+export const REACTION_META: Record<Reaction, { label: string; blurb: string }> =
+  {
+    going: { label: "Going", blurb: "boosts this and events like it" },
+    went: { label: "Went — great", blurb: "teaches your taste" },
+    not_for_me: { label: "Not for me", blurb: "sinks this and events like it" },
+  }
 
 export interface CategoryMeta {
   label: string
@@ -103,7 +104,8 @@ export function asEtiquette(c: string): Etiquette {
 // ---------- the event list ----------
 
 /** Orderings for the event list; "relevance" is the personal buzz score. */
-export type SortKey = "relevance" | "date" | "price-asc" | "price-desc" | "alpha"
+export type SortKey =
+  "relevance" | "date" | "price-asc" | "price-desc" | "alpha"
 
 export const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "relevance", label: "Relevance" },

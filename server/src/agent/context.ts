@@ -146,12 +146,7 @@ export interface SearchParams {
   limit?: number;
 }
 
-export function searchShape(
-  e: CityEvent,
-  occ: Occurrence,
-  tz: string,
-  distanceKm?: number,
-) {
+export function searchShape(e: CityEvent, occ: Occurrence, tz: string, distanceKm?: number) {
   return {
     id: e.id,
     title: e.title,
@@ -178,10 +173,7 @@ export interface SearchResult {
   note?: string;
 }
 
-export async function searchEvents(
-  params: SearchParams,
-  ctx: AgentCtx,
-): Promise<SearchResult> {
+export async function searchEvents(params: SearchParams, ctx: AgentCtx): Promise<SearchResult> {
   const { tz, center } = ctx.settings;
   const q = params.query?.trim().toLowerCase();
   const cats = params.categories?.filter((c) => (CATEGORIES as string[]).includes(c));
@@ -233,9 +225,7 @@ export async function searchEvents(
     results = [...results].sort((a, b) => dist.get(a.e.id)! - dist.get(b.e.id)!);
   } // default: already time-sorted
 
-  const events = results
-    .slice(0, limit)
-    .map((r) => searchShape(r.e, r.occ, tz, dist?.get(r.e.id)));
+  const events = results.slice(0, limit).map((r) => searchShape(r.e, r.occ, tz, dist?.get(r.e.id)));
   if (!events.length) {
     // Name the likeliest fix so the model doesn't burn tool rounds guessing.
     const promotedHidden =
@@ -301,9 +291,7 @@ export function coercePos(v: unknown): [number, number] | undefined {
 
 export function parseLngLat(s: string): [number, number] | undefined {
   const parts = s.split(",").map(Number);
-  return parts.length === 2 && parts.every(Number.isFinite)
-    ? [parts[0], parts[1]]
-    : undefined;
+  return parts.length === 2 && parts.every(Number.isFinite) ? [parts[0], parts[1]] : undefined;
 }
 
 /** [lng,lat] from either shape a caller might send: array or "lng,lat". */
@@ -468,11 +456,7 @@ export async function applyInterests(
 // System prompt
 // ---------------------------------------------------------------------------
 
-export function buildSystemPrompt(
-  ctx: AgentCtx,
-  context: ChatContext,
-  toolsOk: boolean,
-): string {
+export function buildSystemPrompt(ctx: AgentCtx, context: ChatContext, toolsOk: boolean): string {
   const { city, tz } = ctx.settings;
   const nowLabel = fmt(ctx.now.toISOString(), tz, {
     weekday: "long",

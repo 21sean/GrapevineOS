@@ -16,13 +16,11 @@ import type { AgentCapabilities } from "@/lib/types"
 const PROMPTS = [
   {
     title: "Weekend picks, every Friday",
-    text:
-      "Using the Grapevine connector, call search_events for this coming weekend (date_from is Friday, date_to is Sunday, exclude_promoted true, limit 8). Send me the five best picks with their titles, venues and times, one line each. If nothing matches, say so plainly.",
+    text: "Using the Grapevine connector, call search_events for this coming weekend (date_from is Friday, date_to is Sunday, exclude_promoted true, limit 8). Send me the five best picks with their titles, venues and times, one line each. If nothing matches, say so plainly.",
   },
   {
     title: "Rare finds, once a week",
-    text:
-      "Using the Grapevine connector, call search_events for the next 14 days with limit 20, keep only events whose rarity is rare or notable, and send me a short list with dates, times and venues. Skip anything promoted.",
+    text: "Using the Grapevine connector, call search_events for the next 14 days with limit 20, keep only events whose rarity is rare or notable, and send me a short list with dates, times and venues. Skip anything promoted.",
   },
 ] as const
 
@@ -34,12 +32,24 @@ function CopyButton({ text, label }: { text: string; label: string }) {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      toast.error("Couldn't copy", { description: "Clipboard access was blocked." })
+      toast.error("Couldn't copy", {
+        description: "Clipboard access was blocked.",
+      })
     }
   }
   return (
-    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={copy} aria-label={label}>
-      {copied ? <CheckIcon data-icon="inline-start" /> : <CopyIcon data-icon="inline-start" />}
+    <Button
+      variant="ghost"
+      size="sm"
+      className="h-7 text-xs"
+      onClick={copy}
+      aria-label={label}
+    >
+      {copied ? (
+        <CheckIcon data-icon="inline-start" />
+      ) : (
+        <CopyIcon data-icon="inline-start" />
+      )}
       {copied ? "Copied" : "Copy"}
     </Button>
   )
@@ -57,15 +67,21 @@ export function ClaudeHandoff() {
 
   return (
     <section>
-      <SectionHeader icon={<BotIcon className="size-3.5" />} title="Grapevine in Claude" />
+      <SectionHeader
+        icon={<BotIcon className="size-3.5" />}
+        title="Grapevine in Claude"
+      />
       <p className="mt-2 text-xs text-muted-foreground">
-        Add this map as a connector in Claude (Settings, Connectors, add a custom connector with
-        the URL below, then sign in when it asks). After that a scheduled task in your Claude
-        account can ask it anything the chat here can.
+        Add this map as a connector in Claude (Settings, Connectors, add a
+        custom connector with the URL below, then sign in when it asks). After
+        that a scheduled task in your Claude account can ask it anything the
+        chat here can.
       </p>
       {url && (
         <div className="mt-2 flex items-center gap-2 rounded-lg border bg-muted/30 py-1 pr-1 pl-3">
-          <span className="min-w-0 flex-1 truncate font-mono text-xs">{url}</span>
+          <span className="min-w-0 flex-1 truncate font-mono text-xs">
+            {url}
+          </span>
           <CopyButton text={url} label="Copy connector URL" />
         </div>
       )}
@@ -76,14 +92,16 @@ export function ClaudeHandoff() {
               <span className="text-[13px] font-medium">{p.title}</span>
               <CopyButton text={p.text} label={`Copy the prompt: ${p.title}`} />
             </div>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{p.text}</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              {p.text}
+            </p>
           </div>
         ))}
       </div>
       {caps?.mcp.auth === "open" && (
         <p className="mt-2 text-xs text-muted-foreground">
-          This server runs with MCP_OPEN=1, so the connector needs no sign-in; writes act on the
-          operator's linked account.
+          This server runs with MCP_OPEN=1, so the connector needs no sign-in;
+          writes act on the operator's linked account.
         </p>
       )}
     </section>

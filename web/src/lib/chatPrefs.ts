@@ -30,14 +30,15 @@ export const CLAUDE_CHAT_MODELS = [
   { value: "claude-opus-5", label: "Opus 5" },
 ] as const
 
-export const CHAT_EFFORT_OPTIONS: { value: "" | ChatEffort; label: string }[] = [
-  { value: "", label: "Default" },
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-  { value: "xhigh", label: "Extra high" },
-  { value: "max", label: "Max" },
-]
+export const CHAT_EFFORT_OPTIONS: { value: "" | ChatEffort; label: string }[] =
+  [
+    { value: "", label: "Default" },
+    { value: "low", label: "Low" },
+    { value: "medium", label: "Medium" },
+    { value: "high", label: "High" },
+    { value: "xhigh", label: "Extra high" },
+    { value: "max", label: "Max" },
+  ]
 
 export function modelLabel(value: string): string {
   return CLAUDE_CHAT_MODELS.find((m) => m.value === value)?.label ?? value

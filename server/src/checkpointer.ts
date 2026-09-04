@@ -72,8 +72,7 @@ export class SupabaseSaver extends BaseCheckpointSaver {
   private async rowToTuple(row: CheckpointRow): Promise<CheckpointTuple> {
     const checkpoint = (await this.serde.loadsTyped(row.type, unb64(row.checkpoint))) as Checkpoint;
     const metadata = (await this.serde.loadsTyped(row.type, unb64(row.metadata))) as
-      | CheckpointMetadata
-      | undefined;
+      CheckpointMetadata | undefined;
 
     const { data: writeRows } = await db
       .from("chat_checkpoint_writes")
@@ -86,7 +85,11 @@ export class SupabaseSaver extends BaseCheckpointSaver {
     const pendingWrites: CheckpointPendingWrite[] = await Promise.all(
       writeRows.map(
         async (w) =>
-          [w.task_id, w.channel, await this.serde.loadsTyped(w.type, unb64(w.value))] as CheckpointPendingWrite,
+          [
+            w.task_id,
+            w.channel,
+            await this.serde.loadsTyped(w.type, unb64(w.value)),
+          ] as CheckpointPendingWrite,
       ),
     );
 

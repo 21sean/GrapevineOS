@@ -24,19 +24,21 @@ import { supabase } from "@/lib/supabase"
 // Operator-only chrome — load its chunk on first open instead of shipping it
 // to every visitor.
 const AdminSheet = lazy(() =>
-  import("@/components/admin/AdminSheet").then((m) => ({ default: m.AdminSheet })),
+  import("@/components/admin/AdminSheet").then((m) => ({
+    default: m.AdminSheet,
+  }))
 )
 
 // Same deal for the Google Calendar popup (react-day-picker et al.).
 const CalendarDialog = lazy(() =>
   import("@/components/calendar/CalendarDialog").then((m) => ({
     default: m.CalendarDialog,
-  })),
+  }))
 )
 
 // "Your week" digest — most sessions never open it.
 const WeekDigest = lazy(() =>
-  import("@/components/WeekDigest").then((m) => ({ default: m.WeekDigest })),
+  import("@/components/WeekDigest").then((m) => ({ default: m.WeekDigest }))
 )
 
 export function App() {
@@ -73,7 +75,8 @@ export function App() {
     const params = new URLSearchParams(window.location.search)
     // Supabase reports OAuth failures back on the redirect URL.
     const oauthError = params.get("error_description") ?? params.get("error")
-    if (oauthError) toast.error("Sign-in didn't complete", { description: oauthError })
+    if (oauthError)
+      toast.error("Sign-in didn't complete", { description: oauthError })
     // Returning from the Google Calendar consent (see connectGoogleCalendar):
     // the fresh session carries provider tokens exactly once — capture the
     // refresh token now and vault it server-side.
@@ -82,7 +85,9 @@ export function App() {
         const { data } = await supabase.auth.getSession()
         const refreshToken = data.session?.provider_refresh_token
         if (!refreshToken) {
-          toast.error("Google Calendar didn't connect. Try again from your account.")
+          toast.error(
+            "Google Calendar didn't connect. Try again from your account."
+          )
           return
         }
         try {
@@ -93,27 +98,37 @@ export function App() {
           })
         } catch (err) {
           toast.error("Google Calendar didn't connect", {
-            description: String(err instanceof Error ? err.message : err).slice(0, 140),
+            description: String(err instanceof Error ? err.message : err).slice(
+              0,
+              140
+            ),
           })
         }
       })()
     }
     // Sign-in lands back here with a fresh session; reload account-scoped
     // state when the user actually changed (ignores token refreshes).
-    const { data: authSub } = supabase?.auth.onAuthStateChange((event, session) => {
-      const current = useGrapevine.getState().user
-      if (event === "SIGNED_IN" && session && current?.id !== session.user.id) {
-        void load()
+    const { data: authSub } = supabase?.auth.onAuthStateChange(
+      (event, session) => {
+        const current = useGrapevine.getState().user
+        if (
+          event === "SIGNED_IN" &&
+          session &&
+          current?.id !== session.user.id
+        ) {
+          void load()
+        }
+        if (event === "SIGNED_OUT" && current) {
+          useGrapevine.setState({ user: null, calendar: null })
+        }
       }
-      if (event === "SIGNED_OUT" && current) {
-        useGrapevine.setState({ user: null, calendar: null })
-      }
-    }) ?? { data: null }
+    ) ?? { data: null }
     // push-notification deep links: ?event=<id> selects it, ?digest=week
     // opens the weekly digest
     const eventParam = params.get("event")
     if (eventParam) useGrapevine.getState().select(eventParam)
-    if (params.get("digest") === "week") useGrapevine.getState().setWeekOpen(true)
+    if (params.get("digest") === "week")
+      useGrapevine.getState().setWeekOpen(true)
     if (
       params.has("error") ||
       params.has("error_description") ||
@@ -121,17 +136,28 @@ export function App() {
       params.has("event") ||
       params.has("digest")
     ) {
-      for (const k of ["error", "error_description", "error_code", "calendar", "event", "digest"]) {
+      for (const k of [
+        "error",
+        "error_description",
+        "error_code",
+        "calendar",
+        "event",
+        "digest",
+      ]) {
         params.delete(k)
       }
       const qs = params.toString()
-      window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname)
+      window.history.replaceState(
+        null,
+        "",
+        qs ? `?${qs}` : window.location.pathname
+      )
     }
     const timer = setInterval(tick, 30_000)
     navigator.geolocation?.getCurrentPosition(
       (p) => setUserPos([p.coords.longitude, p.coords.latitude]),
       () => {},
-      { maximumAge: 600_000 },
+      { maximumAge: 600_000 }
     )
     return () => {
       clearInterval(timer)
@@ -220,7 +246,10 @@ export function App() {
           </div>
         )}
         {/* bottom-right is dock territory on phones — toast at the top there */}
-        <Toaster theme="dark" position={isMobile ? "top-center" : "bottom-right"} />
+        <Toaster
+          theme="dark"
+          position={isMobile ? "top-center" : "bottom-right"}
+        />
       </div>
     </TooltipProvider>
   )

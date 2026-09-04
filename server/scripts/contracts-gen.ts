@@ -38,10 +38,16 @@ function typeName(t: z.ZodType): string {
   if (t instanceof z.ZodNumber) return "number";
   if (t instanceof z.ZodBoolean) return "boolean";
   if (t instanceof z.ZodLiteral) return `the literal ${JSON.stringify(t.value)}`;
-  if (t instanceof z.ZodEnum) return `one of ${Object.values(t.enum).map((v) => String(v)).join(", ")}`;
+  if (t instanceof z.ZodEnum)
+    return `one of ${Object.values(t.enum)
+      .map((v) => String(v))
+      .join(", ")}`;
   if (t instanceof z.ZodArray) {
     const el = t.element as z.ZodType;
-    if (el instanceof z.ZodEnum) return `list from ${Object.values(el.enum).map((v) => String(v)).join(", ")}`;
+    if (el instanceof z.ZodEnum)
+      return `list from ${Object.values(el.enum)
+        .map((v) => String(v))
+        .join(", ")}`;
     return `list of ${typeName(el)}`;
   }
   if (t instanceof z.ZodTuple) return `[${(t.def.items as z.ZodType[]).map(typeName).join(", ")}]`;
@@ -81,18 +87,18 @@ const ROUTES: Record<string, string> = {
   search_events: "GET /api/ext/v1/events?query=...&categories=music,food&date_from=YYYY-MM-DD",
   get_event: "GET /api/ext/v1/events/:id",
   get_eta: "GET /api/ext/v1/eta?to_event_id=<id>  or  ?to=lng,lat[&from=lng,lat]",
-  set_rarity: "POST /api/ext/v1/events/:id/rarity  {\"rarity\": \"rare\"}",
+  set_rarity: 'POST /api/ext/v1/events/:id/rarity  {"rarity": "rare"}',
   list_saved_events: "GET /api/ext/v1/calendar",
   save_event: "POST /api/ext/v1/calendar/:eventId",
   unsave_event: "DELETE /api/ext/v1/calendar/:eventId",
-  discover_events: "POST /api/ext/v1/discovery/run  {\"query\": \"...\", \"dry_run\": true}",
+  discover_events: 'POST /api/ext/v1/discovery/run  {"query": "...", "dry_run": true}',
   list_scheduled_searches: "GET /api/ext/v1/discovery/searches",
-  schedule_search: "POST /api/ext/v1/discovery/searches  {\"query\": \"...\", \"cadence_hours\": 24}",
-  update_scheduled_search: "PATCH /api/ext/v1/discovery/searches/:id  {\"active\": false}",
+  schedule_search: 'POST /api/ext/v1/discovery/searches  {"query": "...", "cadence_hours": 24}',
+  update_scheduled_search: 'PATCH /api/ext/v1/discovery/searches/:id  {"active": false}',
   run_scheduled_search: "POST /api/ext/v1/discovery/searches/:id/run",
   unschedule_search: "DELETE /api/ext/v1/discovery/searches/:id",
-  update_interests: "POST /api/ext/v1/interests  {\"add_loves\": [\"jazz\"]}",
-  apply_interests: "POST /api/ext/v1/interests  {\"add_loves\": [\"jazz\"], \"confirmed\": true}",
+  update_interests: 'POST /api/ext/v1/interests  {"add_loves": ["jazz"]}',
+  apply_interests: 'POST /api/ext/v1/interests  {"add_loves": ["jazz"], "confirmed": true}',
 };
 
 const ORDER = [
@@ -245,5 +251,7 @@ if (process.argv.includes("--check")) {
   console.log(`${OUT} matches the contracts (${Object.keys(CONTRACTS).length} tools)`);
 } else {
   writeFileSync(OUT, rendered);
-  console.log(`wrote ${OUT} (${toolsFor("rest").length} REST tools, ${toolsFor("mcp").length} MCP tools)`);
+  console.log(
+    `wrote ${OUT} (${toolsFor("rest").length} REST tools, ${toolsFor("mcp").length} MCP tools)`,
+  );
 }

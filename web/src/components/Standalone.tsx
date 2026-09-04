@@ -8,10 +8,10 @@ import { lazy, Suspense } from "react"
  */
 const OAuthConsent = lazy(() => import("./OAuthConsent.tsx"))
 const PrivacyPolicy = lazy(() =>
-  import("./Legal.tsx").then((m) => ({ default: m.PrivacyPolicy })),
+  import("./Legal.tsx").then((m) => ({ default: m.PrivacyPolicy }))
 )
 const TermsOfService = lazy(() =>
-  import("./Legal.tsx").then((m) => ({ default: m.TermsOfService })),
+  import("./Legal.tsx").then((m) => ({ default: m.TermsOfService }))
 )
 
 export default function Standalone() {

@@ -78,8 +78,7 @@ function metres(a: [number, number], b: [number, number]): number {
   const dLng = toRad(a[0] - b[0]);
   const lat1 = toRad(a[1]);
   const lat2 = toRad(b[1]);
-  const h =
-    Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
@@ -110,7 +109,11 @@ const MATCH_RADIUS_M = 500;
 const NAMED_RADIUS_M = 25000;
 
 /** Loose comparison key: "The Casbah!" and "the casbah" should match. */
-const normalise = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const normalise = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 
 /**
  * How well a candidate's name answers the query. 0 is an exact match, 1 is one
@@ -141,11 +144,7 @@ function nameRank(wanted: string, candidate: string): number {
  * the caller's key. `created_at` is stamped explicitly so re-resolving an
  * expired miss restarts its clock.
  */
-async function resolveId(
-  venue: string,
-  at: [number, number],
-  key: string,
-): Promise<string | null> {
+async function resolveId(venue: string, at: [number, number], key: string): Promise<string | null> {
   const url =
     `https://api.mapbox.com/search/searchbox/v1/forward` +
     `?q=${encodeURIComponent(venue)}&proximity=${at[0]},${at[1]}` +
@@ -353,12 +352,14 @@ async function fetchDetails(mapboxId: string): Promise<VenueDetails | null> {
     address: typeof rec.full_address === "string" ? rec.full_address : undefined,
     category: typeof rec.primary_category === "string" ? humanise(rec.primary_category) : undefined,
     categories: Array.isArray(rec.categories)
-      ? rec.categories.filter((c: unknown) => typeof c === "string").slice(0, 6).map(humanise)
+      ? rec.categories
+          .filter((c: unknown) => typeof c === "string")
+          .slice(0, 6)
+          .map(humanise)
       : [],
     phone: typeof rec.phone === "string" ? rec.phone : undefined,
-    website: typeof rec.website === "string" && rec.website.startsWith("http")
-      ? rec.website
-      : undefined,
+    website:
+      typeof rec.website === "string" && rec.website.startsWith("http") ? rec.website : undefined,
     openingHours: typeof rec.opening_hours === "string" ? rec.opening_hours : undefined,
     tz: typeof rec.telemetry?.tags?.timezone === "string" ? rec.telemetry.tags.timezone : undefined,
     popularity: typeof popularity === "number" ? Math.max(0, Math.min(1, popularity)) : undefined,

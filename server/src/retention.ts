@@ -56,10 +56,7 @@ async function referencedIds(): Promise<Set<string>> {
     db.from("calendar_entries").select("event_id").throwOnError(),
     db.from("event_reactions").select("event_id").throwOnError(),
   ]);
-  return new Set([
-    ...cal.data.map((r) => r.event_id),
-    ...reactions.data.map((r) => r.event_id),
-  ]);
+  return new Set([...cal.data.map((r) => r.event_id), ...reactions.data.map((r) => r.event_id)]);
 }
 
 /** One pass: delete long-ended, unreferenced events. Returns count removed. */
@@ -90,7 +87,10 @@ export async function pruneEndedEvents(): Promise<number> {
   log.info(
     `retention: pruned ${removed} event${removed === 1 ? "" : "s"} ` +
       `(one-offs >${oneOffDays}d, series >${days}d ended; ` +
-      `${stale.slice(0, 3).map((e) => e.id).join(", ")}${stale.length > 3 ? ", …" : ""})`,
+      `${stale
+        .slice(0, 3)
+        .map((e) => e.id)
+        .join(", ")}${stale.length > 3 ? ", …" : ""})`,
   );
   return removed;
 }
@@ -112,7 +112,9 @@ export async function pruneGuardrailScans(): Promise<number> {
   const cutoff = new Date(Date.now() - days * 86_400_000);
   const removed = await store.pruneGuardrailScans(cutoff);
   if (removed) {
-    log.info(`retention: pruned ${removed} guardrail scan${removed === 1 ? "" : "s"} older than ${days}d`);
+    log.info(
+      `retention: pruned ${removed} guardrail scan${removed === 1 ? "" : "s"} older than ${days}d`,
+    );
   }
   return removed;
 }
@@ -133,7 +135,9 @@ export async function pruneOldCheckpoints(): Promise<number> {
   if (days === 0) return 0;
   const removed = await pruneChatCheckpoints(new Date(Date.now() - days * 86_400_000));
   if (removed) {
-    log.info(`retention: pruned ${removed} chat checkpoint${removed === 1 ? "" : "s"} older than ${days}d`);
+    log.info(
+      `retention: pruned ${removed} chat checkpoint${removed === 1 ? "" : "s"} older than ${days}d`,
+    );
   }
   return removed;
 }
@@ -152,7 +156,8 @@ export function startRetentionSweep(): void {
   const checkpoints = checkpointRetentionDays() > 0;
   if (!events) log.info("retention: events disabled (EVENT_RETENTION_DAYS=0)");
   if (!scans) log.info("retention: guardrail scans disabled (GUARDRAIL_RETENTION_DAYS=0)");
-  if (!checkpoints) log.info("retention: chat checkpoints disabled (CHAT_CHECKPOINT_RETENTION_DAYS=0)");
+  if (!checkpoints)
+    log.info("retention: chat checkpoints disabled (CHAT_CHECKPOINT_RETENTION_DAYS=0)");
   const run = async () => {
     if (events) {
       await pruneEndedEvents().catch((err) =>

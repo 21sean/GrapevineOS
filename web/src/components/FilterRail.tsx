@@ -87,7 +87,9 @@ export function FilterRail() {
   const setRailWidth = useGrapevine((s) => s.setRailWidth)
   const hiddenCount = useGrapevine((s) => s.hiddenIds.length)
   const clearHidden = useGrapevine((s) => s.clearHidden)
-  const mutedCount = useGrapevine((s) => s.mutedVenues.length + s.mutedSources.length)
+  const mutedCount = useGrapevine(
+    (s) => s.mutedVenues.length + s.mutedSources.length
+  )
   const clearMuted = useGrapevine((s) => s.clearMuted)
 
   // Filters (buzz + categories) tuck into a disclosure that starts collapsed,
@@ -102,7 +104,10 @@ export function FilterRail() {
     const startX = e.clientX
     const startW = railWidth
     const onMove = (ev: PointerEvent) => {
-      const next = Math.min(RAIL_MAX, Math.max(RAIL_MIN, startW + ev.clientX - startX))
+      const next = Math.min(
+        RAIL_MAX,
+        Math.max(RAIL_MIN, startW + ev.clientX - startX)
+      )
       setRailWidth(next)
     }
     const onUp = () => {
@@ -128,7 +133,10 @@ export function FilterRail() {
         <div className="flex items-start gap-2">
           <CalendarRangeIcon className="mt-[5px] size-3.5 shrink-0 text-muted-foreground" />
           <div className="flex flex-1 flex-wrap items-center gap-1.5">
-            <DateQuickChips chipClass={RAIL_CHIP} activeClass={RAIL_CHIP_ACTIVE} />
+            <DateQuickChips
+              chipClass={RAIL_CHIP}
+              activeClass={RAIL_CHIP_ACTIVE}
+            />
             <NearMeChip chipClass={RAIL_CHIP} activeClass={RAIL_CHIP_ACTIVE} />
           </div>
         </div>
@@ -152,13 +160,13 @@ export function FilterRail() {
             <ChevronDownIcon
               className={cn(
                 "size-4 text-muted-foreground transition-transform",
-                filtersOpen && "rotate-180",
+                filtersOpen && "rotate-180"
               )}
             />
           </button>
 
           {filtersOpen && (
-            <div className="duration-150 animate-in fade-in-0 slide-in-from-top-1">
+            <div className="animate-in duration-150 fade-in-0 slide-in-from-top-1">
               <BuzzAndCategoryFilters />
             </div>
           )}
@@ -418,7 +426,9 @@ export function EventListEmpty() {
   return (
     <Empty className="py-10">
       <EmptyHeader>
-        <EmptyTitle>{searching ? "No matches" : "Nothing gets through"}</EmptyTitle>
+        <EmptyTitle>
+          {searching ? "No matches" : "Nothing gets through"}
+        </EmptyTitle>
         <EmptyDescription>
           {searching
             ? `Nothing on the vine matches "${searchQuery.trim()}". Try another word or clear the search.`
@@ -495,7 +505,7 @@ function SegmentedRow({
               style={on ? activeStyle?.[o.value] : undefined}
               className={cn(
                 "rounded-[5px] px-2 py-0.5 text-xs text-muted-foreground transition-colors",
-                on && (activeClass?.[o.value] ?? "bg-accent text-foreground"),
+                on && (activeClass?.[o.value] ?? "bg-accent text-foreground")
               )}
             >
               {o.label}

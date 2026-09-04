@@ -66,17 +66,25 @@ export function WatchCard({
       </span>
       <div className="text-sm">
         <span className="font-medium">{proposal.query}</span>
-        <span className="text-muted-foreground"> · {cadenceLabel(proposal.cadenceHours)}</span>
+        <span className="text-muted-foreground">
+          {" "}
+          · {cadenceLabel(proposal.cadenceHours)}
+        </span>
       </div>
       <span className="text-xs text-muted-foreground">
-        The server re-searches the web on that cadence, verifies each find against its source
-        page, and puts real events on the map for everyone.
+        The server re-searches the web on that cadence, verifies each find
+        against its source page, and puts real events on the map for everyone.
       </span>
       {proposal.state === "scheduled" ? (
         <div className="flex items-center gap-2 text-sm">
           <CheckIcon className="size-4 text-live" />
           Watching
-          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={undo}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-xs"
+            onClick={undo}
+          >
             Undo
           </Button>
         </div>
@@ -85,10 +93,18 @@ export function WatchCard({
       ) : (
         <div className="flex gap-2">
           <Button size="sm" onClick={schedule} disabled={busy}>
-            {busy ? <Spinner data-icon="inline-start" /> : <EyeIcon data-icon="inline-start" />}
+            {busy ? (
+              <Spinner data-icon="inline-start" />
+            ) : (
+              <EyeIcon data-icon="inline-start" />
+            )}
             {user ? "Start watching" : "Sign in to watch"}
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => onState("dismissed")}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onState("dismissed")}
+          >
             Dismiss
           </Button>
         </div>

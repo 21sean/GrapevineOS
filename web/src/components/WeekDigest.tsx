@@ -76,17 +76,20 @@ export function WeekDigest() {
                           setWeekOpen(false)
                           select(e.id)
                         }}
-                        className="flex items-center gap-3 p-2.5 text-left outline-none transition-colors hover:bg-accent focus-visible:bg-accent"
+                        className="flex items-center gap-3 p-2.5 text-left transition-colors outline-none hover:bg-accent focus-visible:bg-accent"
                       >
                         {e.imageUrl ? (
                           <img
                             src={e.imageUrl}
                             alt=""
                             loading="lazy"
-                            onError={(ev) => (ev.currentTarget.style.visibility = "hidden")}
+                            onError={(ev) =>
+                              (ev.currentTarget.style.visibility = "hidden")
+                            }
                             className="size-12 shrink-0 rounded-md object-cover"
                             style={{
-                              backgroundColor: e.imageColor ?? `${meta.color}33`,
+                              backgroundColor:
+                                e.imageColor ?? `${meta.color}33`,
                             }}
                           />
                         ) : (

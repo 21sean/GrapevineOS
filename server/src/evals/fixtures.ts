@@ -49,7 +49,8 @@ export const PLACES: Record<string, [number, number]> = {
 const at = (place: keyof typeof PLACES) => ({ lng: PLACES[place][0], lat: PLACES[place][1] });
 
 function ev(
-  p: Partial<CityEvent> & Pick<CityEvent, "id" | "title" | "venue" | "start" | "end" | "lng" | "lat">,
+  p: Partial<CityEvent> &
+    Pick<CityEvent, "id" | "title" | "venue" | "start" | "end" | "lng" | "lat">,
 ): CityEvent {
   return {
     description: "",

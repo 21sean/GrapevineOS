@@ -9,7 +9,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Spinner } from "@/components/ui/spinner"
-import { signInWithProvider, supabase, type OAuthProvider } from "@/lib/supabase"
+import {
+  signInWithProvider,
+  supabase,
+  type OAuthProvider,
+} from "@/lib/supabase"
 import { useGrapevine } from "@/lib/store"
 
 /**
@@ -29,7 +33,10 @@ export function SignInDialog() {
       await signInWithProvider(provider) // navigates away on success
     } catch (err) {
       toast.error("Couldn't start sign-in", {
-        description: String(err instanceof Error ? err.message : err).slice(0, 140),
+        description: String(err instanceof Error ? err.message : err).slice(
+          0,
+          140
+        ),
       })
       setBusy(null)
     }
@@ -51,7 +58,11 @@ export function SignInDialog() {
             disabled={!supabase || !!busy}
             onClick={() => void go("google")}
           >
-            {busy === "google" ? <Spinner data-icon="inline-start" /> : <GoogleIcon />}
+            {busy === "google" ? (
+              <Spinner data-icon="inline-start" />
+            ) : (
+              <GoogleIcon />
+            )}
             Continue with Google
           </Button>
           <Button
@@ -59,7 +70,11 @@ export function SignInDialog() {
             disabled={!supabase || !!busy}
             onClick={() => void go("github")}
           >
-            {busy === "github" ? <Spinner data-icon="inline-start" /> : <GitHubIcon />}
+            {busy === "github" ? (
+              <Spinner data-icon="inline-start" />
+            ) : (
+              <GitHubIcon />
+            )}
             Continue with GitHub
           </Button>
           {!supabase && (
@@ -71,11 +86,17 @@ export function SignInDialog() {
         </div>
         <p className="text-center text-xs text-muted-foreground">
           By continuing you agree to our{" "}
-          <a className="underline underline-offset-2 hover:text-foreground" href="/terms">
+          <a
+            className="underline underline-offset-2 hover:text-foreground"
+            href="/terms"
+          >
             Terms
           </a>{" "}
           and{" "}
-          <a className="underline underline-offset-2 hover:text-foreground" href="/privacy">
+          <a
+            className="underline underline-offset-2 hover:text-foreground"
+            href="/privacy"
+          >
             Privacy Policy
           </a>
           .
@@ -112,7 +133,12 @@ export function GoogleIcon() {
 /** GitHub mark, monochrome (currentColor). */
 export function GitHubIcon() {
   return (
-    <svg viewBox="0 0 16 16" aria-hidden="true" data-icon="inline-start" fill="currentColor">
+    <svg
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+      data-icon="inline-start"
+      fill="currentColor"
+    >
       <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
     </svg>
   )

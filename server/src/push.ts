@@ -201,7 +201,9 @@ push.delete("/api/push/subscribe", async (req, res) => {
 function localParts(now: Date, tz: string): { dow: string; hour: number; day: string } {
   const dow = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(now);
   const hour = Number(
-    new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", hourCycle: "h23" }).format(now),
+    new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", hourCycle: "h23" }).format(
+      now,
+    ),
   );
   const day = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(now);
   return { dow, hour, day };
@@ -306,7 +308,10 @@ export async function notifyRareFinds(added: CityEvent[]): Promise<void> {
           }
         : {
             title: `${matches.length} rare finds for you`,
-            body: matches.slice(0, 4).map((e) => e.title).join(" · "),
+            body: matches
+              .slice(0, 4)
+              .map((e) => e.title)
+              .join(" · "),
             url: `${clickBase()}/?event=${encodeURIComponent(first.id)}`,
             tag: "rarefind",
           };
@@ -381,7 +386,11 @@ async function leaveByTick(
   }
 }
 
-async function digestTick(subsByUser: Map<string, PushSub[]>, tz: string, city: string): Promise<void> {
+async function digestTick(
+  subsByUser: Map<string, PushSub[]>,
+  tz: string,
+  city: string,
+): Promise<void> {
   const { dow, hour, day } = localParts(new Date(), tz);
   if (dow !== DIGEST_DOW || hour < DIGEST_HOUR) return;
   for (const [userId, subs] of subsByUser) {

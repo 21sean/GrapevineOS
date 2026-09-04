@@ -171,10 +171,7 @@ function groundTruth(row: LabelledScan): boolean | null {
  * rather than interpolated. Interpolating inside a bucket would invent
  * precision the recorded data does not have.
  */
-export function sweep(
-  buckets: GuardrailBucket[],
-  labelled: LabelledScan[],
-): GuardrailSweep {
+export function sweep(buckets: GuardrailBucket[], labelled: LabelledScan[]): GuardrailSweep {
   const scored = labelled.filter(
     (r): r is LabelledScan & { score: number } => typeof r.score === "number",
   );

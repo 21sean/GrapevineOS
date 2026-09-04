@@ -126,14 +126,17 @@ export interface EvalSuite {
 const SECRET_MIN_LENGTH = 12;
 
 /** Env names that are configuration rather than credentials. */
-const NOT_SECRET = /^(NODE_|npm_|PATH$|PWD$|HOME$|LANG|TERM|TZ$|SHELL$|USER$|LOGNAME$|TMPDIR$|OS$|COMPUTERNAME$|PROCESSOR|SYSTEM|WINDIR|PUBLIC$|ALLUSERSPROFILE$|COMMONPROGRAM|PROGRAM|APPDATA$|LOCALAPPDATA$|SESSIONNAME$|USERDOMAIN|USERNAME$|USERPROFILE$|HOMEDRIVE$|HOMEPATH$|LOGONSERVER$|DRIVERDATA$|PSMODULEPATH$|PATHEXT$|COMSPEC$|NUMBER_OF_PROCESSORS$|CLAUDE)/i;
+const NOT_SECRET =
+  /^(NODE_|npm_|PATH$|PWD$|HOME$|LANG|TERM|TZ$|SHELL$|USER$|LOGNAME$|TMPDIR$|OS$|COMPUTERNAME$|PROCESSOR|SYSTEM|WINDIR|PUBLIC$|ALLUSERSPROFILE$|COMMONPROGRAM|PROGRAM|APPDATA$|LOCALAPPDATA$|SESSIONNAME$|USERDOMAIN|USERNAME$|USERPROFILE$|HOMEDRIVE$|HOMEPATH$|LOGONSERVER$|DRIVERDATA$|PSMODULEPATH$|PATHEXT$|COMSPEC$|NUMBER_OF_PROCESSORS$|CLAUDE)/i;
 
 function secretValues(): string[] {
-  return Object.entries(process.env)
-    .filter(([k, v]) => !!v && v.length >= SECRET_MIN_LENGTH && !NOT_SECRET.test(k))
-    .map(([, v]) => v!)
-    // Longest first, so a value that contains another is masked whole.
-    .sort((a, b) => b.length - a.length);
+  return (
+    Object.entries(process.env)
+      .filter(([k, v]) => !!v && v.length >= SECRET_MIN_LENGTH && !NOT_SECRET.test(k))
+      .map(([, v]) => v!)
+      // Longest first, so a value that contains another is masked whole.
+      .sort((a, b) => b.length - a.length)
+  );
 }
 
 export function scrubSecrets(text: string): string {

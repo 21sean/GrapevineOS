@@ -114,7 +114,8 @@ export function CalendarDialog() {
     h: window.innerHeight,
   }))
   useEffect(() => {
-    const onResize = () => setVp({ w: window.innerWidth, h: window.innerHeight })
+    const onResize = () =>
+      setVp({ w: window.innerWidth, h: window.innerHeight })
     window.addEventListener("resize", onResize)
     return () => window.removeEventListener("resize", onResize)
   }, [])
@@ -141,7 +142,11 @@ export function CalendarDialog() {
         // delta — doubling it keeps the grip under the pointer.
         next = {
           w: clamp(w0 + 2 * (ev.clientX - x0), MIN_W, window.innerWidth - EDGE),
-          h: clamp(h0 + 2 * (ev.clientY - y0), MIN_H, window.innerHeight - EDGE),
+          h: clamp(
+            h0 + 2 * (ev.clientY - y0),
+            MIN_H,
+            window.innerHeight - EDGE
+          ),
         }
         setSize(next)
       }
@@ -159,7 +164,7 @@ export function CalendarDialog() {
       window.addEventListener("pointermove", onMove)
       window.addEventListener("pointerup", onUp)
     },
-    [dims],
+    [dims]
   )
 
   const connected = !!user && !!calendar?.google
@@ -196,7 +201,8 @@ export function CalendarDialog() {
   const title = useMemo(() => {
     if (view === "month") return MONTH_YEAR.format(anchor)
     const last = addDays(range.from, AGENDA_DAYS - 1)
-    if (range.from.getMonth() === last.getMonth()) return MONTH_YEAR.format(range.from)
+    if (range.from.getMonth() === last.getMonth())
+      return MONTH_YEAR.format(range.from)
     const sameYear = range.from.getFullYear() === last.getFullYear()
     return sameYear
       ? `${MONTH_SHORT.format(range.from)} – ${MONTH_SHORT.format(last)} ${last.getFullYear()}`
@@ -207,7 +213,7 @@ export function CalendarDialog() {
     setAnchor((a) =>
       view === "month"
         ? new Date(a.getFullYear(), a.getMonth() + dir, 1)
-        : addDays(a, dir * AGENDA_DAYS),
+        : addDays(a, dir * AGENDA_DAYS)
     )
   }
 
@@ -246,7 +252,11 @@ export function CalendarDialog() {
 
         {/* toolbar */}
         <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border p-3 pr-14">
-          <Button variant="outline" size="sm" onClick={() => setAnchor(new Date())}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAnchor(new Date())}
+          >
             Today
           </Button>
           <div className="flex items-center">
@@ -272,7 +282,11 @@ export function CalendarDialog() {
           </h2>
           <div className="ml-auto flex items-center gap-2">
             <Select value={view} onValueChange={(v) => setView(v as View)}>
-              <SelectTrigger size="sm" className="w-28" aria-label="Calendar view">
+              <SelectTrigger
+                size="sm"
+                className="w-28"
+                aria-label="Calendar view"
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -393,7 +407,9 @@ function ConnectPrompt({ signedIn }: { signedIn: boolean }) {
           <CalendarX2Icon />
         </EmptyMedia>
         <EmptyTitle>
-          {signedIn ? "Connect Google Calendar" : "Sign in to see your calendar"}
+          {signedIn
+            ? "Connect Google Calendar"
+            : "Sign in to see your calendar"}
         </EmptyTitle>
         <EmptyDescription>
           {signedIn
@@ -408,8 +424,10 @@ function ConnectPrompt({ signedIn }: { signedIn: boolean }) {
             onClick={() =>
               connectGoogleCalendar().catch((err) =>
                 toast.error("Couldn't start the Google consent", {
-                  description: String(err instanceof Error ? err.message : err).slice(0, 140),
-                }),
+                  description: String(
+                    err instanceof Error ? err.message : err
+                  ).slice(0, 140),
+                })
               )
             }
           >

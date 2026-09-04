@@ -74,7 +74,9 @@ export function MobileDock() {
   const detailOpen = useGrapevine((s) => s.detailOpen)
   const hiddenCount = useGrapevine((s) => s.hiddenIds.length)
   const clearHidden = useGrapevine((s) => s.clearHidden)
-  const mutedCount = useGrapevine((s) => s.mutedVenues.length + s.mutedSources.length)
+  const mutedCount = useGrapevine(
+    (s) => s.mutedVenues.length + s.mutedSources.length
+  )
   const clearMuted = useGrapevine((s) => s.clearMuted)
 
   const { visible, ordered } = useOrderedEvents()
@@ -154,7 +156,10 @@ export function MobileDock() {
     if (dt > 0) d.v = (e.clientY - d.lastY) / dt
     d.lastY = e.clientY
     d.lastT = e.timeStamp
-    const visiblePx = Math.min(d.height, Math.max(d.peekPx, d.startVisible - dy))
+    const visiblePx = Math.min(
+      d.height,
+      Math.max(d.peekPx, d.startVisible - dy)
+    )
     el.style.transform = `translateY(${d.height - visiblePx}px)`
   }
 
@@ -165,7 +170,7 @@ export function MobileDock() {
     if (!d.moved) return // plain tap — leave it to click handlers
     const visiblePx = Math.min(
       d.height,
-      Math.max(d.peekPx, d.startVisible - (e.clientY - d.startY)),
+      Math.max(d.peekPx, d.startVisible - (e.clientY - d.startY))
     )
     const halfPx = d.height * 0.48
     let next: Snap
@@ -192,7 +197,7 @@ export function MobileDock() {
       ref={dockRef}
       aria-label="Events"
       style={{ transform: transformFor(dockState) }}
-      className="glass absolute inset-x-0 bottom-0 z-[15] flex flex-col overflow-hidden rounded-t-2xl border-b-0 pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] transition-transform duration-[420ms] ease-[cubic-bezier(0.32,0.72,0,1)] will-change-transform top-[calc(max(env(safe-area-inset-top),0.75rem)+3.75rem)]"
+      className="glass absolute inset-x-0 top-[calc(max(env(safe-area-inset-top),0.75rem)+3.75rem)] bottom-0 z-[15] flex flex-col overflow-hidden rounded-t-2xl border-b-0 pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] transition-transform duration-[420ms] ease-[cubic-bezier(0.32,0.72,0,1)] will-change-transform"
     >
       <div
         ref={safeProbeRef}
@@ -211,7 +216,9 @@ export function MobileDock() {
         <div className="flex touch-none justify-center pt-2 pb-1">
           <button
             type="button"
-            aria-label={dockState === "peek" ? "Expand event list" : "Collapse event list"}
+            aria-label={
+              dockState === "peek" ? "Expand event list" : "Collapse event list"
+            }
             onClick={() => snapTo(dockState === "peek" ? "half" : "peek")}
             className="flex h-4 w-14 items-center justify-center"
           >
@@ -230,7 +237,7 @@ export function MobileDock() {
 
         {/* Quick filters ride in the peek strip, one thumb-tap away.
             Free-only and farmers markets live in the Filters panel. */}
-        <div className="flex touch-pan-x gap-2 overflow-x-auto px-4 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex touch-pan-x [scrollbar-width:none] gap-2 overflow-x-auto px-4 py-2 [&::-webkit-scrollbar]:hidden">
           {toggles
             .filter((t) => t.key !== "free")
             .map((t) => (
@@ -246,7 +253,10 @@ export function MobileDock() {
             ))}
           {/* Today / Tomorrow / Weekend / range picker — the phone finally
               gets the date window the agent could always set */}
-          <DateQuickChips chipClass={DOCK_CHIP} activeClass={DOCK_CHIP_ACTIVE} />
+          <DateQuickChips
+            chipClass={DOCK_CHIP}
+            activeClass={DOCK_CHIP_ACTIVE}
+          />
           {/* drive-time radius from wherever the user is standing */}
           <NearMeChip chipClass={DOCK_CHIP} activeClass={DOCK_CHIP_ACTIVE} />
           <Chip
@@ -271,7 +281,7 @@ export function MobileDock() {
       </div>
 
       {filtersOpen && (
-        <div className="px-4 pb-3 duration-150 animate-in fade-in-0 slide-in-from-top-1">
+        <div className="animate-in px-4 pb-3 duration-150 fade-in-0 slide-in-from-top-1">
           <BuzzAndCategoryFilters />
         </div>
       )}
@@ -334,7 +344,7 @@ function Chip({
       onClick={onClick}
       className={cn(
         "flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border bg-card/50 px-3 text-[13px] whitespace-nowrap transition-colors",
-        active && activeClass,
+        active && activeClass
       )}
     >
       {children}

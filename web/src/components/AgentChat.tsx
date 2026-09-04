@@ -27,7 +27,11 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Spinner } from "@/components/ui/spinner"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { CapabilitiesPopover } from "@/components/chat/Capabilities"
 import { ModelEffortPicker } from "@/components/chat/ModelEffortPicker"
 import { CalendarCard, InterestsCard } from "@/components/chat/ProposalCards"
@@ -112,7 +116,9 @@ export function AgentChat() {
           />
           <SheetHeader className="sr-only">
             <SheetTitle>Ask Grapevine</SheetTitle>
-            <SheetDescription>Chat with the local events concierge</SheetDescription>
+            <SheetDescription>
+              Chat with the local events concierge
+            </SheetDescription>
           </SheetHeader>
           <Conversation chat={chat} className="min-h-[42svh]" />
         </SheetContent>
@@ -147,7 +153,7 @@ function DesktopPalette({
       if (panelRef.current.contains(t)) return
       if (
         t.closest(
-          '[data-slot="sheet-content"], [data-slot="dialog-content"], [data-slot="popover-content"], [data-sonner-toaster]',
+          '[data-slot="sheet-content"], [data-slot="dialog-content"], [data-slot="popover-content"], [data-sonner-toaster]'
         )
       )
         return
@@ -207,7 +213,7 @@ function Conversation({
       toast.error(
         err === "not-allowed" || err === "service-not-allowed"
           ? "Microphone access is blocked — allow it in your browser's site settings."
-          : `Dictation failed (${err})`,
+          : `Dictation failed (${err})`
       ),
   })
 
@@ -218,8 +224,10 @@ function Conversation({
   // The scroll container is the Radix ScrollArea viewport, not the root.
   const viewport = useCallback(
     () =>
-      listRef.current?.querySelector<HTMLElement>('[data-slot="scroll-area-viewport"]') ?? null,
-    [],
+      listRef.current?.querySelector<HTMLElement>(
+        '[data-slot="scroll-area-viewport"]'
+      ) ?? null,
+    []
   )
 
   // Follow the stream, but only while the reader is at the tail — a reply that
@@ -247,7 +255,7 @@ function Conversation({
       pinned.current = true
       send(text)
     },
-    [send],
+    [send]
   )
 
   function submit(e?: FormEvent) {
@@ -274,7 +282,7 @@ function Conversation({
               loadThread(id).catch((err) =>
                 toast.error("Couldn't load that conversation", {
                   description: String(err).slice(0, 140),
-                }),
+                })
               )
             }}
           />
@@ -307,7 +315,7 @@ function Conversation({
           "flex shrink-0 items-center gap-2 py-2 pr-2",
           // The picker row already draws the top divider when it's shown.
           chatProvider === "claude" ? "" : "border-t border-border/60",
-          "pl-2",
+          "pl-2"
         )}
       >
         <CapabilitiesPopover />
@@ -322,7 +330,7 @@ function Conversation({
               onClick={() => setShowHistory((v) => !v)}
               className={cn(
                 "rounded-full text-muted-foreground",
-                showHistory && "bg-accent text-foreground",
+                showHistory && "bg-accent text-foreground"
               )}
             >
               <HistoryIcon />
@@ -352,17 +360,23 @@ function Conversation({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder={
-            speech.listening ? "Listening…" : "Ask about tonight, this weekend, a vibe…"
+            speech.listening
+              ? "Listening…"
+              : "Ask about tonight, this weekend, a vibe…"
           }
           className="h-9 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
         />
         {speech.supported && (
-          <Hint label={speech.listening ? "Stop dictation" : "Speak your request"}>
+          <Hint
+            label={speech.listening ? "Stop dictation" : "Speak your request"}
+          >
             <Button
               type="button"
               variant="ghost"
               size="icon-sm"
-              aria-label={speech.listening ? "Stop dictation" : "Speak your request"}
+              aria-label={
+                speech.listening ? "Stop dictation" : "Speak your request"
+              }
               aria-pressed={speech.listening}
               onClick={() => {
                 if (!speech.listening) dictationBase.current = input
@@ -371,7 +385,8 @@ function Conversation({
               }}
               className={cn(
                 "rounded-full text-muted-foreground",
-                speech.listening && "animate-pulse bg-destructive/15 text-destructive",
+                speech.listening &&
+                  "animate-pulse bg-destructive/15 text-destructive"
               )}
             >
               <MicIcon />
@@ -415,7 +430,9 @@ function EmptyState({ onPick }: { onPick: (q: string) => void }) {
     <div className="flex flex-col items-center gap-4 px-6 py-10 text-center">
       <SparklesIcon className="size-6 text-wine" />
       <div className="space-y-1">
-        <p className="font-heading text-lg font-semibold italic">Ask Grapevine</p>
+        <p className="font-heading text-lg font-semibold italic">
+          Ask Grapevine
+        </p>
         <p className="text-sm text-muted-foreground">
           Anything about what's on in {city ?? "town"} — it searches, pins the
           map, and can plan your day.
@@ -459,7 +476,7 @@ function Message({
   }
 
   const linked = new Set(
-    [...item.text.matchAll(EVENT_LINK_RE)].map((m) => m[2]),
+    [...item.text.matchAll(EVENT_LINK_RE)].map((m) => m[2])
   )
   const chipRow = item.highlights.filter((id) => !linked.has(id))
 
@@ -471,9 +488,13 @@ function Message({
           className="flex flex-wrap items-center gap-2 rounded-lg bg-card/60 px-3 py-2 text-xs text-muted-foreground"
         >
           <span className="min-w-0">{n.message}</span>
-          {["no-model", "ollama-down", "no-tools", "cli-missing", "cli-auth"].includes(
-            n.code,
-          ) && (
+          {[
+            "no-model",
+            "ollama-down",
+            "no-tools",
+            "cli-missing",
+            "cli-auth",
+          ].includes(n.code) && (
             <Button
               variant="outline"
               size="sm"
@@ -516,9 +537,12 @@ function Message({
 
       {item.text && <RichText text={item.text} />}
 
-      {item.streaming && !item.text && !item.status && item.tools.length === 0 && (
-        <Spinner className="size-3.5 text-muted-foreground" />
-      )}
+      {item.streaming &&
+        !item.text &&
+        !item.status &&
+        item.tools.length === 0 && (
+          <Spinner className="size-3.5 text-muted-foreground" />
+        )}
 
       {chipRow.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
@@ -547,16 +571,23 @@ function Message({
             proposal={p}
             onState={(s) => chat.setProposalState(itemIdx, i, s)}
           />
-        ),
+        )
       )}
 
       {item.usage && !item.streaming && <UsageLine usage={item.usage} />}
 
       {item.error && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs">
-          <span className="min-w-0 text-destructive-foreground/90">{item.error}</span>
+          <span className="text-destructive-foreground/90 min-w-0">
+            {item.error}
+          </span>
           {onRetry && (
-            <Button variant="outline" size="sm" className="h-6 px-2 text-xs" onClick={onRetry}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-6 px-2 text-xs"
+              onClick={onRetry}
+            >
               Retry
             </Button>
           )}
@@ -593,7 +624,10 @@ function UsageLine({ usage }: { usage: ChatUsage }) {
     >
       {/* tabIndex so the explanation is reachable without a pointer — this is
           the only place the cache split is written down. */}
-      <div tabIndex={0} className="font-mono text-[10px] text-muted-foreground/70">
+      <div
+        tabIndex={0}
+        className="font-mono text-[10px] text-muted-foreground/70"
+      >
         {parts.join(" · ")}
       </div>
     </Hint>
@@ -617,7 +651,10 @@ export function EventChip({ id, label }: { id: string; label: string }) {
   useEffect(() => {
     if (!event && !refreshAttempted.has(id)) {
       refreshAttempted.add(id)
-      useGrapevine.getState().refreshEvents().catch(() => {})
+      useGrapevine
+        .getState()
+        .refreshEvents()
+        .catch(() => {})
     }
   }, [event, id])
 

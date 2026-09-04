@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils"
 const AccountDialog = lazy(() =>
   import("@/components/AccountDialog").then((m) => ({
     default: m.AccountDialog,
-  })),
+  }))
 )
 
 export function TopBar() {
@@ -51,7 +51,7 @@ export function TopBar() {
     // when the app runs full-bleed (viewport-fit=cover / add-to-home-screen).
     <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 pt-[max(env(safe-area-inset-top),0.75rem)] pr-[max(env(safe-area-inset-right),0.75rem)] pl-[max(env(safe-area-inset-left),0.75rem)] sm:gap-4 sm:pt-4 sm:pr-4 sm:pl-4">
       <div className="glass pointer-events-auto flex h-11 items-center gap-2.5 rounded-full px-3.5 sm:gap-3 sm:px-4">
-        <span className="font-heading text-base font-semibold italic tracking-tight sm:text-lg">
+        <span className="font-heading text-base font-semibold tracking-tight italic sm:text-lg">
           Grapevine
         </span>
         {/* the city is ambient context — the live count earns the phone space */}
@@ -64,7 +64,7 @@ export function TopBar() {
           <span
             className={cn(
               "size-2 rounded-full",
-              liveCount ? "animate-pulse bg-live" : "bg-muted-foreground/50",
+              liveCount ? "animate-pulse bg-live" : "bg-muted-foreground/50"
             )}
           />
           {liveCount} live<span className="max-sm:hidden"> now</span>
@@ -75,7 +75,7 @@ export function TopBar() {
       <button
         type="button"
         onClick={() => setAskOpen(true)}
-        className="glass pointer-events-auto hidden h-11 min-w-0 max-w-md flex-1 items-center gap-2.5 rounded-full px-4 text-sm text-muted-foreground transition-colors hover:text-foreground sm:flex"
+        className="glass pointer-events-auto hidden h-11 max-w-md min-w-0 flex-1 items-center gap-2.5 rounded-full px-4 text-sm text-muted-foreground transition-colors hover:text-foreground sm:flex"
       >
         <SparklesIcon className="size-4 shrink-0 text-wine" />
         <span className="truncate">Ask Grapevine</span>

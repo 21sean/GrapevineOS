@@ -121,7 +121,10 @@ export function dominantColor(bytes: Buffer, contentType: string): string | null
     }
   }
   if (!n) return null;
-  const hex = (v: number) => Math.round(v / n).toString(16).padStart(2, "0");
+  const hex = (v: number) =>
+    Math.round(v / n)
+      .toString(16)
+      .padStart(2, "0");
   return `#${hex(r)}${hex(g)}${hex(b)}`;
 }
 
@@ -225,9 +228,7 @@ export async function pruneGenericImages(): Promise<number> {
   for (const e of events) {
     if (e.imageUrl) counts.set(e.imageUrl, (counts.get(e.imageUrl) ?? 0) + 1);
   }
-  const generic = new Set(
-    [...counts.entries()].filter(([, n]) => n >= 2).map(([url]) => url),
-  );
+  const generic = new Set([...counts.entries()].filter(([, n]) => n >= 2).map(([url]) => url));
   let cleared = 0;
   for (const e of events) {
     if (e.imageUrl && generic.has(e.imageUrl)) {

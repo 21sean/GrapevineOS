@@ -95,7 +95,10 @@ export function assertRecording(): void {
   const ctx = probe.otelSpan.spanContext();
   // Deliberately never ended: export happens in the processor's onEnd, so an
   // abandoned probe proves the provider is live without leaving a junk trace.
-  const ok = probe.otelSpan.isRecording() && /^[0-9a-f]{32}$/.test(ctx.traceId) && ctx.traceId !== "0".repeat(32);
+  const ok =
+    probe.otelSpan.isRecording() &&
+    /^[0-9a-f]{32}$/.test(ctx.traceId) &&
+    ctx.traceId !== "0".repeat(32);
   if (!ok) {
     throw new Error("no tracer provider registered: spans would be silently discarded");
   }
@@ -233,7 +236,9 @@ export async function resetSimulatedRun(prefix: string): Promise<void> {
     throw new Error(`refusing to reset on an unsafe prefix: ${prefix}`);
   }
   const ids = (
-    await ch(`SELECT DISTINCT trace_id FROM events_core WHERE session_id LIKE '${prefix}-%' FORMAT TSV`)
+    await ch(
+      `SELECT DISTINCT trace_id FROM events_core WHERE session_id LIKE '${prefix}-%' FORMAT TSV`,
+    )
   )
     .split("\n")
     .map((l) => l.trim())
@@ -272,17 +277,25 @@ export async function resetSimulatedRun(prefix: string): Promise<void> {
     );
     // mutations_sync = 2 so the delete is done before the re-emit starts,
     // otherwise the tabs briefly hold both runs at once.
-    await ch(`ALTER TABLE events_full DELETE WHERE trace_id IN (${list}) SETTINGS mutations_sync = 2`);
-    await ch(`ALTER TABLE events_core DELETE WHERE trace_id IN (${list}) SETTINGS mutations_sync = 2`);
+    await ch(
+      `ALTER TABLE events_full DELETE WHERE trace_id IN (${list}) SETTINGS mutations_sync = 2`,
+    );
+    await ch(
+      `ALTER TABLE events_core DELETE WHERE trace_id IN (${list}) SETTINGS mutations_sync = 2`,
+    );
   }
   if (scoreRows > 0) {
     await ch(`ALTER TABLE scores DELETE WHERE id LIKE '${prefix}-%' SETTINGS mutations_sync = 2`);
   }
   const left = Number(
-    (await ch(`SELECT count() FROM events_core WHERE session_id LIKE '${prefix}-%' FORMAT TSV`)).trim(),
+    (
+      await ch(`SELECT count() FROM events_core WHERE session_id LIKE '${prefix}-%' FORMAT TSV`)
+    ).trim(),
   );
   const scoresLeft = Number(
     (await ch(`SELECT count() FROM scores WHERE id LIKE '${prefix}-%' FORMAT TSV`)).trim(),
   );
-  console.log(`reset: done. ${left} '${prefix}-' spans and ${scoresLeft} '${prefix}-' scores remain`);
+  console.log(
+    `reset: done. ${left} '${prefix}-' spans and ${scoresLeft} '${prefix}-' scores remain`,
+  );
 }

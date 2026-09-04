@@ -21,12 +21,13 @@ import { cn } from "@/lib/utils"
 // react-day-picker only loads when someone opens the picker — same chunk
 // discipline as the lazy CalendarDialog in App.tsx.
 const Calendar = lazy(() =>
-  import("@/components/ui/calendar").then((m) => ({ default: m.Calendar })),
+  import("@/components/ui/calendar").then((m) => ({ default: m.Calendar }))
 )
 
 /** "2026-07-12"/"2026-07-15" → "Jul 12 – Jul 15" (open ends spelled out). */
-export function rangeLabel(from: string | null, to: string | null): string {
-  if (from && to) return from === to ? fmtDay(from) : `${fmtDay(from)} – ${fmtDay(to)}`
+function rangeLabel(from: string | null, to: string | null): string {
+  if (from && to)
+    return from === to ? fmtDay(from) : `${fmtDay(from)} – ${fmtDay(to)}`
   if (from) return `from ${fmtDay(from)}`
   return `through ${fmtDay(to!)}`
 }
@@ -68,7 +69,9 @@ export function DateQuickChips({
   const setFilters = useGrapevine((s) => s.setFilters)
   // City-local today; localDay returns the same string all day, so this only
   // re-renders the chips when the date actually flips.
-  const today = useGrapevine((s) => localDay(s.now.toISOString(), s.settings?.tz))
+  const today = useGrapevine((s) =>
+    localDay(s.now.toISOString(), s.settings?.tz)
+  )
   const [open, setOpen] = useState(false)
 
   const ranges = quickRanges(today)

@@ -69,10 +69,7 @@ ext.get("/api/ext/v1/events", extAuth, async (req, res) => {
     date_to: q.date_to ?? q.to,
     free_only: q.free_only ?? q.free,
   };
-  const parsed = parseArgs(
-    "search_events",
-    coerceQuery(CONTRACTS.search_events.schema, aliased),
-  );
+  const parsed = parseArgs("search_events", coerceQuery(CONTRACTS.search_events.schema, aliased));
   if (!parsed.ok) return res.status(400).json({ error: parsed.error });
   try {
     const ctx = await buildCtx();
@@ -191,7 +188,9 @@ ext.use("/api/ext/v1/discovery", discoveryRouter(extAuth));
 ext.post("/api/ext/v1/interests", extAuth, async (req, res) => {
   const body = (req.body ?? {}) as Record<string, unknown>;
   const confirmed = body.confirmed === true;
-  const parsed = confirmed ? parseArgs("apply_interests", body) : parseArgs("update_interests", body);
+  const parsed = confirmed
+    ? parseArgs("apply_interests", body)
+    : parseArgs("update_interests", body);
   if (!parsed.ok) return res.status(400).json({ error: parsed.error });
   try {
     const user = await extUser(res);

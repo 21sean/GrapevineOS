@@ -119,8 +119,7 @@ auth.get("/api/me", async (req, res) => {
 auth.put("/api/me/prefs", async (req, res) => {
   const user = await sessionUser(req);
   if (!user) return res.status(401).json({ error: "not signed in" });
-  const { filters, interests, pinnedIds, hiddenIds, mutedVenues, mutedSources } =
-    req.body ?? {};
+  const { filters, interests, pinnedIds, hiddenIds, mutedVenues, mutedSources } = req.body ?? {};
   const updated = await store.updateUserPrefs(user.id, {
     ...(filters !== undefined && { filters }),
     ...(interests !== undefined && { interests }),

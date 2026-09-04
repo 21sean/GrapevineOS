@@ -21,22 +21,24 @@ export const capabilities = Router();
 capabilities.get("/api/agent/capabilities", async (_req, res) => {
   const [settings, guard] = await Promise.all([store.settings(), guardConfig()]);
   const provider = settings.chatProvider;
-  let tools = false;
-  let surface: "graph" | "mcp" | null = null;
-  if (provider === "ollama") {
-    tools = settings.model ? await modelSupportsTools(settings.model).catch(() => false) : false;
-    surface = tools ? "graph" : null;
-  } else {
-    // A CLI brings its own toolbox: this server's MCP surface, when it can.
-    tools = cliSupportsTools(provider);
-    surface = tools ? "mcp" : null;
-  }
+  // A CLI brings its own toolbox, this server's MCP surface, when it can.
+  const tools =
+    provider === "ollama"
+      ? settings.model
+        ? await modelSupportsTools(settings.model).catch(() => false)
+        : false
+      : cliSupportsTools(provider);
+  const surface: "graph" | "mcp" | null = !tools ? null : provider === "ollama" ? "graph" : "mcp";
   const body: AgentCapabilities = {
     provider,
     model: provider === "ollama" ? settings.model : "",
     tools,
     toolbox: surface
-      ? toolsFor(surface).map((c) => ({ name: c.name, description: c.description, effect: c.effect }))
+      ? toolsFor(surface).map((c) => ({
+          name: c.name,
+          description: c.description,
+          effect: c.effect,
+        }))
       : [],
     rails: {
       mode: guard.mode,

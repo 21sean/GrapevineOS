@@ -8,12 +8,7 @@
  * API keys.
  */
 import { chatJSON } from "./ollama.js";
-import {
-  cliJSON,
-  detectProviders,
-  providerInfo,
-  type CliProviderId,
-} from "./providers.js";
+import { cliJSON, detectProviders, providerInfo, type CliProviderId } from "./providers.js";
 import { store } from "./store.js";
 import type { LlmProviderId } from "./types.js";
 

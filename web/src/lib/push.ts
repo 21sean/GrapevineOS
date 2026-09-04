@@ -7,7 +7,11 @@ import { api } from "./api"
  */
 
 export function pushSupported(): boolean {
-  return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window
+  return (
+    "serviceWorker" in navigator &&
+    "PushManager" in window &&
+    "Notification" in window
+  )
 }
 
 /** The applicationServerKey format subscribe() wants. */
@@ -34,10 +38,13 @@ export async function enablePush(prefs: {
   leaveBy?: boolean
   rareFinds?: boolean
 }): Promise<PushSubscription> {
-  if (!pushSupported()) throw new Error("this browser doesn't support notifications")
+  if (!pushSupported())
+    throw new Error("this browser doesn't support notifications")
   const permission = await Notification.requestPermission()
   if (permission !== "granted") {
-    throw new Error("notifications are blocked — allow them in your browser's site settings")
+    throw new Error(
+      "notifications are blocked — allow them in your browser's site settings"
+    )
   }
   const reg =
     (await navigator.serviceWorker.getRegistration()) ??
@@ -47,7 +54,9 @@ export async function enablePush(prefs: {
     (await reg.pushManager.getSubscription()) ??
     (await reg.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array((await api.pushKey()).publicKey) as BufferSource,
+      applicationServerKey: urlBase64ToUint8Array(
+        (await api.pushKey()).publicKey
+      ) as BufferSource,
     }))
   await api.pushSubscribe(sub.toJSON(), prefs)
   return sub

@@ -407,22 +407,12 @@ export const GUARDRAIL_RAILS: GuardrailRail[] = ["input", "content", "output"];
  * surface showing up in the panel is the correct way to learn about it.
  */
 export type GuardrailSurface =
-  | "chat"
-  | "chat-cli"
-  | "discovery"
-  | "eval"
-  | "warmup"
-  | "unknown"
-  | (string & {});
+  "chat" | "chat-cli" | "discovery" | "eval" | "warmup" | "unknown" | (string & {});
 
 /** Operator triage. Labelled rows are the calibration set the sweep scores. */
 export type GuardrailLabel = "correct" | "false_positive" | "false_negative";
 
-export const GUARDRAIL_LABELS: GuardrailLabel[] = [
-  "correct",
-  "false_positive",
-  "false_negative",
-];
+export const GUARDRAIL_LABELS: GuardrailLabel[] = ["correct", "false_positive", "false_negative"];
 
 export function isGuardrailLabel(v: unknown): v is GuardrailLabel {
   return typeof v === "string" && (GUARDRAIL_LABELS as string[]).includes(v);

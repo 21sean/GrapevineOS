@@ -40,7 +40,7 @@ export function MonthView({
   const cells = useMemo(() => monthGrid(anchor), [anchor])
   const byDay = useMemo(
     () => cells.map((day) => events.filter((e) => onDay(e, day)).sort(byStart)),
-    [cells, events],
+    [cells, events]
   )
 
   return (
@@ -99,7 +99,7 @@ function DayCell({
       onClick={() => onPickDay(day)}
       className={cn(
         "flex min-h-0 cursor-default flex-col gap-1 overflow-hidden border-r border-b border-border/60 p-1 transition-colors last:border-r-0 hover:bg-accent/40",
-        !inMonth && "bg-background/40",
+        !inMonth && "bg-background/40"
       )}
     >
       <span
@@ -109,7 +109,7 @@ function DayCell({
             ? "bg-primary font-semibold text-primary-foreground"
             : inMonth
               ? "text-foreground"
-              : "text-muted-foreground/60",
+              : "text-muted-foreground/60"
         )}
       >
         {day.getDate()}
@@ -176,7 +176,7 @@ function EventChip({
       className={cn(
         "w-full shrink-0 truncate rounded border px-1.5 py-0.5 text-left text-xs transition-opacity hover:opacity-80",
         meta.chip,
-        ended && "line-through opacity-55",
+        ended && "line-through opacity-55"
       )}
     >
       {!event.allDay && (

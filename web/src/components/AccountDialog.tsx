@@ -103,10 +103,10 @@ export function AccountDialog({
     return {
       onMap: visible.length,
       boosted: upcoming.filter((e) =>
-        interestTerms(e).some((t) => interests.loves.includes(t)),
+        interestTerms(e).some((t) => interests.loves.includes(t))
       ).length,
       hidden: upcoming.filter((e) =>
-        interestTerms(e).some((t) => interests.avoids.includes(t)),
+        interestTerms(e).some((t) => interests.avoids.includes(t))
       ).length,
     }
   }, [events, visible, interests, now, tz])
@@ -117,7 +117,7 @@ export function AccountDialog({
       pinnedIds
         .map((id) => events.find((e) => e.id === id))
         .filter((e): e is CityEvent => Boolean(e)),
-    [pinnedIds, events],
+    [pinnedIds, events]
   )
 
   const filtersDefault =
@@ -231,7 +231,7 @@ export function AccountDialog({
                           className={cn(
                             "truncate text-[13px] font-medium",
                             ended &&
-                              "text-muted-foreground line-through decoration-border",
+                              "text-muted-foreground line-through decoration-border"
                           )}
                         >
                           {e.title}
@@ -300,7 +300,7 @@ export function AccountDialog({
                 <ChevronDownIcon
                   className={cn(
                     "size-4 text-muted-foreground transition-transform duration-200",
-                    notifOpen && "rotate-180",
+                    notifOpen && "rotate-180"
                   )}
                 />
               </span>
@@ -312,76 +312,78 @@ export function AccountDialog({
                 </p>
               ) : (
                 <div className="mt-2 flex flex-col gap-2">
-                <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border px-3 py-2">
-                  <span className="min-w-0">
-                    <span className="block text-[13px] font-medium">
-                      Event reminders
+                  <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border px-3 py-2">
+                    <span className="min-w-0">
+                      <span className="block text-[13px] font-medium">
+                        Event reminders
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        A nudge 45 minutes before a saved event starts
+                      </span>
                     </span>
-                    <span className="block text-xs text-muted-foreground">
-                      A nudge 45 minutes before a saved event starts
+                    <Switch
+                      checked={!!pushState?.reminders}
+                      disabled={!pushState || pushBusy}
+                      onCheckedChange={(v) => void togglePush("reminders", v)}
+                    />
+                  </label>
+                  <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border px-3 py-2">
+                    <span className="min-w-0">
+                      <span className="block text-[13px] font-medium">
+                        Leave-by alerts
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        "Time to leave" with live traffic, for events you're
+                        going to
+                      </span>
                     </span>
-                  </span>
-                  <Switch
-                    checked={!!pushState?.reminders}
-                    disabled={!pushState || pushBusy}
-                    onCheckedChange={(v) => void togglePush("reminders", v)}
-                  />
-                </label>
-                <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border px-3 py-2">
-                  <span className="min-w-0">
-                    <span className="block text-[13px] font-medium">
-                      Leave-by alerts
+                    <Switch
+                      checked={!!pushState?.leaveBy}
+                      disabled={!pushState || pushBusy}
+                      onCheckedChange={(v) => void togglePush("leaveBy", v)}
+                    />
+                  </label>
+                  <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border px-3 py-2">
+                    <span className="min-w-0">
+                      <span className="block text-[13px] font-medium">
+                        Weekly digest
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        "Your week" top picks, Sunday evening
+                      </span>
                     </span>
-                    <span className="block text-xs text-muted-foreground">
-                      "Time to leave" with live traffic, for events you're
-                      going to
+                    <Switch
+                      checked={!!pushState?.weeklyDigest}
+                      disabled={!pushState || pushBusy}
+                      onCheckedChange={(v) =>
+                        void togglePush("weeklyDigest", v)
+                      }
+                    />
+                  </label>
+                  <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border px-3 py-2">
+                    <span className="min-w-0">
+                      <span className="block text-[13px] font-medium">
+                        Rare finds
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        The moment a rare one-off matching your "more like this"
+                        picks lands
+                      </span>
                     </span>
-                  </span>
-                  <Switch
-                    checked={!!pushState?.leaveBy}
-                    disabled={!pushState || pushBusy}
-                    onCheckedChange={(v) => void togglePush("leaveBy", v)}
-                  />
-                </label>
-                <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border px-3 py-2">
-                  <span className="min-w-0">
-                    <span className="block text-[13px] font-medium">
-                      Weekly digest
-                    </span>
-                    <span className="block text-xs text-muted-foreground">
-                      "Your week" top picks, Sunday evening
-                    </span>
-                  </span>
-                  <Switch
-                    checked={!!pushState?.weeklyDigest}
-                    disabled={!pushState || pushBusy}
-                    onCheckedChange={(v) => void togglePush("weeklyDigest", v)}
-                  />
-                </label>
-                <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border px-3 py-2">
-                  <span className="min-w-0">
-                    <span className="block text-[13px] font-medium">
-                      Rare finds
-                    </span>
-                    <span className="block text-xs text-muted-foreground">
-                      The moment a rare one-off matching your "more like this"
-                      picks lands
-                    </span>
-                  </span>
-                  <Switch
-                    checked={!!pushState?.rareFinds}
-                    disabled={!pushState || pushBusy}
-                    onCheckedChange={(v) => void togglePush("rareFinds", v)}
-                  />
-                </label>
-                <p className="text-xs text-muted-foreground">
-                  Notifications are per-browser. Reminders follow your saved
-                  events; leave-by alerts time the drive (with traffic) to
-                  anything you saved or marked "going", from your last known
-                  spot; the digest and rare finds are ranked by your interests
-                  and reactions.
-                </p>
-              </div>
+                    <Switch
+                      checked={!!pushState?.rareFinds}
+                      disabled={!pushState || pushBusy}
+                      onCheckedChange={(v) => void togglePush("rareFinds", v)}
+                    />
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    Notifications are per-browser. Reminders follow your saved
+                    events; leave-by alerts time the drive (with traffic) to
+                    anything you saved or marked "going", from your last known
+                    spot; the digest and rare finds are ranked by your interests
+                    and reactions.
+                  </p>
+                </div>
               ))}
           </section>
 
@@ -488,8 +490,12 @@ export function AccountDialog({
                 </p>
               ) : (
                 <>
-                  {filters.liveOnly && <Badge variant="secondary">Live only</Badge>}
-                  {filters.rareOnly && <Badge variant="secondary">Rare finds</Badge>}
+                  {filters.liveOnly && (
+                    <Badge variant="secondary">Live only</Badge>
+                  )}
+                  {filters.rareOnly && (
+                    <Badge variant="secondary">Rare finds</Badge>
+                  )}
                   {filters.hidePromoted && (
                     <Badge variant="secondary">Hiding promoted</Badge>
                   )}
@@ -508,7 +514,11 @@ export function AccountDialog({
                     </Badge>
                   ))}
                   {filters.hideCategories.map((c) => (
-                    <Badge key={`hide-${c}`} variant="secondary" className="gap-1.5">
+                    <Badge
+                      key={`hide-${c}`}
+                      variant="secondary"
+                      className="gap-1.5"
+                    >
                       <span
                         className="size-2 rounded-full opacity-40"
                         style={{ background: CATEGORY_META[c].color }}

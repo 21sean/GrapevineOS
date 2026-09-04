@@ -50,10 +50,10 @@ export function AdminSheet() {
             : { width: "34rem", maxWidth: "calc(100vw - 1.5rem)" }
         }
         className={cn(
-          "glass flex flex-col gap-0 bg-background/70 p-0 overflow-hidden",
+          "glass flex flex-col gap-0 overflow-hidden bg-background/70 p-0",
           isMobile
             ? "max-h-[90svh] rounded-t-2xl border-b-0 pb-[env(safe-area-inset-bottom)]"
-            : "rounded-xl data-[side=right]:inset-y-3 data-[side=right]:right-3 data-[side=right]:h-auto data-[side=right]:border",
+            : "rounded-xl data-[side=right]:inset-y-3 data-[side=right]:right-3 data-[side=right]:h-auto data-[side=right]:border"
         )}
       >
         {/* accent wash: admin is lit by the wine hue that marks the brand's
@@ -103,7 +103,7 @@ export function AdminSheet() {
         >
           <div className="shrink-0 border-b border-border/60 px-5 pb-3">
             {/* horizontally scrollable so the tabs never cram; scrollbar hidden */}
-            <TabsList className="w-full justify-start overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <TabsList className="w-full [scrollbar-width:none] justify-start overflow-x-auto [&::-webkit-scrollbar]:hidden">
               {TABS.map((t) => (
                 <TabsTrigger key={t.value} value={t.value}>
                   {t.label}

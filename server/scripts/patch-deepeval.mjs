@@ -10,13 +10,20 @@
  * lines reference them), so the smallest correct fix is to turn the file into
  * a re-export of the directory index. Runs on postinstall so an `npm install`
  * cannot quietly bring the bug back; remove once a fixed deepeval ships.
+ *
+ * With npm workspaces the package is hoisted to the repo root, so both
+ * locations are checked.
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
-const file = new URL("../node_modules/deepeval/dist/telemetry.js", import.meta.url);
+const candidates = [
+  new URL("../node_modules/deepeval/dist/telemetry.js", import.meta.url),
+  new URL("../../node_modules/deepeval/dist/telemetry.js", import.meta.url),
+];
+const file = candidates.find((u) => existsSync(u));
 const shim = `// patched by scripts/patch-deepeval.mjs — see that file for why\nmodule.exports = require("./telemetry/index.js");\n`;
 
-if (!existsSync(file)) {
+if (!file) {
   console.log("patch-deepeval: dist/telemetry.js is gone — upstream fixed it, delete this script");
 } else if (readFileSync(file, "utf8").includes("telemetry/index.js")) {
   console.log("patch-deepeval: already patched");

@@ -22,21 +22,34 @@ export function ProvidersTab() {
   const setSettings = useGrapevine((s) => s.setSettings)
 
   const [clis, setClis] = useState<CliProviderStatus[] | null>(null)
-  const [ollama, setOllama] = useState<{ ok: boolean; url: string; version: string | null } | null>(null)
+  const [ollama, setOllama] = useState<{
+    ok: boolean
+    url: string
+    version: string | null
+  } | null>(null)
   const [mcp, setMcp] = useState<McpInfo | null>(null)
   const [refreshing, setRefreshing] = useState(false)
 
   const refresh = useCallback((force = false) => {
     setRefreshing(true)
     Promise.allSettled([
-      api.providers(force).then((r) => setClis(r.providers)).catch(() => setClis([])),
-      api.ollamaHealth().then(setOllama).catch(() => setOllama(null)),
+      api
+        .providers(force)
+        .then((r) => setClis(r.providers))
+        .catch(() => setClis([])),
+      api
+        .ollamaHealth()
+        .then(setOllama)
+        .catch(() => setOllama(null)),
     ]).finally(() => setRefreshing(false))
   }, [])
 
   useEffect(() => {
     refresh()
-    api.mcpInfo().then(setMcp).catch(() => setMcp(null))
+    api
+      .mcpInfo()
+      .then(setMcp)
+      .catch(() => setMcp(null))
   }, [refresh])
 
   const chatActive = settings?.chatProvider ?? "ollama"
@@ -45,7 +58,7 @@ export function ProvidersTab() {
   async function setProvider(
     role: "chatProvider" | "extractProvider",
     id: LlmProviderId,
-    label: string,
+    label: string
   ) {
     try {
       const next = await api.saveSettings({ [role]: id })
@@ -53,10 +66,12 @@ export function ProvidersTab() {
       toast.success(
         role === "chatProvider"
           ? `Ask Grapevine now answers via ${label}`
-          : `Newsletter extraction now runs via ${label}`,
+          : `Newsletter extraction now runs via ${label}`
       )
     } catch (err) {
-      toast.error("Couldn't switch provider", { description: String(err).slice(0, 140) })
+      toast.error("Couldn't switch provider", {
+        description: String(err).slice(0, 140),
+      })
     }
   }
 
@@ -121,7 +136,8 @@ export function ProvidersTab() {
       <div
         className={cn(
           "flex flex-col gap-2 rounded-lg border px-3 py-2.5",
-          (chatActive === "ollama" || extractActive === "ollama") && "border-wine/60",
+          (chatActive === "ollama" || extractActive === "ollama") &&
+            "border-wine/60"
         )}
       >
         <div className="flex items-center justify-between gap-2">
@@ -133,7 +149,7 @@ export function ProvidersTab() {
                 <span
                   className={cn(
                     "size-1.5 rounded-full",
-                    ollama?.ok ? "bg-live" : "bg-destructive",
+                    ollama?.ok ? "bg-live" : "bg-destructive"
                   )}
                 />
               </span>
@@ -168,7 +184,7 @@ export function ProvidersTab() {
             key={p.id}
             className={cn(
               "flex flex-col gap-2 rounded-lg border px-3 py-2.5",
-              isActive && "border-wine/60",
+              isActive && "border-wine/60"
             )}
           >
             <div className="flex items-center justify-between gap-2">
@@ -184,7 +200,7 @@ export function ProvidersTab() {
                           ? "bg-destructive"
                           : p.authed
                             ? "bg-live"
-                            : "bg-amber-400",
+                            : "bg-amber-400"
                       )}
                     />
                   </span>
@@ -244,21 +260,29 @@ export function ProvidersTab() {
             <Snippet text={mcp.url} />
           </div>
           <div className="flex flex-col gap-1.5">
-            <SnippetLabel>Claude Desktop / claude.ai — custom connector</SnippetLabel>
+            <SnippetLabel>
+              Claude Desktop / claude.ai — custom connector
+            </SnippetLabel>
             <Snippet text={mcp.connectorUrl} />
             <p className="text-xs text-muted-foreground">
               Settings → Connectors → Add custom connector → paste this URL —
-              nothing else. {mcp.auth === "oauth" &&
+              nothing else.{" "}
+              {mcp.auth === "oauth" &&
                 "Claude discovers the OAuth setup on its own, opens a browser window to sign in with your Grapevine account, and you approve once. "}
               Connectors need the server reachable over HTTPS — run a tunnel
-              (e.g. <code className="font-mono">cloudflared tunnel --url http://localhost:8787</code>)
-              and set MCP_PUBLIC_URL in server/.env to the tunnel URL so this
+              (e.g.{" "}
+              <code className="font-mono">
+                cloudflared tunnel --url http://localhost:8787
+              </code>
+              ) and set MCP_PUBLIC_URL in server/.env to the tunnel URL so this
               snippet updates.
             </p>
           </div>
           <div className="flex flex-col gap-1.5">
             <SnippetLabel>Claude Code — one command</SnippetLabel>
-            <Snippet text={`claude mcp add --transport http grapevine ${mcp.url}`} />
+            <Snippet
+              text={`claude mcp add --transport http grapevine ${mcp.url}`}
+            />
             {mcp.auth === "oauth" && (
               <p className="text-xs text-muted-foreground">
                 First use triggers the same browser sign-in; run{" "}
@@ -325,7 +349,11 @@ function CopyButton({ text }: { text: string }) {
           .catch(() => toast.error("Couldn't copy"))
       }}
     >
-      {copied ? <CheckIcon className="size-3.5 text-live" /> : <CopyIcon className="size-3.5" />}
+      {copied ? (
+        <CheckIcon className="size-3.5 text-live" />
+      ) : (
+        <CopyIcon className="size-3.5" />
+      )}
     </Button>
   )
 }

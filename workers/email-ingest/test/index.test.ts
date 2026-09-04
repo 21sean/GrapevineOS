@@ -107,13 +107,12 @@ function makeDrainEnv(contents: Record<string, string>, overrides: Partial<Env> 
 async function runScheduled(env: Env, ctx?: unknown) {
   const c = (ctx ?? makeCtx().ctx) as { waitUntil: (p: Promise<unknown>) => void };
   const waited: Promise<unknown>[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   worker.scheduled!({} as any, env, {
     waitUntil: (p: Promise<unknown>) => {
       waited.push(p);
       c.waitUntil(p);
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
   await Promise.all(waited);
 }
@@ -144,7 +143,6 @@ function insertedRow(calls: { init: RequestInit }[], index = 0) {
 }
 
 async function runEmail(message: unknown, env: Env, ctx?: unknown) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return worker.email(message as any, env, (ctx ?? makeCtx().ctx) as any);
 }
 
@@ -426,10 +424,7 @@ describe("email() failure handling", () => {
   });
 
   it("recovers when the retry succeeds — no dead letter", async () => {
-    const { fn } = mockFetch(
-      new Error("network down"),
-      new Response(null, { status: 201 }),
-    );
+    const { fn } = mockFetch(new Error("network down"), new Response(null, { status: 201 }));
     const { env, kvPut } = makeEnv();
 
     await runEmail(makeMessage(), env);

@@ -12,10 +12,16 @@ import {
   selectTour,
   selectVisible,
 } from "@/lib/derived"
-import { BOOKED_COLOR, CATEGORY_META, type Category, type CityEvent } from "@/lib/types"
+import {
+  BOOKED_COLOR,
+  CATEGORY_META,
+  type Category,
+  type CityEvent,
+} from "@/lib/types"
 import { BASEMAP_LAYERS } from "@/lib/mapLayers"
 
-const MAPBOX_TOKEN = (import.meta.env.VITE_MAPBOX_TOKEN as string | undefined) ?? ""
+const MAPBOX_TOKEN =
+  (import.meta.env.VITE_MAPBOX_TOKEN as string | undefined) ?? ""
 mapboxgl.accessToken = MAPBOX_TOKEN
 
 const TRAFFIC_SOURCE = "gv-traffic"
@@ -59,14 +65,28 @@ function addTrafficLayer(map: mapboxgl.Map) {
     slot: "middle",
     layout: { "line-join": "round" },
     paint: {
-      "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 14, 2.5, 18, 5],
+      "line-width": [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        10,
+        1,
+        14,
+        2.5,
+        18,
+        5,
+      ],
       "line-color": [
         "match",
         ["get", "congestion"],
-        "low", "#3fae6a",
-        "moderate", "#e3b74f",
-        "heavy", "#e2683f",
-        "severe", "#c43a4b",
+        "low",
+        "#3fae6a",
+        "moderate",
+        "#e3b74f",
+        "heavy",
+        "#e2683f",
+        "severe",
+        "#c43a4b",
         "#3fae6a",
       ],
       "line-opacity": 0.8,
@@ -79,9 +99,9 @@ const ICON_SVG = Object.fromEntries(
   (Object.keys(CATEGORY_META) as Category[]).map((c) => [
     c,
     renderToStaticMarkup(
-      createElement(CATEGORY_META[c].icon, { size: 13, strokeWidth: 2.5 }),
+      createElement(CATEGORY_META[c].icon, { size: 13, strokeWidth: 2.5 })
     ),
-  ]),
+  ])
 ) as Record<Category, string>
 
 // Events within ~10 m of each other share one marker (a "stack") — separate
@@ -151,7 +171,7 @@ function LiveMap() {
 
   const agentIds = useMemo(
     () => new Set(agentHighlight?.ids ?? []),
-    [agentHighlight],
+    [agentHighlight]
   )
 
   // The search box narrows the map too: ids that survive the query, or null
@@ -162,7 +182,7 @@ function LiveMap() {
   const searched = useGrapevine(selectSearched)
   const searchIds = useMemo(
     () => (searchQuery.trim() ? new Set(searched.map((e) => e.id)) : null),
-    [searched, searchQuery],
+    [searched, searchQuery]
   )
 
   // A marker looks "selected" only while its detail sheet is open. Keeping
@@ -196,7 +216,10 @@ function LiveMap() {
       bearing: -12,
       attributionControl: false,
     })
-    map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "bottom-right")
+    map.addControl(
+      new mapboxgl.NavigationControl({ visualizePitch: true }),
+      "bottom-right"
+    )
 
     // originalEvent is only set for user gestures, not programmatic moves
     map.on("movestart", (e) => {
@@ -236,7 +259,11 @@ function LiveMap() {
       // config. (The [mapLayers] effect below is a no-op until this runs.)
       const st = useGrapevine.getState()
       for (const l of BASEMAP_LAYERS) {
-        map.setConfigProperty("basemap", l.config, st.mapLayers[l.key] !== false)
+        map.setConfigProperty(
+          "basemap",
+          l.config,
+          st.mapLayers[l.key] !== false
+        )
       }
       // trafficOn is persisted; restore it once the style can take layers
       if (st.trafficOn) addTrafficLayer(map)
@@ -275,17 +302,29 @@ function LiveMap() {
   // --- camera focus (also drives which face a stack shows during the tour) ---
   const focus: CityEvent | undefined = carouselOn
     ? tour[tour.length ? carouselIdx % tour.length : 0]
-    : visible.find((e) => e.id === selectedId) ??
-      events.find((e) => e.id === selectedId)
+    : (visible.find((e) => e.id === selectedId) ??
+      events.find((e) => e.id === selectedId))
   const focusId = focus?.id
   const focusSeq = carouselOn ? carouselIdx : -1
 
   // Latest decorate inputs for the stack pager handlers, which live in plain
   // DOM listeners outside React's render cycle. Synced in an effect (not
   // during render); listeners only fire after effects have run.
-  const decorCtxRef = useRef({ liveIds, activeId, agentIds, searchIds, bookedLines })
+  const decorCtxRef = useRef({
+    liveIds,
+    activeId,
+    agentIds,
+    searchIds,
+    bookedLines,
+  })
   useEffect(() => {
-    decorCtxRef.current = { liveIds, activeId, agentIds, searchIds, bookedLines }
+    decorCtxRef.current = {
+      liveIds,
+      activeId,
+      agentIds,
+      searchIds,
+      bookedLines,
+    }
   }, [liveIds, activeId, agentIds, searchIds, bookedLines])
   // Snap a stack's face to the selected/toured/highlighted event only when
   // that target changes — never on unrelated re-runs, so a face the user
@@ -386,7 +425,10 @@ function LiveMap() {
           numEl,
           events: group,
           // a stack born holding a booked event leads with the user's plans
-          idx: Math.max(0, group.findIndex((e) => bookedLines.has(e.id))),
+          idx: Math.max(
+            0,
+            group.findIndex((e) => bookedLines.has(e.id))
+          ),
         }
 
         const cycle = (dir: number) => {
@@ -394,7 +436,14 @@ function LiveMap() {
           if (n < 2) return
           created.idx = (created.idx + dir + n) % n
           const ctx = decorCtxRef.current
-          decorateStack(created, ctx.liveIds, ctx.activeId, ctx.agentIds, ctx.searchIds, ctx.bookedLines)
+          decorateStack(
+            created,
+            ctx.liveIds,
+            ctx.activeId,
+            ctx.agentIds,
+            ctx.searchIds,
+            ctx.bookedLines
+          )
           // Sheet open means the user is inspecting this venue — retarget it.
           // Sheet closed, paging is a silent preview: no camera move, no popup.
           const st = useGrapevine.getState()
@@ -566,7 +615,7 @@ function decorateStack(
   selectedId: string | null,
   agentIds?: Set<string>,
   searchIds?: ReadonlySet<string> | null,
-  bookedLines?: ReadonlyMap<string, string>,
+  bookedLines?: ReadonlyMap<string, string>
 ) {
   const e = stack.events[stack.idx]
   if (!e) return
@@ -597,7 +646,10 @@ function decorateStack(
   // booked: venue on top, "event at time" beneath; otherwise just the title
   setText(stack.labelMainEl, bookedLine ? e.venue : e.title)
   setText(stack.labelSubEl, bookedLine ?? "")
-  setText(stack.countEl, stack.events.length > 1 ? String(stack.events.length) : "")
+  setText(
+    stack.countEl,
+    stack.events.length > 1 ? String(stack.events.length) : ""
+  )
   setText(stack.numEl, `${stack.idx + 1}/${stack.events.length}`)
 }
 
@@ -611,11 +663,13 @@ export function EventMap() {
     return (
       <div className="flex h-full w-full items-center justify-center bg-background p-8 text-center">
         <div className="max-w-md space-y-2">
-          <p className="font-heading text-lg font-semibold">The map needs a Mapbox token</p>
+          <p className="font-heading text-lg font-semibold">
+            The map needs a Mapbox token
+          </p>
           <p className="text-sm text-muted-foreground">
             Set <span className="font-mono">VITE_MAPBOX_TOKEN</span> in{" "}
-            <span className="font-mono">web/.env.local</span> (a public token scoped to styles and
-            tiles) and reload. See web/.env.example.
+            <span className="font-mono">web/.env.local</span> (a public token
+            scoped to styles and tiles) and reload. See web/.env.example.
           </p>
         </div>
       </div>

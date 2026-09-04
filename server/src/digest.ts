@@ -97,7 +97,10 @@ export async function weekPicks(
     loves: interests.loves ?? [],
     avoids: interests.avoids ?? [],
     reactions: new Map(reactions.map((r) => [r.eventId, r.reaction])),
-    tagAffinity: tagAffinity(byId, reactions.map((r) => [r.eventId, r.reaction] as const)),
+    tagAffinity: tagAffinity(
+      byId,
+      reactions.map((r) => [r.eventId, r.reaction] as const),
+    ),
   };
 
   const muted = mutedSets(user);

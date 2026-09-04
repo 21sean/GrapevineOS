@@ -109,10 +109,12 @@ export function EventDialog({
   const [location, setLocation] = useState(draft?.location ?? "")
   const [allDay, setAllDay] = useState(draft?.allDay ?? false)
   const [color, setColor] = useState<Etiquette>(
-    draft ? asEtiquette(draft.color) : "sky",
+    draft ? asEtiquette(draft.color) : "sky"
   )
   const [startDay, setStartDay] = useState<Date>(() =>
-    draft ? startOfDay(parseGcal(draft.start)) : startOfDay(defaultDay ?? new Date()),
+    draft
+      ? startOfDay(parseGcal(draft.start))
+      : startOfDay(defaultDay ?? new Date())
   )
   const [endDay, setEndDay] = useState<Date>(() => {
     if (!draft) return startOfDay(defaultDay ?? new Date())
@@ -121,13 +123,17 @@ export function EventDialog({
     return startOfDay(draft.allDay ? addDays(end, -1) : end)
   })
   const [startTime, setStartTime] = useState(() =>
-    draft && !draft.allDay ? hhmm(parseGcal(draft.start)) : nextQuarter(new Date()),
+    draft && !draft.allDay
+      ? hhmm(parseGcal(draft.start))
+      : nextQuarter(new Date())
   )
   const [endTime, setEndTime] = useState(() => {
     if (draft && !draft.allDay) return hhmm(parseGcal(draft.end))
     const t = nextQuarter(new Date())
     const [h, m] = t.split(":").map(Number)
-    return h >= 23 ? "23:45" : `${String(h + 1).padStart(2, "0")}:${String(m).padStart(2, "0")}`
+    return h >= 23
+      ? "23:45"
+      : `${String(h + 1).padStart(2, "0")}:${String(m).padStart(2, "0")}`
   })
   const [busy, setBusy] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -196,7 +202,9 @@ export function EventDialog({
             {draft ? "Edit Event" : "New Event"}
           </DialogTitle>
           <DialogDescription className="sr-only">
-            {draft ? "Edit this Google Calendar event" : "Create a Google Calendar event"}
+            {draft
+              ? "Edit this Google Calendar event"
+              : "Create a Google Calendar event"}
           </DialogDescription>
         </DialogHeader>
 
@@ -239,7 +247,11 @@ export function EventDialog({
             {!allDay && (
               <Field>
                 <FieldLabel>Start Time</FieldLabel>
-                <TimeSelect value={startTime} onChange={setStartTime} disabled={readOnly} />
+                <TimeSelect
+                  value={startTime}
+                  onChange={setStartTime}
+                  disabled={readOnly}
+                />
               </Field>
             )}
           </div>
@@ -247,12 +259,20 @@ export function EventDialog({
           <div className="grid grid-cols-[1fr_auto] gap-3">
             <Field data-invalid={invalid || undefined}>
               <FieldLabel>End Date</FieldLabel>
-              <DayPickerField value={endDay} onChange={setEndDay} disabled={readOnly} />
+              <DayPickerField
+                value={endDay}
+                onChange={setEndDay}
+                disabled={readOnly}
+              />
             </Field>
             {!allDay && (
               <Field data-invalid={invalid || undefined}>
                 <FieldLabel>End Time</FieldLabel>
-                <TimeSelect value={endTime} onChange={setEndTime} disabled={readOnly} />
+                <TimeSelect
+                  value={endTime}
+                  onChange={setEndTime}
+                  disabled={readOnly}
+                />
               </Field>
             )}
           </div>
@@ -297,11 +317,16 @@ export function EventDialog({
                   onClick={() => setColor(c)}
                   className={cn(
                     "flex size-7 items-center justify-center rounded-full border-2 transition-transform hover:scale-110 disabled:pointer-events-none",
-                    ETIQUETTE_META[c].swatch,
+                    ETIQUETTE_META[c].swatch
                   )}
                 >
                   {color === c && (
-                    <span className={cn("size-3 rounded-full", ETIQUETTE_META[c].dot)} />
+                    <span
+                      className={cn(
+                        "size-3 rounded-full",
+                        ETIQUETTE_META[c].dot
+                      )}
+                    />
                   )}
                 </button>
               ))}
@@ -310,7 +335,8 @@ export function EventDialog({
 
           {draft?.grapevineEventId && (
             <FieldDescription>
-              Saved from Grapevine — removing it here also un-saves it on the map.
+              Saved from Grapevine — removing it here also un-saves it on the
+              map.
             </FieldDescription>
           )}
           {readOnly && (
@@ -380,7 +406,10 @@ function DayPickerField({
           className="justify-between font-normal"
         >
           {fmtDay.format(value)}
-          <CalendarIcon data-icon="inline-end" className="text-muted-foreground" />
+          <CalendarIcon
+            data-icon="inline-end"
+            className="text-muted-foreground"
+          />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">

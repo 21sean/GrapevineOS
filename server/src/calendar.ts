@@ -151,7 +151,10 @@ function readPatch(body: unknown): GcalEventPatch {
   const attendees = Array.isArray(b.attendees)
     ? (b.attendees as unknown[])
         .map((a) => a as Record<string, unknown>)
-        .filter((a) => typeof a.email === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.email as string))
+        .filter(
+          (a) =>
+            typeof a.email === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.email as string),
+        )
         .slice(0, 100)
         .map((a) => ({
           email: (a.email as string).trim(),
@@ -230,13 +233,7 @@ calendar.patch("/api/calendar/google/events/:gid", async (req, res) => {
   const notify = patch.attendees !== undefined || patch.guestsCanModify !== undefined;
   try {
     res.json(
-      await patchGoogleEvent(
-        user,
-        req.params.gid,
-        patch,
-        (await store.settings()).tz,
-        notify,
-      ),
+      await patchGoogleEvent(user, req.params.gid, patch, (await store.settings()).tz, notify),
     );
   } catch (err) {
     res.status(502).json({ error: String(err).slice(0, 200) });
@@ -340,7 +337,11 @@ calendar.get("/api/calendar/feed/:token", async (req, res) => {
 calendar.get("/api/events/:id/ics", async (req, res) => {
   const event = await store.eventById(req.params.id);
   if (!event) return res.status(404).json({ error: "unknown event" });
-  const slug = event.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40) || "event";
+  const slug =
+    event.title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .slice(0, 40) || "event";
   const { tz } = await store.settings();
   res.setHeader("Content-Type", "text/calendar; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="${slug}.ics"`);

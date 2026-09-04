@@ -63,7 +63,8 @@ export async function sweepOnce(): Promise<string> {
   sweeping = true;
   try {
     const messages = await store.adminChatMessages(candidate.id);
-    if (!messages?.some((m) => m.role === "assistant")) return `skip: ${candidate.id} has no replies`;
+    if (!messages?.some((m) => m.role === "assistant"))
+      return `skip: ${candidate.id} has no replies`;
     const judged = await evaluateConversation(messages);
     const saved = await store.recordConversationEval(candidate.id, judged);
     void recordConversationScores(saved);

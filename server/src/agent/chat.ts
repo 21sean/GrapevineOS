@@ -109,9 +109,7 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
 
     /** Persist the finished exchange for signed-in users (fire-and-forget). */
     const providerLabel =
-      settings.chatProvider === "ollama"
-        ? settings.model || "ollama"
-        : settings.chatProvider;
+      settings.chatProvider === "ollama" ? settings.model || "ollama" : settings.chatProvider;
     const persist = (assistantText: string) => {
       if (!user || !assistantText.trim()) return;
       store
@@ -133,9 +131,7 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
     // the model is local Ollama or a subscription CLI (cli-model.ts). What
     // differs per provider is only the pre-flight below.
     const provider =
-      settings.chatProvider && settings.chatProvider !== "ollama"
-        ? settings.chatProvider
-        : null;
+      settings.chatProvider && settings.chatProvider !== "ollama" ? settings.chatProvider : null;
 
     let baseUrl = "http://localhost:11434";
     let toolsOk = false;
@@ -244,7 +240,12 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
         signal: AbortSignal.any([ac.signal, AbortSignal.timeout(CHAT_DEADLINE_MS)]),
         recursionLimit: 50,
         runName: "ask-grapevine",
-        metadata: { thread_id: threadId, model: providerLabel, tools: toolsOk, request_id: requestId },
+        metadata: {
+          thread_id: threadId,
+          model: providerLabel,
+          tools: toolsOk,
+          request_id: requestId,
+        },
         ...(lf && { callbacks: [lf] }),
       },
     );
@@ -261,6 +262,13 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
       if (frame.type === "delta") answer += frame.text;
       if (frame.type === "replace") answer = frame.text;
       send(frame);
+    }
+    // The client hung up, or the server is stopping, mid-answer: nothing to
+    // persist and nobody to answer. A stream that ended cleanly on an abort
+    // would otherwise record a half reply as the whole one.
+    if (ac.signal.aborted) {
+      res.end();
+      return;
     }
     if (!railBlocked) persist(answer);
     done();

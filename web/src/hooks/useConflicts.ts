@@ -30,7 +30,7 @@ export function useConflicts(
   event: CityEvent | null | undefined,
   enabled: boolean,
   now: Date,
-  tz: string,
+  tz: string
 ): Conflicts | null {
   const events = useGrapevine((s) => s.events)
   const calendar = useGrapevine((s) => s.calendar)
@@ -83,7 +83,10 @@ export function useConflicts(
   // Google copies of Grapevine saves carry grapevineEventId — those are
   // either this event itself or already counted in `saved` above.
   const googleBusy = (google ?? []).filter(
-    (g) => !g.allDay && !g.grapevineEventId && overlaps(g.start, g.end, occ.start, occ.end),
+    (g) =>
+      !g.allDay &&
+      !g.grapevineEventId &&
+      overlaps(g.start, g.end, occ.start, occ.end)
   )
 
   if (!saved.length && !googleBusy.length) return null

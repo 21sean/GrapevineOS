@@ -28,7 +28,13 @@ const DAY_MS = 86_400_000;
 const MAX_STEPS = 3000; // safety cap on occurrence expansion
 
 const DAY_INDEX: Record<string, number> = {
-  SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6,
+  SU: 0,
+  MO: 1,
+  TU: 2,
+  WE: 3,
+  TH: 4,
+  FR: 5,
+  SA: 6,
 };
 const WD_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -41,7 +47,9 @@ const WD_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
  */
 export function normalizeRRule(input: string | null | undefined): string | null {
   if (!input) return null;
-  const body = String(input).trim().replace(/^RRULE:/i, "");
+  const body = String(input)
+    .trim()
+    .replace(/^RRULE:/i, "");
   if (!body) return null;
 
   const parts = new Map<string, string>();
@@ -49,7 +57,10 @@ export function normalizeRRule(input: string | null | undefined): string | null 
     const eq = chunk.indexOf("=");
     if (eq < 0) continue;
     const key = chunk.slice(0, eq).trim().toUpperCase();
-    const value = chunk.slice(eq + 1).trim().toUpperCase();
+    const value = chunk
+      .slice(eq + 1)
+      .trim()
+      .toUpperCase();
     if (key && value) parts.set(key, value);
   }
 
@@ -126,7 +137,10 @@ function parseRRuleFresh(input: string): ParsedRRule | null {
     if (eq < 0) continue;
     parts.set(
       chunk.slice(0, eq).trim().toUpperCase(),
-      chunk.slice(eq + 1).trim().toUpperCase(),
+      chunk
+        .slice(eq + 1)
+        .trim()
+        .toUpperCase(),
     );
   }
 
@@ -209,8 +223,12 @@ function wallInTz(ms: number, tz?: string): WallParts {
   const dt = new Date(ms);
   if (!tz) {
     return {
-      y: dt.getFullYear(), mo: dt.getMonth() + 1, d: dt.getDate(),
-      hh: dt.getHours(), mi: dt.getMinutes(), ss: dt.getSeconds(),
+      y: dt.getFullYear(),
+      mo: dt.getMonth() + 1,
+      d: dt.getDate(),
+      hh: dt.getHours(),
+      mi: dt.getMinutes(),
+      ss: dt.getSeconds(),
     };
   }
   const parts = wallFmt(tz).formatToParts(dt);
@@ -218,8 +236,12 @@ function wallInTz(ms: number, tz?: string): WallParts {
     Number(parts.find((p) => p.type === t)?.value ?? 0);
   const hh = get("hour");
   return {
-    y: get("year"), mo: get("month"), d: get("day"),
-    hh: hh === 24 ? 0 : hh, mi: get("minute"), ss: get("second"),
+    y: get("year"),
+    mo: get("month"),
+    d: get("day"),
+    hh: hh === 24 ? 0 : hh,
+    mi: get("minute"),
+    ss: get("second"),
   };
 }
 
@@ -275,8 +297,7 @@ function* occurrenceStarts(
 
   let emitted = 0;
   let steps = 0;
-  const done = () =>
-    (rule.count != null && emitted >= rule.count) || steps >= MAX_STEPS;
+  const done = () => (rule.count != null && emitted >= rule.count) || steps >= MAX_STEPS;
 
   // The anchor instant itself, exactly as stored.
   if (done()) return;
@@ -322,8 +343,7 @@ function* occurrenceStarts(
   // day); months without that day are skipped per RFC 5545 — never rolled
   // into the next month.
   const monthStep = rule.freq === "YEARLY" ? 12 * rule.interval : rule.interval;
-  const days =
-    rule.freq === "MONTHLY" && rule.bymonthday.length ? rule.bymonthday : [aw.d];
+  const days = rule.freq === "MONTHLY" && rule.bymonthday.length ? rule.bymonthday : [aw.d];
   const anchorMonth = aw.y * 12 + (aw.mo - 1);
   for (let p = 0; !done(); p++) {
     const total = anchorMonth + p * monthStep;

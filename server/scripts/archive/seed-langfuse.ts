@@ -39,12 +39,7 @@ import { defaultResource, resourceFromAttributes } from "@opentelemetry/resource
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import { writeFileSync } from "node:fs";
 import { db } from "../../src/db.js";
-import {
-  BENIGN,
-  INDIRECT,
-  INJECTIONS,
-  LEAKS,
-} from "../../src/evals/suites/guardrails.js";
+import { BENIGN, INDIRECT, INJECTIONS, LEAKS } from "../../src/evals/suites/guardrails.js";
 import { CLEAN_REPLIES, SUBTLE_LEAKS } from "../../src/evals/suites/guardrails-judge.js";
 import { judgeModelName } from "../../src/evals/judge.js";
 import { ollamaBase } from "../../src/ollama.js";
@@ -79,7 +74,8 @@ const NUMERIC_CONFIGS: { name: string; description: string }[] = [
   },
   {
     name: "conversation.helpfulness",
-    description: "Did the concierge's replies answer what was asked, concretely, respecting stated constraints.",
+    description:
+      "Did the concierge's replies answer what was asked, concretely, respecting stated constraints.",
   },
   {
     name: "conversation.groundedness",
@@ -87,15 +83,18 @@ const NUMERIC_CONFIGS: { name: string; description: string }[] = [
   },
   {
     name: "conversation.persona",
-    description: "The concierge stayed entirely in character — no model talk, no instruction disclosure.",
+    description:
+      "The concierge stayed entirely in character — no model talk, no instruction disclosure.",
   },
   {
     name: "rail.input",
-    description: "Llama Prompt Guard 2 MALICIOUS probability for the user's message (block threshold lives in guardrail settings).",
+    description:
+      "Llama Prompt Guard 2 MALICIOUS probability for the user's message (block threshold lives in guardrail settings).",
   },
   {
     name: "rail.content",
-    description: "Prompt Guard MALICIOUS probability for fetched web text (indirect-injection rail).",
+    description:
+      "Prompt Guard MALICIOUS probability for fetched web text (indirect-injection rail).",
   },
 ];
 
@@ -225,7 +224,8 @@ async function ensurePrompts(): Promise<void> {
     type: "chat",
     prompt: [{ role: "system", content: CONCIERGE_SYSTEM }],
     labels: ["production"],
-    commitMessage: "Verbatim from server/src/agent/context.ts buildSystemPrompt; per-request values as variables.",
+    commitMessage:
+      "Verbatim from server/src/agent/context.ts buildSystemPrompt; per-request values as variables.",
   });
   await lf.prompt.create({
     name: "thread-recall-summarizer",
@@ -415,7 +415,9 @@ async function backfillScores(): Promise<void> {
     });
   }
   await lf.score.flush();
-  console.log(`mirrored ${evals.length} eval verdicts and ${scans.length} rail decisions as session scores`);
+  console.log(
+    `mirrored ${evals.length} eval verdicts and ${scans.length} rail decisions as session scores`,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -556,7 +558,8 @@ async function runPersonaExperiment(): Promise<void> {
         name: "accuracy",
         value:
           itemResults.reduce(
-            (acc, r) => acc + Number(r.evaluations.find((e) => e.name === "verdict-accuracy")?.value ?? 0),
+            (acc, r) =>
+              acc + Number(r.evaluations.find((e) => e.name === "verdict-accuracy")?.value ?? 0),
             0,
           ) / Math.max(itemResults.length, 1),
       }),
@@ -592,4 +595,6 @@ writeFileSync(
 
 await lf.flush();
 await sdk.shutdown();
-console.log("done — open Langfuse at " + (process.env.LANGFUSE_BASE_URL ?? "http://localhost:3000"));
+console.log(
+  "done — open Langfuse at " + (process.env.LANGFUSE_BASE_URL ?? "http://localhost:3000"),
+);

@@ -1,7 +1,7 @@
 # Grapevine architecture: diagram redraw brief
 
 This document captures everything about the AI, agent, web-discovery, MCP, and
-integration layers that changed *after* the current `docs/*.png` diagrams were
+integration layers that changed _after_ the current `docs/*.png` diagrams were
 drawn, so the five existing figures can be brought current and two new ones
 added. It is a spec for whoever redraws them, not prose to reproduce verbatim:
 each section gives the exact node labels, code tags, arrow labels, and callouts
@@ -17,20 +17,20 @@ listed in the Appendix). Where this doc and the code disagree, the code wins.
 
 The diagrams were last authored across these commits:
 
-| Diagram | Last drawn at | State |
-|---|---|---|
-| `email-worker.png` | `d5939b0` | still accurate |
-| `interest-learning.png` | `d5939b0` / `b877f73` | still accurate |
-| `guardrails.png` | `b877f73` | **minor update** |
-| `how-it-works.png` | `2d9883f` | **major redraw** |
-| `ask-grapevine.png` | `df55614` (PR #7, LangGraph 1.4) | **partial update** |
+| Diagram                 | Last drawn at                    | State              |
+| ----------------------- | -------------------------------- | ------------------ |
+| `email-worker.png`      | `d5939b0`                        | still accurate     |
+| `interest-learning.png` | `d5939b0` / `b877f73`            | still accurate     |
+| `guardrails.png`        | `b877f73`                        | **minor update**   |
+| `how-it-works.png`      | `2d9883f`                        | **major redraw**   |
+| `ask-grapevine.png`     | `df55614` (PR #7, LangGraph 1.4) | **partial update** |
 
 Everything below landed on `main` **after** those commits:
 
-| PR | Title | Architectural impact |
-|---|---|---|
-| **#9** `bddf168` | CLI LLM providers for extraction + Copilot, and leave-by alerts | The "brain" is no longer only local Ollama. Chat **and** newsletter extraction can each be routed independently to a subscription-authed CLI: **Claude Code, OpenAI Codex, Gemini CLI, or GitHub Copilot CLI**. No API keys. Claude Code loops back into Grapevine's own MCP endpoint to keep tools. Also: traffic-aware "Leave by 6:38" push alerts. |
-| **#10** `bc2b76b` | Date quick filters, sharing, search-aware map, empty-state reset | UX only. **No diagram impact.** |
+| PR                | Title                                                                  | Architectural impact                                                                                                                                                                                                                                                                                                                                                                   |
+| ----------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **#9** `bddf168`  | CLI LLM providers for extraction + Copilot, and leave-by alerts        | The "brain" is no longer only local Ollama. Chat **and** newsletter extraction can each be routed independently to a subscription-authed CLI: **Claude Code, OpenAI Codex, Gemini CLI, or GitHub Copilot CLI**. No API keys. Claude Code loops back into Grapevine's own MCP endpoint to keep tools. Also: traffic-aware "Leave by 6:38" push alerts.                                  |
+| **#10** `bc2b76b` | Date quick filters, sharing, search-aware map, empty-state reset       | UX only. **No diagram impact.**                                                                                                                                                                                                                                                                                                                                                        |
 | **#11** `b7ffb7c` | Verified web discovery, scheduled searches, Claude Desktop MCP support | A whole new **second data source**: search the open web, read pages, extract, then **verify** (deterministic gates plus a skeptical second LLM pass) before commit. Runs one-off or on a saved schedule. New **MCP tools** (`discover_events`, `schedule_search`, and friends) and **Claude Desktop / claude.ai custom connector** support (`?key=` URL auth, CORS, `MCP_PUBLIC_URL`). |
 
 Net effect for the diagrams:
@@ -60,24 +60,25 @@ callout stack.
 
 **Palette** (approximate, sample the existing PNGs to match exactly):
 
-| Role | Value | Used for |
-|---|---|---|
-| Canvas | warm cream `#F7F3EA` | background |
-| Ink | near-black `#1B1A17` | titles, body |
-| Muted ink | `#6E6A62` | subtitles, secondary text, arrow labels |
-| **Wine (primary accent)** | `#7B1E3C` | eyebrow label, active chip fill, step numbers (`01 · INTAKE`), loop arrows, footer left-rule |
-| Wine tint | `#F1E1E6` | active-chip / highlighted-card fill (e.g. "Personal score") |
-| Supabase green | `#3FCF8E` | the store node / Postgres icon |
-| Success green | `#2FA36B` | terminal dots (You, Browser, Local server) |
-| Alert clay | `#C0492F` on tint `#F6E2DB` | failure/blocked cards plus arrows (Blocked, Dead letter, Reply replaced) |
-| Card | `#FFFFFF`, radius ~18px, hairline border `#E7E1D6`, soft shadow | every step card |
-| Code tag | bg `#EFEAE0`, mono ink `#4A463E` | the monospace chip at a card's foot |
+| Role                      | Value                                                           | Used for                                                                                     |
+| ------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Canvas                    | warm cream `#F7F3EA`                                            | background                                                                                   |
+| Ink                       | near-black `#1B1A17`                                            | titles, body                                                                                 |
+| Muted ink                 | `#6E6A62`                                                       | subtitles, secondary text, arrow labels                                                      |
+| **Wine (primary accent)** | `#7B1E3C`                                                       | eyebrow label, active chip fill, step numbers (`01 · INTAKE`), loop arrows, footer left-rule |
+| Wine tint                 | `#F1E1E6`                                                       | active-chip / highlighted-card fill (e.g. "Personal score")                                  |
+| Supabase green            | `#3FCF8E`                                                       | the store node / Postgres icon                                                               |
+| Success green             | `#2FA36B`                                                       | terminal dots (You, Browser, Local server)                                                   |
+| Alert clay                | `#C0492F` on tint `#F6E2DB`                                     | failure/blocked cards plus arrows (Blocked, Dead letter, Reply replaced)                     |
+| Card                      | `#FFFFFF`, radius ~18px, hairline border `#E7E1D6`, soft shadow | every step card                                                                              |
+| Code tag                  | bg `#EFEAE0`, mono ink `#4A463E`                                | the monospace chip at a card's foot                                                          |
 
 **Type.** Heading in a heavy geometric grotesk; body in its regular weight;
 **monospace** for code tags and arrow labels that name identifiers. Eyebrow is
 letter-spaced wine caps in the form `SECTION NAME · GRAPEVINE`.
 
 **Grammar** (consistent across all five):
+
 - Eyebrow → big bold title → one- or two-line muted subtitle → a row of chips
   (first chip wine-filled, rest outlined) → a thin divider → the flow.
 - Flow = rounded **step cards**, each with a wine `NN · LABEL` eyebrow, bold
@@ -97,13 +98,13 @@ letter-spaced wine caps in the form `SECTION NAME · GRAPEVINE`.
 
 ### 3.1 `how-it-works.png` (major redraw)
 
-*Current:* a clean 4-step line. `Newsletters →` **01 INTAKE** (Newsletters by
+_Current:_ a clean 4-step line. `Newsletters →` **01 INTAKE** (Newsletters by
 email) → **02 STORE** (One Postgres, deny-all) → **03 ENRICH** (The local
 brain, Ollama) → **04 SERVE** (A live 3D map) `→ You`. Chips: Cloudflare Email
 Routing · Supabase Postgres · Ollama · local model · Mapbox GL · no paid APIs.
 Footer: "Free, end to end … Nothing leaves your machine by default."
 
-*Why it's stale:* it shows one intake path and hard-codes Ollama as the brain.
+_Why it's stale:_ it shows one intake path and hard-codes Ollama as the brain.
 Both are now more general.
 
 **Redraw guidance, two intake lanes into a shared brain:**
@@ -111,7 +112,7 @@ Both are now more general.
 - Keep the spine, but **fork the intake** into two lanes that merge at STORE /
   ENRICH:
   - **Lane A, Newsletters** (unchanged): `Newsletters → email worker →
-    Postgres`. Tag `workers/email-ingest`.
+Postgres`. Tag `workers/email-ingest`.
   - **Lane B, Web discovery** (new): `Web search → verify → Postgres`. Tag
     `server/src/discovery.ts`. One line: "AI web search, gated by a
     verification pass." (Full detail lives in the new discovery figure, §4.1;
@@ -134,7 +135,7 @@ Both are now more general.
 
 ### 3.2 `ask-grapevine.png` (partial update)
 
-*Current (already redrawn for LangGraph 1.4):* AGENT NODE (ChatOllama, tools
+_Current (already redrawn for LangGraph 1.4):_ AGENT NODE (ChatOllama, tools
 bound, system prompt rebuilt each turn) ⇄ TOOLS NODE (Data tools:
 `search_events · get_event · get_eta · search_web · read_page`; UI tools:
 `show_on_map · propose_calendar · update_interests`), with GRAPH STATE
@@ -153,14 +154,14 @@ bound, system prompt rebuilt each turn) ⇄ TOOLS NODE (Data tools:
    model chip to **"engine: Ollama (default) · or CLI provider"** and keep the
    agent-node body describing the Ollama/LangGraph path (the tool-using one).
 2. **The UI-tools list is incomplete.** The real set is `show_on_map ·
-   set_filters · propose_calendar · save_calendar · set_rarity ·
-   update_interests`. Data tools list is correct as drawn.
+set_filters · propose_calendar · save_calendar · set_rarity ·
+update_interests`. Data tools list is correct as drawn.
 3. **Add a small branch for CLI-provider chat** (from PR #9): either a sidebar
    card or a second mini-lane, since it bypasses the graph:
    - **CLI provider path:** one-shot per turn, **no LangGraph, no UI tools**,
      digest-grounded, in-memory transcript (no checkpointer). Tag
      `providers.ts` · `MAX_EXCHANGES = 8`.
-   - **Claude Code is special:** it connects *back* to Grapevine's own `/mcp`
+   - **Claude Code is special:** it connects _back_ to Grapevine's own `/mcp`
      endpoint (`--mcp-config` → `--allowedTools mcp__grapevine`), regaining
      `search_events · get_event · get_eta · save/unsave_event`, but **still no
      live map pinning.** Codex / Gemini / Copilot stay digest-only.
@@ -173,7 +174,7 @@ bound, system prompt rebuilt each turn) ⇄ TOOLS NODE (Data tools:
 
 ### 3.3 `guardrails.png` (minor update)
 
-*Current:* INPUT RAIL (Prompt Guard 2, `malicious ≥ 0.80` → Blocked) → LANGGRAPH
+_Current:_ INPUT RAIL (Prompt Guard 2, `malicious ≥ 0.80` → Blocked) → LANGGRAPH
 AGENT (system prompt + agent + tools) → OUTPUT RAIL (Persona guard → Reply
 replaced on identity leak), with a CONTENT RAIL re-scanning fetched tool text.
 All fail-safe. This is still **structurally correct**, verified against
@@ -182,18 +183,18 @@ All fail-safe. This is still **structurally correct**, verified against
 **Updates:**
 
 - **The rails wrap both engines, not just the LangGraph agent.** In
-  `agent/index.ts` the input rail (`scanText`) runs *before* the engine branch,
+  `agent/index.ts` the input rail (`scanText`) runs _before_ the engine branch,
   and the output persona guard runs on the CLI answer too (`personaGuard({
-  modelName: provider })`). Redraw the center box as **"engine: LangGraph agent
+modelName: provider })`). Redraw the center box as **"engine: LangGraph agent
   (Ollama) · or CLI provider"** so the rails visibly bracket either engine.
 - **Scope the content rail precisely.** The content rail (same 86M classifier)
   guards the **in-app agent's** web tools only: `search_web` snippets and
-  `read_page` text in `agent/tools.ts`. **Web discovery does *not* use this
+  `read_page` text in `agent/tools.ts`. **Web discovery does _not_ use this
   rail**; it has its own separate verification gate (§4.1). If the figure could
   read as "all web text everywhere flows through Prompt Guard," add a one-line
   clarifier or leave discovery out of this figure entirely.
 - Numbers to keep: input `~15-90 ms`, content `~15 ms/window`, output `~0 ms ·
-  always on`, threshold `0.80`, model **Llama Prompt Guard 2 · 86M · ONNX /
+always on`, threshold `0.80`, model **Llama Prompt Guard 2 · 86M · ONNX /
   Transformers.js · CPU**. Input/content **fail open**; output **fails closed**
   (regex, always on even if the classifier is disabled). All correct.
 
@@ -202,7 +203,7 @@ All fail-safe. This is still **structurally correct**, verified against
 Verified against the pipeline; PR #11 did not touch email. Catch-all routing →
 PostalMime worker → one idempotent `raw_emails` row → local server polls;
 dead-letter to KV (`ttl 30d`) on insert failure; optional `INGEST_URL` push
-mode. **No redraw needed.** *Optional:* a small footnote that this is now **one
+mode. **No redraw needed.** _Optional:_ a small footnote that this is now **one
 of two intake paths** (the other being web discovery), if you want the set to
 cross-reference cleanly.
 
@@ -211,7 +212,8 @@ cross-reference cleanly.
 The feedback loop is unchanged: taste signals (interests + one-tap reactions) →
 open-vocabulary tag affinity → per-event personal score → ranked surfaces (map ·
 list · your week · push) → loops back. Weights/caps as drawn. **No redraw
-needed.** *Optional tweaks if convenient:*
+needed.** _Optional tweaks if convenient:_
+
 - The "Ask Grapevine · Ollama" chip could read **"Ask Grapevine · Ollama or
   CLI"** for consistency with the provider abstraction.
 - **External agents can now write interests too** (`update_interests` over MCP,
@@ -222,7 +224,7 @@ needed.** *Optional tweaks if convenient:*
 
 ## 4. New diagrams to add
 
-### 4.1 Web discovery: *"Search the web, but verify"* (highest priority)
+### 4.1 Web discovery: _"Search the web, but verify"_ (highest priority)
 
 The flagship new subsystem (PR #11), and completely undrawn. Source of truth:
 `server/src/discovery.ts`. The core guarantee: the model does **not** get to
@@ -257,6 +259,7 @@ page it came from.
      the whole catalog; logged to ingest history as kind `search`; images
      enriched. Tag `store.addEvents`. **Dry-run is the default** for
      external/MCP callers: verify and report, write nothing.
+
 - **Reject lane (clay, peeling down):** a "Rejected: reported with a reason,
   never written" card fed by both the deterministic gate and the LLM verifier
   (reasons like "title not found on the source page," "source page does not
@@ -274,7 +277,7 @@ page it came from.
   `source_url` and an `evidence` quote; the map only shows what a second,
   skeptical pass could still support."
 
-### 4.2 Agent interoperability: *"One core, three surfaces"* (high priority)
+### 4.2 Agent interoperability: _"One core, three surfaces"_ (high priority)
 
 The MCP, OpenClaw, and integrations story, also undrawn. This is where MCP,
 Claude Desktop connectors, and the OpenClaw skill belong. Source of truth:
@@ -287,7 +290,7 @@ Claude Desktop connectors, and the OpenClaw skill belong. Source of truth:
   drives the same tools."
 - **Center, the shared core:** one wine-tinted hub card **"Domain executors
   (`agent/context.ts`)"**: `searchEvents · getEvent · getEta · calendar ·
-  interests · rarity · runDiscovery`. Everything fans out from here.
+interests · rarity · runDiscovery`. Everything fans out from here.
 - **Three surface cards around it:**
   1. **In-app agent**: LangGraph tools (Zod-validated), the ⌘K chat. Consumer:
      the web client. Tag `agent/tools.ts`.
@@ -297,8 +300,8 @@ Claude Desktop connectors, and the OpenClaw skill belong. Source of truth:
      `/api/ext/v1`.
   3. **MCP server**: Streamable HTTP `POST /mcp`, **stateless**, 12 tools
      (`search_events · get_event · get_eta · list_saved_events · save_event ·
-     unsave_event · set_event_rarity · discover_events · list_scheduled_searches
-     · schedule_search · unschedule_search · update_interests`). Auth: **OAuth
+unsave_event · set_event_rarity · discover_events · list_scheduled_searches
+· schedule_search · unschedule_search · update_interests`). Auth: **OAuth
      2.1** with Supabase Auth as the authorization server. RFC 9728
      protected-resource metadata at `/.well-known/oauth-protected-resource`,
      401 + `WWW-Authenticate` challenge, PKCE code flow with dynamic client
@@ -322,7 +325,7 @@ Claude Desktop connectors, and the OpenClaw skill belong. Source of truth:
   else's." Optionally a second: "Dry-run by default: discovery over MCP/REST
   reports before it writes."
 
-### 4.3 Providers: *"Bring your own brain"* (optional; can fold into §3.1)
+### 4.3 Providers: _"Bring your own brain"_ (optional; can fold into §3.1)
 
 If you want a clean standalone for PR #9 rather than cramming it into
 `how-it-works`. Source of truth: `server/src/providers.ts`, `llm.ts`,
@@ -334,8 +337,8 @@ If you want a clean standalone for PR #9 rather than cramming it into
 - **Two role selectors** (`chatProvider`, `extractProvider`, both default
   `ollama`) each pointing at the same five engines:
   - **Ollama**: local, private default (chat = the full LangGraph agent).
-  - **Claude Code** (`claude -p`, Anthropic / claude.ai): *plus MCP loopback
-    for tools in chat.*
+  - **Claude Code** (`claude -p`, Anthropic / claude.ai): _plus MCP loopback
+    for tools in chat._
   - **Codex CLI** (`codex exec`, OpenAI / ChatGPT).
   - **Gemini CLI** (`gemini`, Google OAuth free tier).
   - **Copilot CLI** (`copilot -p`, GitHub Copilot).
@@ -351,16 +354,16 @@ If you want a clean standalone for PR #9 rather than cramming it into
 
 ## Appendix: source of truth
 
-| Concern | File(s) | Key facts for labels |
-|---|---|---|
-| Web discovery | `server/src/discovery.ts` | `MAX_RESULTS 8`, `MAX_PAGES 4`, `PAGE_CHARS 12000`, `MAX_DAYS_OUT 400`, `DISCOVERY_MIN_CONFIDENCE 0.7` (drops to 0.5 if corroborated), verdicts `confirmed/corrected/unsupported`, fails closed, dry-run default, scheduler `DISCOVERY_TICK_SECONDS 300` / `DISCOVERY_SCHEDULE=0` / cadence 1-336 h |
-| CLI providers | `server/src/providers.ts`, `llm.ts` | ids `claude · codex · gemini · copilot`; subscription-authed; `cliSupportsTools` = claude only; MCP loopback via `--mcp-config`/`--allowedTools mcp__grapevine`; `MAX_EXCHANGES 8`; `CLI_TIMEOUT_MS 110000` |
-| Provider settings | `server/src/types.ts`, `store.ts`, `web/.../admin/ProvidersTab.tsx` | `chatProvider` and `extractProvider`, independent, both default `ollama` |
-| MCP server | `server/src/mcp.ts`, `index.ts` (`/api/mcp/info`) | Streamable HTTP `POST /mcp`, stateless, 12 tools, OAuth 2.1 (Supabase AS, RFC 9728 metadata + 401 challenge, JWKS-verified Bearer, per-user writes), fallbacks `X-Agent-Key`/internal loopback key/`MCP_OPEN=1`, CORS, 405 on GET/DELETE, `MCP_PUBLIC_URL` |
-| External REST | `server/src/agent/index.ts` | `/api/ext/v1/*`, `X-Agent-Key`, endpoints: events, events/:id, events/:id/rarity, eta, calendar (GET/POST/DELETE), discovery/run, discovery/searches (GET/POST/DELETE), interests |
-| Shared executors | `server/src/agent/context.ts` | `searchEvents · getEvent · getEta · setEventRarity · vetTopics …`, one layer behind agent + REST + MCP |
-| Agent graph | `server/src/agent/graph.ts` | nodes `agent · tools · finalize`; `MAX_TOOL_ROUNDS 6`; Zod 4 StateSchema; `toolRounds` + `Overwrite(0)`; `MemorySaver` per `thread_id`; retry connection-only + 45s idle on model nodes, none on tools |
-| Agent tools | `server/src/agent/tools.ts` | data: `search_events · get_event · get_eta · search_web · read_page`; UI: `show_on_map · set_filters · propose_calendar · save_calendar · set_rarity · update_interests` |
-| Guardrails | `server/src/agent/guardrails.ts`, `agent/index.ts`, `agent/tools.ts` | Prompt Guard 2 · 86M · ONNX; threshold `0.80`; input rail before engine branch (covers CLI); content rail on `search_web`/`read_page` only; output persona rail always-on, keyed to model/provider; `HOLDBACK 64` |
-| OpenClaw skill | `openclaw/skills/grapevine/SKILL.md` | REST usage, `GRAPEVINE_URL`/`GRAPEVINE_AGENT_KEY`, ground rules (confirm before writes, dry-run discovery), "prefer MCP when available" |
-| Leave-by alerts (PR #9) | `server/src/push.ts` | traffic-aware "Leave by H:MM" on going/saved events; shares the Web Push pipe with reminders + Sunday digest (relevant only if a push figure is ever drawn) |
+| Concern                 | File(s)                                                              | Key facts for labels                                                                                                                                                                                                                                                                                |
+| ----------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Web discovery           | `server/src/discovery.ts`                                            | `MAX_RESULTS 8`, `MAX_PAGES 4`, `PAGE_CHARS 12000`, `MAX_DAYS_OUT 400`, `DISCOVERY_MIN_CONFIDENCE 0.7` (drops to 0.5 if corroborated), verdicts `confirmed/corrected/unsupported`, fails closed, dry-run default, scheduler `DISCOVERY_TICK_SECONDS 300` / `DISCOVERY_SCHEDULE=0` / cadence 1-336 h |
+| CLI providers           | `server/src/providers.ts`, `llm.ts`                                  | ids `claude · codex · gemini · copilot`; subscription-authed; `cliSupportsTools` = claude only; MCP loopback via `--mcp-config`/`--allowedTools mcp__grapevine`; `MAX_EXCHANGES 8`; `CLI_TIMEOUT_MS 110000`                                                                                         |
+| Provider settings       | `server/src/types.ts`, `store.ts`, `web/.../admin/ProvidersTab.tsx`  | `chatProvider` and `extractProvider`, independent, both default `ollama`                                                                                                                                                                                                                            |
+| MCP server              | `server/src/mcp.ts`, `index.ts` (`/api/mcp/info`)                    | Streamable HTTP `POST /mcp`, stateless, 12 tools, OAuth 2.1 (Supabase AS, RFC 9728 metadata + 401 challenge, JWKS-verified Bearer, per-user writes), fallbacks `X-Agent-Key`/internal loopback key/`MCP_OPEN=1`, CORS, 405 on GET/DELETE, `MCP_PUBLIC_URL`                                          |
+| External REST           | `server/src/agent/index.ts`                                          | `/api/ext/v1/*`, `X-Agent-Key`, endpoints: events, events/:id, events/:id/rarity, eta, calendar (GET/POST/DELETE), discovery/run, discovery/searches (GET/POST/DELETE), interests                                                                                                                   |
+| Shared executors        | `server/src/agent/context.ts`                                        | `searchEvents · getEvent · getEta · setEventRarity · vetTopics …`, one layer behind agent + REST + MCP                                                                                                                                                                                              |
+| Agent graph             | `server/src/agent/graph.ts`                                          | nodes `agent · tools · finalize`; `MAX_TOOL_ROUNDS 6`; Zod 4 StateSchema; `toolRounds` + `Overwrite(0)`; `MemorySaver` per `thread_id`; retry connection-only + 45s idle on model nodes, none on tools                                                                                              |
+| Agent tools             | `server/src/agent/tools.ts`                                          | data: `search_events · get_event · get_eta · search_web · read_page`; UI: `show_on_map · set_filters · propose_calendar · save_calendar · set_rarity · update_interests`                                                                                                                            |
+| Guardrails              | `server/src/agent/guardrails.ts`, `agent/index.ts`, `agent/tools.ts` | Prompt Guard 2 · 86M · ONNX; threshold `0.80`; input rail before engine branch (covers CLI); content rail on `search_web`/`read_page` only; output persona rail always-on, keyed to model/provider; `HOLDBACK 64`                                                                                   |
+| OpenClaw skill          | `openclaw/skills/grapevine/SKILL.md`                                 | REST usage, `GRAPEVINE_URL`/`GRAPEVINE_AGENT_KEY`, ground rules (confirm before writes, dry-run discovery), "prefer MCP when available"                                                                                                                                                             |
+| Leave-by alerts (PR #9) | `server/src/push.ts`                                                 | traffic-aware "Leave by H:MM" on going/saved events; shares the Web Push pipe with reminders + Sunday digest (relevant only if a push figure is ever drawn)                                                                                                                                         |

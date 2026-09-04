@@ -5,7 +5,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import {
   CHAT_EFFORT_OPTIONS,
   CLAUDE_CHAT_MODELS,
@@ -110,7 +114,7 @@ function Row({
       onClick={onSelect}
       className={cn(
         "flex items-center justify-between rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent",
-        active && "text-foreground",
+        active && "text-foreground"
       )}
     >
       <span>{label}</span>

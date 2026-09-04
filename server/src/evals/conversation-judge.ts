@@ -21,11 +21,7 @@
 import "./deepeval-env.js";
 import { GEval } from "deepeval/metrics";
 import { LLMTestCase, SingleTurnParams } from "deepeval/test-case";
-import type {
-  ChatMessage,
-  ConversationEvalScore,
-  ConversationVerdict,
-} from "../types.js";
+import type { ChatMessage, ConversationEvalScore, ConversationVerdict } from "../types.js";
 import { judge, METRIC_DEFAULTS } from "./judge.js";
 import { JUDGE_ROLE as ROLE, verdictOf } from "./judge-rubric.js";
 
@@ -115,7 +111,10 @@ export async function evaluateConversation(
   return {
     model: name,
     overall,
-    verdict: verdictOf(overall, scores.map((s) => s.score)),
+    verdict: verdictOf(
+      overall,
+      scores.map((s) => s.score),
+    ),
     scores,
     ms: Date.now() - started,
   };

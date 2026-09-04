@@ -85,7 +85,10 @@ function candidateTags(rawName: string, providerWords: Set<string>): string[] {
   if (!name) return [];
   if (name.includes(":")) return [name.replace(/\s+/g, "")]; // literal tag
 
-  let tokens = name.split(/[\s_-]+/).filter(Boolean).filter((t) => !DECORATION.test(t));
+  const tokens = name
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .filter((t) => !DECORATION.test(t));
   const variants: string[][] = [tokens];
   // "google gemma 4" — also try without the lab prefix, but keep the
   // original too ("mistral small" would lose its family otherwise)
@@ -97,8 +100,14 @@ function candidateTags(rawName: string, providerWords: Set<string>): string[] {
     const base: string[] = [];
     for (const t of toks) {
       const combo = t.match(SIZE_COMBO);
-      if (combo) { sizes.push(t, combo[1]); continue; }
-      if (SIZE.test(t)) { sizes.push(t); continue; }
+      if (combo) {
+        sizes.push(t, combo[1]);
+        continue;
+      }
+      if (SIZE.test(t)) {
+        sizes.push(t);
+        continue;
+      }
       base.push(t);
     }
     if (!base.length) continue;
@@ -162,7 +171,9 @@ function collectCandidates(db: any): Map<string, Meta> {
   const providerWords = new Set<string>();
   for (const [id, provider] of Object.entries<any>(db)) {
     providerWords.add(id.toLowerCase());
-    for (const w of String(provider?.name ?? "").toLowerCase().split(/\s+/)) {
+    for (const w of String(provider?.name ?? "")
+      .toLowerCase()
+      .split(/\s+/)) {
       if (w) providerWords.add(w);
     }
   }
@@ -206,9 +217,7 @@ function collectCandidates(db: any): Map<string, Meta> {
 
 // ---------- ollama registry verification ----------
 
-async function manifest(
-  tag: string,
-): Promise<{ gb: number; digest: string } | null> {
+async function manifest(tag: string): Promise<{ gb: number; digest: string } | null> {
   const [name, ver = "latest"] = tag.split(":");
   try {
     const res = await fetch(
@@ -220,10 +229,7 @@ async function manifest(
     );
     if (!res.ok) return null;
     const m: any = await res.json();
-    const bytes = (m.layers ?? []).reduce(
-      (sum: number, l: any) => sum + (l?.size ?? 0),
-      0,
-    );
+    const bytes = (m.layers ?? []).reduce((sum: number, l: any) => sum + (l?.size ?? 0), 0);
     if (!(bytes > 0)) return null;
     return { gb: bytes / 2 ** 30, digest: String(m.config?.digest ?? "") };
   } catch {

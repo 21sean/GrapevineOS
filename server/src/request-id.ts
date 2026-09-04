@@ -28,7 +28,13 @@ export function requestId(req: Request, res: Response, next: NextFunction): void
   res.setHeader("X-Request-Id", id);
   const t0 = Date.now();
   res.once("finish", () => {
-    const record = { id, method: req.method, path: req.path, status: res.statusCode, ms: Date.now() - t0 };
+    const record = {
+      id,
+      method: req.method,
+      path: req.path,
+      status: res.statusCode,
+      ms: Date.now() - t0,
+    };
     if (res.statusCode >= 500) log.warn(record, "request");
     else log.debug(record, "request");
   });
@@ -48,7 +54,8 @@ export function notFound(req: Request, res: Response): void {
 }
 
 /** Failures that mean "a thing this server depends on did not answer". */
-const UPSTREAM = /fetch failed|ECONN|ETIMEDOUT|EAI_AGAIN|PostgrestError|ollama|mapbox|supabase|timed out|no answer|aborted|upstream/i;
+const UPSTREAM =
+  /fetch failed|ECONN|ETIMEDOUT|EAI_AGAIN|PostgrestError|ollama|mapbox|supabase|timed out|no answer|aborted|upstream/i;
 
 export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction): void {
   const id = currentRequestId(res);

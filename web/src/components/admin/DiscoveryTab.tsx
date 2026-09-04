@@ -10,7 +10,12 @@ import {
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -84,7 +89,9 @@ export function DiscoveryTab() {
           description: `${res.extracted} candidates extracted, none passed verification`,
         })
     } catch (err) {
-      toast.error("Discovery failed", { description: String(err).slice(0, 180) })
+      toast.error("Discovery failed", {
+        description: String(err).slice(0, 180),
+      })
     } finally {
       setBusy(false)
     }
@@ -92,25 +99,35 @@ export function DiscoveryTab() {
 
   async function commit() {
     if (!run) return
-    const chosen = run.verified.filter((c) => included.has(c.event.id)).map((c) => c.event)
+    const chosen = run.verified
+      .filter((c) => included.has(c.event.id))
+      .map((c) => c.event)
     try {
       const res = await api.commitEvents(chosen)
       await refreshEvents()
-      toast.success(`Added ${res.added} event${res.added === 1 ? "" : "s"} to the map`)
+      toast.success(
+        `Added ${res.added} event${res.added === 1 ? "" : "s"} to the map`
+      )
       setRun(null)
       setQuery("")
     } catch (err) {
-      toast.error("Couldn't save events", { description: String(err).slice(0, 140) })
+      toast.error("Couldn't save events", {
+        description: String(err).slice(0, 140),
+      })
     }
   }
 
   async function addSchedule() {
     try {
       await api.addDiscoverySearch(query, cadence)
-      toast.success(`Scheduled: “${query.trim()}” ${cadenceLabel(cadence).toLowerCase()}`)
+      toast.success(
+        `Scheduled: “${query.trim()}” ${cadenceLabel(cadence).toLowerCase()}`
+      )
       refreshSearches()
     } catch (err) {
-      toast.error("Couldn't schedule search", { description: String(err).slice(0, 140) })
+      toast.error("Couldn't schedule search", {
+        description: String(err).slice(0, 140),
+      })
     }
   }
 
@@ -119,11 +136,15 @@ export function DiscoveryTab() {
     try {
       const res = await api.runDiscoverySearch(s.id)
       await refreshEvents()
-      if (res.error) toast.error(`“${s.query}” failed`, { description: res.error })
+      if (res.error)
+        toast.error(`“${s.query}” failed`, { description: res.error })
       else
-        toast.success(`“${s.query}”: ${res.added} new event${res.added === 1 ? "" : "s"}`, {
-          description: `${res.extracted} extracted, ${res.verified.length} verified`,
-        })
+        toast.success(
+          `“${s.query}”: ${res.added} new event${res.added === 1 ? "" : "s"}`,
+          {
+            description: `${res.extracted} extracted, ${res.verified.length} verified`,
+          }
+        )
     } catch (err) {
       toast.error("Run failed", { description: String(err).slice(0, 140) })
     } finally {
@@ -138,7 +159,9 @@ export function DiscoveryTab() {
     <div className="flex flex-col gap-5">
       <FieldGroup>
         <Field>
-          <FieldLabel htmlFor="discovery-query">Search the web for events</FieldLabel>
+          <FieldLabel htmlFor="discovery-query">
+            Search the web for events
+          </FieldLabel>
           <div className="flex gap-2">
             <Input
               id="discovery-query"
@@ -150,21 +173,30 @@ export function DiscoveryTab() {
               }}
             />
             <Button onClick={preview} disabled={busy || !canQuery}>
-              {busy ? <Spinner data-icon="inline-start" /> : <SearchIcon data-icon="inline-start" />}
+              {busy ? (
+                <Spinner data-icon="inline-start" />
+              ) : (
+                <SearchIcon data-icon="inline-start" />
+              )}
               {busy ? "Verifying…" : "Preview"}
             </Button>
           </div>
           <FieldDescription>
-            Searches near {settings?.city ?? "your city"}, reads the top pages, and
-            verifies every candidate against its source before anything can land on
-            the map. Takes a minute or two.
+            Searches near {settings?.city ?? "your city"}, reads the top pages,
+            and verifies every candidate against its source before anything can
+            land on the map. Takes a minute or two.
           </FieldDescription>
         </Field>
 
         <Field>
-          <FieldLabel htmlFor="discovery-cadence">…or run it on a schedule</FieldLabel>
+          <FieldLabel htmlFor="discovery-cadence">
+            …or run it on a schedule
+          </FieldLabel>
           <div className="flex gap-2">
-            <Select value={String(cadence)} onValueChange={(v) => setCadence(Number(v))}>
+            <Select
+              value={String(cadence)}
+              onValueChange={(v) => setCadence(Number(v))}
+            >
               <SelectTrigger id="discovery-cadence" className="w-40">
                 <SelectValue />
               </SelectTrigger>
@@ -176,7 +208,11 @@ export function DiscoveryTab() {
                 ))}
               </SelectContent>
             </Select>
-            <Button variant="outline" onClick={addSchedule} disabled={!canQuery}>
+            <Button
+              variant="outline"
+              onClick={addSchedule}
+              disabled={!canQuery}
+            >
               <PlusIcon data-icon="inline-start" />
               Schedule
             </Button>
@@ -192,13 +228,17 @@ export function DiscoveryTab() {
           <Separator />
           <div className="flex flex-col gap-3">
             <span className="text-sm text-muted-foreground">
-              Read {run.pagesRead.length} page{run.pagesRead.length === 1 ? "" : "s"} ·{" "}
-              {run.extracted} extracted · {run.verified.length} verified ·{" "}
-              {run.rejected.length} rejected
+              Read {run.pagesRead.length} page
+              {run.pagesRead.length === 1 ? "" : "s"} · {run.extracted}{" "}
+              extracted · {run.verified.length} verified · {run.rejected.length}{" "}
+              rejected
             </span>
 
             {run.verified.map((c) => (
-              <div key={c.event.id} className="flex items-start gap-3 rounded-lg border p-3">
+              <div
+                key={c.event.id}
+                className="flex items-start gap-3 rounded-lg border p-3"
+              >
                 <Switch
                   checked={included.has(c.event.id)}
                   onCheckedChange={(on) => {
@@ -221,14 +261,19 @@ export function DiscoveryTab() {
                       variant="secondary"
                       style={{ color: CATEGORY_META[c.event.category]?.color }}
                     >
-                      {CATEGORY_META[c.event.category]?.label ?? c.event.category}
+                      {CATEGORY_META[c.event.category]?.label ??
+                        c.event.category}
                     </Badge>
                     <Badge variant="outline" className="text-live">
-                      {c.verdict === "corrected" ? "verified (corrected)" : "verified"}{" "}
+                      {c.verdict === "corrected"
+                        ? "verified (corrected)"
+                        : "verified"}{" "}
                       {Math.round(c.confidence * 100)}%
                     </Badge>
                     {c.corroborations >= 2 && (
-                      <Badge variant="outline">{c.corroborations} sources</Badge>
+                      <Badge variant="outline">
+                        {c.corroborations} sources
+                      </Badge>
                     )}
                     <StarRating rating={c.event.rating} showNumber />
                     <span className="font-mono text-xs text-muted-foreground">
@@ -293,8 +338,8 @@ export function DiscoveryTab() {
             Scheduled searches
           </h3>
           <p className="text-sm text-muted-foreground">
-            Re-run on the server; verified finds land on the map automatically and
-            show up in ingest history as “search”.
+            Re-run on the server; verified finds land on the map automatically
+            and show up in ingest history as “search”.
           </p>
         </div>
 
@@ -305,7 +350,10 @@ export function DiscoveryTab() {
           </p>
         )}
         {searches?.map((s) => (
-          <div key={s.id} className="flex items-center gap-3 rounded-lg border p-3">
+          <div
+            key={s.id}
+            className="flex items-center gap-3 rounded-lg border p-3"
+          >
             <Switch
               checked={s.active}
               onCheckedChange={async (on) => {

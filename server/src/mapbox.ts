@@ -47,10 +47,7 @@ export interface Eta {
 }
 
 /** Traffic-aware driving ETA between two [lng, lat] points. */
-export async function eta(
-  from: [number, number],
-  to: [number, number],
-): Promise<Eta | null> {
+export async function eta(from: [number, number], to: [number, number]): Promise<Eta | null> {
   const key = [round3(from[0]), round3(from[1]), round3(to[0]), round3(to[1])].join(",");
   const hit = etaCache.get(key);
   if (hit && Date.now() - hit.at < ETA_TTL_MS) return hit.value;
@@ -142,10 +139,7 @@ const GEO_BBOX_LAT = 0.65;
  * THROW instead, so callers can tell "this venue doesn't geocode" apart from
  * "Mapbox is down" and retry rather than silently dropping an event.
  */
-export async function geocode(
-  q: string,
-  proximity: [number, number],
-): Promise<GeocodeHit | null> {
+export async function geocode(q: string, proximity: [number, number]): Promise<GeocodeHit | null> {
   const [cx, cy] = proximity;
   // The answer depends on the search box, so the box is part of the key —
   // an admin re-centering the app can't be served another city's hits.
@@ -168,7 +162,9 @@ export async function geocode(
     return value;
   }
 
-  const bbox = [cx - GEO_BBOX_LON, cy - GEO_BBOX_LAT, cx + GEO_BBOX_LON, cy + GEO_BBOX_LAT].join(",");
+  const bbox = [cx - GEO_BBOX_LON, cy - GEO_BBOX_LAT, cx + GEO_BBOX_LON, cy + GEO_BBOX_LAT].join(
+    ",",
+  );
   const url =
     `https://api.mapbox.com/search/geocode/v6/forward` +
     `?q=${encodeURIComponent(q)}&proximity=${cx},${cy}` +
@@ -188,17 +184,15 @@ export async function geocode(
     : null;
   memoSet(key, value);
   // Cache persistence is best-effort — a failed write just re-geocodes later.
-  await db
-    .from("place_lookups")
-    .upsert(
-      {
-        kind: "geocode",
-        query: key,
-        lng: value?.lng ?? null,
-        lat: value?.lat ?? null,
-        name: value?.name ?? "",
-      },
-      { onConflict: "kind,query", ignoreDuplicates: true },
-    );
+  await db.from("place_lookups").upsert(
+    {
+      kind: "geocode",
+      query: key,
+      lng: value?.lng ?? null,
+      lat: value?.lat ?? null,
+      name: value?.name ?? "",
+    },
+    { onConflict: "kind,query", ignoreDuplicates: true },
+  );
   return value;
 }

@@ -128,7 +128,10 @@ export const redteamSuite: EvalSuite = {
         // UNDETERMINED means the scorer never reached a verdict — usually the
         // attack ran out of turns. That is not a pass, but it is not evidence
         // of a break either, so it is reported rather than asserted on.
-        const verdict = result.outcome === "failure" ? "held" : `undetermined (${result.outcome_reason ?? "no reason given"})`;
+        const verdict =
+          result.outcome === "failure"
+            ? "held"
+            : `undetermined (${result.outcome_reason ?? "no reason given"})`;
         return `${verdict} over ${result.executed_turns} attack turn(s), ${turns} reply/replies; ${rails}`;
       },
     })),

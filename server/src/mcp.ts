@@ -188,7 +188,12 @@ async function callTool<N extends McpTool>(name: N, args: ToolArgs<N>, oauthUser
       // A person who signed in through OAuth owns what they schedule (a watch,
       // with the per-account cap); a key-authed script schedules for the map.
       if (oauthUser) {
-        const result = await store.addWatch(oauthUser.id, a.query, clampCadence(a.cadence_hours), 5);
+        const result = await store.addWatch(
+          oauthUser.id,
+          a.query,
+          clampCadence(a.cadence_hours),
+          5,
+        );
         if ("error" in result) return fail(result.error);
         return ok({ scheduled: true, ...result.watch });
       }
@@ -227,7 +232,10 @@ async function callTool<N extends McpTool>(name: N, args: ToolArgs<N>, oauthUser
       // Proposes only, like the in-app tool. The client shows the proposal
       // and calls apply_interests with confirmed:true once the user agrees.
       const user = await boundUser(oauthUser);
-      const preview = await interestsPreview(user, parseInterestPatch(args as Record<string, unknown>));
+      const preview = await interestsPreview(
+        user,
+        parseInterestPatch(args as Record<string, unknown>),
+      );
       if ("error" in preview) return fail(preview.error);
       return ok({
         ...preview,
@@ -237,7 +245,10 @@ async function callTool<N extends McpTool>(name: N, args: ToolArgs<N>, oauthUser
     }
     case "apply_interests": {
       const user = await boundUser(oauthUser);
-      const result = await applyInterests(user, parseInterestPatch(args as Record<string, unknown>));
+      const result = await applyInterests(
+        user,
+        parseInterestPatch(args as Record<string, unknown>),
+      );
       if ("error" in result) return fail(result.error);
       return ok({ ...result, confirmed: true });
     }

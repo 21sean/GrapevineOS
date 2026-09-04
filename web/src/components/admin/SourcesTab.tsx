@@ -7,7 +7,9 @@ import { useGrapevine } from "@/lib/store"
 
 export function SourcesTab() {
   const sources = useGrapevine((s) => s.sources)
-  const inboxDomain = useGrapevine((s) => s.settings?.inboxDomain ?? "example.com")
+  const inboxDomain = useGrapevine(
+    (s) => s.settings?.inboxDomain ?? "example.com"
+  )
 
   function copy(address: string) {
     navigator.clipboard
@@ -16,7 +18,7 @@ export function SourcesTab() {
       .catch(() =>
         toast.error("Couldn't copy", {
           description: "Clipboard access was blocked.",
-        }),
+        })
       )
   }
 
@@ -73,10 +75,11 @@ export function SourcesTab() {
       <Alert>
         <AlertTitle>Hands-free ingestion</AlertTitle>
         <AlertDescription>
-          The Cloudflare Email Worker in <span className="font-mono">workers/email-ingest</span>{" "}
-          parses incoming newsletters and posts them to this app's ingest
-          endpoint. Deploy steps are in the README. Until then, paste emails
-          in the Ingest tab.
+          The Cloudflare Email Worker in{" "}
+          <span className="font-mono">workers/email-ingest</span> parses
+          incoming newsletters and posts them to this app's ingest endpoint.
+          Deploy steps are in the README. Until then, paste emails in the Ingest
+          tab.
         </AlertDescription>
       </Alert>
     </div>

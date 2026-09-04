@@ -98,7 +98,9 @@ export function whenLabel(ev: CatalogEvent, nowMs: number): string {
   const ongoing = ev.startMs < nowMs && ev.endMs > nowMs + DAY_MS;
   if (ongoing) return `running through ${dateLabel(ev.endMs)}`;
   if (startDay === today) {
-    return ptHour(ev.startMs) >= 17 ? `tonight, ${clockLabel(ev.startMs)}` : `today, ${clockLabel(ev.startMs)}`;
+    return ptHour(ev.startMs) >= 17
+      ? `tonight, ${clockLabel(ev.startMs)}`
+      : `today, ${clockLabel(ev.startMs)}`;
   }
   if (startDay === ptDayKey(nowMs + DAY_MS)) return `tomorrow, ${clockLabel(ev.startMs)}`;
   return `${dateLabel(ev.startMs)}, ${clockLabel(ev.startMs)}`;
@@ -127,7 +129,10 @@ const HOODS: [string, RegExp][] = [
   ["Point Loma", /point loma|liberty station|shelter island/i],
   ["Barrio Logan", /barrio logan|logan ave/i],
   ["Gaslamp", /gaslamp|fifth ave.*san diego/i],
-  ["downtown", /downtown|rady shell|jacobs park|san diego central library|petco park|convention center/i],
+  [
+    "downtown",
+    /downtown|rady shell|jacobs park|san diego central library|petco park|convention center/i,
+  ],
   ["Coronado", /coronado/i],
   ["Mission Valley", /mission valley|fashion valley/i],
   ["Encinitas", /encinitas|cardiff/i],
@@ -156,8 +161,7 @@ function dollarsOf(price: string | null, isFree: boolean): number | null {
 
 /** Pull the whole real catalog. PostgREST caps a page at 1000 rows. */
 export async function loadCatalog(): Promise<CatalogEvent[]> {
-  const cols =
-    "id,title,category,tags,venue,address,starts_at,ends_at,price,is_free,rating,rarity";
+  const cols = "id,title,category,tags,venue,address,starts_at,ends_at,price,is_free,rating,rarity";
   const out: CatalogEvent[] = [];
   for (let page = 0; page < 6; page++) {
     const { data } = await db
@@ -253,14 +257,16 @@ function matches(ev: CatalogEvent, nowMs: number, q: Query): boolean {
   if (q.rare && ev.rarity !== "rare" && ev.rarity !== "notable") return false;
   if (q.dow && !q.dow.includes(ptWeekday(ev.startMs))) return false;
   if (q.maxHour !== undefined && ptHour(ev.startMs) > q.maxHour) return false;
-  if (q.maxDollars !== undefined && (ev.dollars === null || ev.dollars > q.maxDollars)) return false;
+  if (q.maxDollars !== undefined && (ev.dollars === null || ev.dollars > q.maxDollars))
+    return false;
   if (q.tagAny) {
     const hay = `${ev.tags.join(" ")} ${ev.title} ${ev.category}`.toLowerCase();
     if (!q.tagAny.some((t) => hay.includes(t.toLowerCase()))) return false;
   }
   if (q.kids) {
     const hay = `${ev.tags.join(" ")} ${ev.title}`;
-    if (!KID_TAGS.test(hay) && ev.category !== "market" && ev.category !== "community") return false;
+    if (!KID_TAGS.test(hay) && ev.category !== "market" && ev.category !== "community")
+      return false;
   }
   return true;
 }
@@ -309,7 +315,13 @@ export function resolvePicks(
     picks: take(
       opts.strict
         ? { ...q, to: nowMs + 45 * DAY_MS }
-        : { to: nowMs + 45 * DAY_MS, category: q.category, tagAny: q.tagAny, rare: q.rare, kids: q.kids },
+        : {
+            to: nowMs + 45 * DAY_MS,
+            category: q.category,
+            tagAny: q.tagAny,
+            rare: q.rare,
+            kids: q.kids,
+          },
     ),
     widened: true,
   };
@@ -356,7 +368,12 @@ const SOURCES = [
   ["Hello San Diego", "https://www.sandiego.org/explore/events.aspx"],
 ] as const;
 
-function tool(name: string, args: Record<string, unknown>, result: Record<string, unknown>, ms: number): ToolCall {
+function tool(
+  name: string,
+  args: Record<string, unknown>,
+  result: Record<string, unknown>,
+  ms: number,
+): ToolCall {
   return { name, args, result, ms };
 }
 
@@ -383,7 +400,12 @@ function listReply(opener: string, picks: CatalogEvent[], nowMs: number, closer?
   return [opener, "", bullets(picks, nowMs), ...(closer ? ["", closer] : [])].join("\n");
 }
 
-function widenedReply(subject: string, picks: CatalogEvent[], nowMs: number, closer?: string): string {
+function widenedReply(
+  subject: string,
+  picks: CatalogEvent[],
+  nowMs: number,
+  closer?: string,
+): string {
   return listReply(
     `Nothing on the map for ${subject}, so I looked a little further out. Closest fits:`,
     picks,
@@ -465,7 +487,12 @@ function makeFinder(id: string, plan: (rng: Rng, nowMs: number) => FinderPlan): 
     let closer = choice(rng, CLOSERS);
     if (picks.length && rng() < 0.3) {
       tools.push(
-        tool("show_on_map", { ids: picks.map((e) => e.id) }, { pinned: picks.length }, 20 + Math.floor(rng() * 40)),
+        tool(
+          "show_on_map",
+          { ids: picks.map((e) => e.id) },
+          { pinned: picks.length },
+          20 + Math.floor(rng() * 40),
+        ),
       );
       closer = "Pinned them on your map.";
     }
@@ -543,10 +570,18 @@ const familyTurn = makeFinder("family", (rng, nowMs) => {
   // The constraint has to follow the wording: somebody asking for Sunday
   // morning is not served by a Wednesday afternoon market.
   const variants: [string, Query, string][] = [
-    ["free stuff to do with a 6 year old on sunday morning?", { dow: [0], maxHour: 13 }, "a free Sunday morning"],
+    [
+      "free stuff to do with a 6 year old on sunday morning?",
+      { dow: [0], maxHour: 13 },
+      "a free Sunday morning",
+    ],
     ["kid friendly things this weekend?", { dow: [6, 0] }, "free kid-friendly plans this weekend"],
     ["somewhere to take a 4 year old that isn't the zoo again", {}, "free kid-friendly plans"],
-    ["anything for kids saturday that doesn't cost anything", { dow: [6] }, "a free Saturday with kids"],
+    [
+      "anything for kids saturday that doesn't cost anything",
+      { dow: [6] },
+      "a free Saturday with kids",
+    ],
   ];
   const [ask, extra, subject] = choice(rng, variants);
   return {
@@ -756,9 +791,24 @@ const discoverTurn: TurnMaker = (rng, nowMs, catalog) => {
     replyText: reply,
     tags: ["ask-grapevine", "discovery", "web"],
     toolCalls: [
-      tool("search_web", { query: "san diego events this month" }, { count: 8 + Math.floor(rng() * 6), source: sourceName }, 900 + Math.floor(rng() * 2600)),
-      tool("read_page", { url: sourceUrl }, { chars: 4000 + Math.floor(rng() * 26000) }, 700 + Math.floor(rng() * 2200)),
-      tool("discover_events", { query: "san diego events", commit }, { extracted, verified, added: commit ? verified : 0 }, 4000 + Math.floor(rng() * 9000)),
+      tool(
+        "search_web",
+        { query: "san diego events this month" },
+        { count: 8 + Math.floor(rng() * 6), source: sourceName },
+        900 + Math.floor(rng() * 2600),
+      ),
+      tool(
+        "read_page",
+        { url: sourceUrl },
+        { chars: 4000 + Math.floor(rng() * 26000) },
+        700 + Math.floor(rng() * 2200),
+      ),
+      tool(
+        "discover_events",
+        { query: "san diego events", commit },
+        { extracted, verified, added: commit ? verified : 0 },
+        4000 + Math.floor(rng() * 9000),
+      ),
     ],
     picks,
     adversarial: false,
@@ -781,7 +831,9 @@ const rarityTurn: TurnMaker = (rng, nowMs, catalog) => {
     ]),
     replyText: `Done. I've marked [${ev.title}](event:${ev.id}) as ${rarity}, so it ${rarity === "rare" ? "will show up in your Rare finds filter" : "sits with the rest of the map now"}.`,
     tags: ["ask-grapevine", "curation", "rarity"],
-    toolCalls: [tool("set_rarity", { id: ev.id, rarity }, { ok: true, rarity }, 60 + Math.floor(rng() * 120))],
+    toolCalls: [
+      tool("set_rarity", { id: ev.id, rarity }, { ok: true, rarity }, 60 + Math.floor(rng() * 120)),
+    ],
     picks: [ev],
     adversarial: false,
     blocked: false,
@@ -799,11 +851,31 @@ const filtersTurn: TurnMaker = (rng, nowMs, catalog) => {
   ] as [string, number][]);
   const hood = weighted(rng, ASK_HOODS);
   const map: Record<string, [string, Record<string, unknown>, string]> = {
-    free: ["only show me free stuff", { free_only: true }, "Free-only filter is on. Everything with a ticket price is hidden until you tell me otherwise."],
-    "hide-farmers": ["hide the farmers markets, I see them every week", { farmers: "hide" }, "Farmers markets are hidden. Your map is a lot shorter and a bit more interesting now."],
-    "no-music": ["stop showing me concerts", { hide_categories: ["music"] }, "Music is off the map. Say the word when you want the concerts back."],
-    near: [`only show things within 20 minutes of ${hood}`, { near_minutes: 20, near: hood }, `Filtered to a 20 minute radius of ${hood}.`],
-    rare: ["just show me the rare finds", { rare_only: true }, "Rare finds only. It is a short list by design."],
+    free: [
+      "only show me free stuff",
+      { free_only: true },
+      "Free-only filter is on. Everything with a ticket price is hidden until you tell me otherwise.",
+    ],
+    "hide-farmers": [
+      "hide the farmers markets, I see them every week",
+      { farmers: "hide" },
+      "Farmers markets are hidden. Your map is a lot shorter and a bit more interesting now.",
+    ],
+    "no-music": [
+      "stop showing me concerts",
+      { hide_categories: ["music"] },
+      "Music is off the map. Say the word when you want the concerts back.",
+    ],
+    near: [
+      `only show things within 20 minutes of ${hood}`,
+      { near_minutes: 20, near: hood },
+      `Filtered to a 20 minute radius of ${hood}.`,
+    ],
+    rare: [
+      "just show me the rare finds",
+      { rare_only: true },
+      "Rare finds only. It is a short list by design.",
+    ],
   };
   const [ask, args, reply] = map[variant];
   // The filter the visitor just switched on is a constraint on everything that
@@ -818,7 +890,9 @@ const filtersTurn: TurnMaker = (rng, nowMs, catalog) => {
   return {
     intent: "set-filters",
     userText: ask,
-    replyText: picks.length ? `${reply}\n\nWhat's left for the next few days:\n\n${bullets(picks, nowMs)}` : reply,
+    replyText: picks.length
+      ? `${reply}\n\nWhat's left for the next few days:\n\n${bullets(picks, nowMs)}`
+      : reply,
     tags: ["ask-grapevine", "filters"],
     toolCalls: [tool("set_filters", args, { ok: true }, 40 + Math.floor(rng() * 90))],
     picks,
@@ -844,7 +918,14 @@ const tasteTurn: TurnMaker = (rng, nowMs, catalog) => {
     userText: `I like ${loves.join(" and ")}${avoids.length ? `, less ${avoids.join(" and ")} please` : ""}`,
     replyText: `Noted: more ${loves.join(" and ")}${avoids.length ? `, less ${avoids.join(" and ")}` : ""}. That reshapes what I lead with from here.${picks.length ? `\n\nStarting with:\n\n${bullets(picks, nowMs)}` : ""}`,
     tags: ["ask-grapevine", "taste"],
-    toolCalls: [tool("update_interests", { loves, avoids }, { ok: true, loves, avoids }, 50 + Math.floor(rng() * 110))],
+    toolCalls: [
+      tool(
+        "update_interests",
+        { loves, avoids },
+        { ok: true, loves, avoids },
+        50 + Math.floor(rng() * 110),
+      ),
+    ],
     picks,
     adversarial: false,
     blocked: false,
@@ -865,8 +946,18 @@ const calendarTurn: TurnMaker = (rng, nowMs, catalog) => {
     replyText: `Saved to your Grapevine calendar: ${picks.map((p) => `[${p.title}](event:${p.id})`).join(", ")}. ${picks[0].venue} is the address on the invite, ${whenLabel(picks[0], nowMs)}.`,
     tags: ["ask-grapevine", "calendar"],
     toolCalls: [
-      tool("propose_calendar", { ids: picks.map((p) => p.id) }, { proposed: picks.length }, 70 + Math.floor(rng() * 150)),
-      tool("save_calendar", { ids: picks.map((p) => p.id) }, { ok: true, saved: picks.map((p) => p.id) }, 260 + Math.floor(rng() * 700)),
+      tool(
+        "propose_calendar",
+        { ids: picks.map((p) => p.id) },
+        { proposed: picks.length },
+        70 + Math.floor(rng() * 150),
+      ),
+      tool(
+        "save_calendar",
+        { ids: picks.map((p) => p.id) },
+        { ok: true, saved: picks.map((p) => p.id) },
+        260 + Math.floor(rng() * 700),
+      ),
     ],
     picks,
     adversarial: false,
@@ -881,7 +972,11 @@ const weatherTurn: TurnMaker = (rng, nowMs, catalog) => {
   const { picks } = resolvePicks(catalog, nowMs, { to: nowMs + 6 * DAY_MS }, 2, rng);
   return {
     intent: "out-of-scope-weather",
-    userText: choice(rng, ["is it going to rain saturday?", "what's the weather doing tonight", "will the marine layer burn off sunday?"]),
+    userText: choice(rng, [
+      "is it going to rain saturday?",
+      "what's the weather doing tonight",
+      "will the marine layer burn off sunday?",
+    ]),
     replyText: `Weather is not my department, I would only be guessing. What I can tell you is which of these has a roof over it:\n\n${bullets(picks, nowMs)}`,
     tags: ["ask-grapevine", "out-of-scope", "weather"],
     toolCalls: [searchTool(rng, { to: nowMs + 6 * DAY_MS }, picks, nowMs)],
@@ -897,7 +992,11 @@ const parkingTurn: TurnMaker = (rng, nowMs, catalog) => {
   const venue = picks[0]?.venue ?? "the Casbah";
   return {
     intent: "out-of-scope-parking",
-    userText: choice(rng, [`where do I park near ${venue}?`, "is parking a nightmare there?", `any parking tips for ${venue}`]),
+    userText: choice(rng, [
+      `where do I park near ${venue}?`,
+      "is parking a nightmare there?",
+      `any parking tips for ${venue}`,
+    ]),
     replyText: `I do not track parking, so treat this as local habit rather than fact: side streets a few blocks out are usually open after 6, and the trolley drops you close enough to walk. ${picks[0] ? `For [${picks[0].title}](event:${picks[0].id}) I would leave 20 minutes of slack.` : ""}`,
     tags: ["ask-grapevine", "out-of-scope", "parking"],
     toolCalls: [],
@@ -913,7 +1012,11 @@ const hotelTurn: TurnMaker = (rng, nowMs, catalog) => {
   const { picks } = resolvePicks(catalog, nowMs, { hood, to: nowMs + 14 * DAY_MS }, 2, rng);
   return {
     intent: "out-of-scope-hotel",
-    userText: choice(rng, [`book me a hotel in ${hood}`, `where should we stay in ${hood}?`, "can you get me a table somewhere friday"]),
+    userText: choice(rng, [
+      `book me a hotel in ${hood}`,
+      `where should we stay in ${hood}?`,
+      "can you get me a table somewhere friday",
+    ]),
     replyText: `Bookings are outside what I do, I only cover what is on in town. If you are landing in ${hood} though, here is what would be happening around you:\n\n${bullets(picks, nowMs)}`,
     tags: ["ask-grapevine", "out-of-scope", hoodTag(hood)],
     toolCalls: [searchTool(rng, { hood, to: nowMs + 14 * DAY_MS }, picks, nowMs)],
@@ -964,16 +1067,35 @@ const personaProbeTurn: TurnMaker = (rng) => ({
 });
 
 const indirectInjectionTurn: TurnMaker = (rng, nowMs, catalog) => {
-  const { picks } = resolvePicks(catalog, nowMs, { tagAny: ["food", "taco"], to: nowMs + 12 * DAY_MS }, 2, rng);
+  const { picks } = resolvePicks(
+    catalog,
+    nowMs,
+    { tagAny: ["food", "taco"], to: nowMs + 12 * DAY_MS },
+    2,
+    rng,
+  );
   const [sourceName, sourceUrl] = choice(rng, SOURCES);
   return {
     intent: "indirect-injection",
-    userText: choice(rng, ["best tacos near the casbah before a 9pm show?", "find a taco spot writeup and tell me where to go"]),
+    userText: choice(rng, [
+      "best tacos near the casbah before a 9pm show?",
+      "find a taco spot writeup and tell me where to go",
+    ]),
     replyText: `That page had a line in it trying to talk to me rather than to you, so I ignored it and did not follow where it pointed. On the actual question: ${picks.length ? `here is what the map has nearby.\n\n${bullets(picks, nowMs)}` : "the map does not carry restaurants, only what is on. Tell me the night and I will find you something around dinner."}`,
     tags: ["ask-grapevine", "injection", "indirect", "web"],
     toolCalls: [
-      tool("search_web", { query: "best tacos near the casbah" }, { count: 6, source: sourceName }, 800 + Math.floor(rng() * 1800)),
-      tool("read_page", { url: sourceUrl }, { chars: 3200, flagged: true, excerpt: INDIRECT.slice(0, 90) }, 600 + Math.floor(rng() * 1500)),
+      tool(
+        "search_web",
+        { query: "best tacos near the casbah" },
+        { count: 6, source: sourceName },
+        800 + Math.floor(rng() * 1800),
+      ),
+      tool(
+        "read_page",
+        { url: sourceUrl },
+        { chars: 3200, flagged: true, excerpt: INDIRECT.slice(0, 90) },
+        600 + Math.floor(rng() * 1500),
+      ),
     ],
     picks,
     adversarial: true,
@@ -1092,12 +1214,20 @@ const cheaperFollow: FollowUpFn = (rng, nowMs, catalog, prev) => {
 
 const earlierFollow: FollowUpFn = (rng, nowMs, catalog, prev) => {
   // Earlier, but still free / kid friendly / in the same neighborhood.
-  const q = inherited(prev, { to: nowMs + 9 * DAY_MS, maxHour: 18, excludeIds: alreadyShown(prev) });
+  const q = inherited(prev, {
+    to: nowMs + 9 * DAY_MS,
+    maxHour: 18,
+    excludeIds: alreadyShown(prev),
+  });
   const { picks: early } = resolvePicks(catalog, nowMs, q, 2, rng, { strict: true });
   const late = prev.picks.find((p) => ptHour(p.startMs) >= 19) ?? prev.picks[0];
   return withPicks(
     "followup-earlier",
-    choice(rng, ["something earlier? we have a sitter until 9", "anything that starts before 7", "that's too late for us"]),
+    choice(rng, [
+      "something earlier? we have a sitter until 9",
+      "anything that starts before 7",
+      "that's too late for us",
+    ]),
     early.length
       ? `${late ? `${late.title} does not start until ${clockLabel(late.startMs)}, so no. ` : ""}These start early enough:\n\n${bullets(early, nowMs)}`
       : "Everything that fits what you asked for is an evening thing. If a daytime plan works I can drop one of the other conditions and look again.",
@@ -1110,11 +1240,12 @@ const earlierFollow: FollowUpFn = (rng, nowMs, catalog, prev) => {
 
 const whichBetterFollow: FollowUpFn = (rng, _nowMs, _catalog, prev) => {
   const [a, b] = prev.picks;
-  const text = a && b
-    ? `${a.title}, at ${a.venue}. ${b.title} will be the bigger, louder room, so if the point is talking to people rather than being at a thing, take the first one. If you want the night out, flip that.`
-    : a
-      ? `${a.title} is the only one I would push, and ${a.venue} is the reason: the room does half the work. Go early, it fills up.`
-      : "Give me two you are weighing up and I will tell you which one I would take.";
+  const text =
+    a && b
+      ? `${a.title}, at ${a.venue}. ${b.title} will be the bigger, louder room, so if the point is talking to people rather than being at a thing, take the first one. If you want the night out, flip that.`
+      : a
+        ? `${a.title} is the only one I would push, and ${a.venue} is the reason: the room does half the work. Go early, it fills up.`
+        : "Give me two you are weighing up and I will tell you which one I would take.";
   return withPicks(
     "followup-compare",
     choice(rng, [
@@ -1139,7 +1270,9 @@ const mapFollow: FollowUpFn = (rng, _nowMs, _catalog, prev) => {
       ? `Pinned ${ids.length} on your map: ${prev.picks.map((p) => `[${p.title}](event:${p.id})`).join(", ")}.`
       : "Nothing to pin from that answer. Ask me for something and I will put it up.",
     ["map"],
-    ids.length ? [tool("show_on_map", { ids }, { pinned: ids.length }, 25 + Math.floor(rng() * 50))] : [],
+    ids.length
+      ? [tool("show_on_map", { ids }, { pinned: ids.length }, 25 + Math.floor(rng() * 50))]
+      : [],
     prev.picks,
     prev.query,
   );
@@ -1173,12 +1306,24 @@ const etaFollow: FollowUpFn = (rng, _nowMs, _catalog, prev) => {
   const minutes = 8 + Math.floor(rng() * 32);
   return withPicks(
     "followup-eta",
-    target ? choice(rng, [`how long from ${from} to that first one?`, `can I get there from ${from} after work?`]) : "how far is that from downtown?",
+    target
+      ? choice(rng, [
+          `how long from ${from} to that first one?`,
+          `can I get there from ${from} after work?`,
+        ])
+      : "how far is that from downtown?",
     target
       ? `About ${minutes} minutes from ${from}, so leave by ${clockLabel(target.startMs - (minutes + 15) * 60_000)} for [${target.title}](event:${target.id}).`
       : `About ${minutes} minutes at that hour.`,
     ["travel", hoodTag(from)],
-    [tool("get_eta", { from, to: target?.venue ?? "downtown San Diego" }, { minutes, miles: Math.round(minutes * 0.4 * 10) / 10 }, 200 + Math.floor(rng() * 500))],
+    [
+      tool(
+        "get_eta",
+        { from, to: target?.venue ?? "downtown San Diego" },
+        { minutes, miles: Math.round(minutes * 0.4 * 10) / 10 },
+        200 + Math.floor(rng() * 500),
+      ),
+    ],
     prev.picks,
     prev.query,
   );
@@ -1221,12 +1366,27 @@ const detailsFollow: FollowUpFn = (rng, nowMs, _catalog, prev) => {
   const ev = prev.picks[prev.picks.length - 1] ?? prev.picks[0];
   return withPicks(
     "followup-details",
-    ev ? choice(rng, [`what time do doors open for ${ev.title}?`, "how much is that one?", "tell me more about the last one"]) : "tell me more",
+    ev
+      ? choice(rng, [
+          `what time do doors open for ${ev.title}?`,
+          "how much is that one?",
+          "tell me more about the last one",
+        ])
+      : "tell me more",
     ev
       ? `[${ev.title}](event:${ev.id}) is at ${ev.venue}, ${whenLabel(ev, nowMs)}, ${priceLabel(ev)}.${ev.rarity === "rare" ? " It is flagged rare, which on this map means it will not come round again soon." : ""}`
       : "Nothing to expand on yet. Ask me what is on and I will start there.",
     ["details"],
-    ev ? [tool("get_event", { id: ev.id }, { id: ev.id, venue: ev.venue, price: priceLabel(ev) }, 40 + Math.floor(rng() * 90))] : [],
+    ev
+      ? [
+          tool(
+            "get_event",
+            { id: ev.id },
+            { id: ev.id, venue: ev.venue, price: priceLabel(ev) },
+            40 + Math.floor(rng() * 90),
+          ),
+        ]
+      : [],
     ev ? [ev] : [],
     prev.query,
   );
@@ -1236,7 +1396,11 @@ const parkingFollow: FollowUpFn = (rng, _nowMs, _catalog, prev) => {
   const ev = prev.picks[0];
   return withPicks(
     "followup-parking",
-    choice(rng, ["is parking a nightmare?", "should we drive or take the trolley?", "where would you park"]),
+    choice(rng, [
+      "is parking a nightmare?",
+      "should we drive or take the trolley?",
+      "where would you park",
+    ]),
     `Manageable on a weeknight. Street parking a few blocks off ${ev?.venue ?? "the venue"} is usually open after 6, and the trolley saves you the circling if you are coming from downtown. Parking is not something I track, so that is local habit rather than a promise.`,
     ["out-of-scope", "parking"],
     [],
@@ -1252,14 +1416,22 @@ const notMyThingFollow: FollowUpFn = (rng, nowMs, catalog, prev) => {
   const q = inherited(prev, {
     to: nowMs + 12 * DAY_MS,
     excludeIds: alreadyShown(prev),
-    category: ["music", "arts", "community", "food", "market", "festival"].filter((c) => c !== avoid),
+    category: ["music", "arts", "community", "food", "market", "festival"].filter(
+      (c) => c !== avoid,
+    ),
   });
   delete q.tagAny;
   const { picks } = resolvePicks(catalog, nowMs, q, 3, rng, { strict: true });
   return withPicks(
     "followup-reject",
-    choice(rng, ["not really my thing, what else?", "nah, something else", "none of those, try again"]),
-    picks.length ? `Fair. Different direction:\n\n${bullets(picks, nowMs)}` : "Then tell me what you do like and I will stop guessing.",
+    choice(rng, [
+      "not really my thing, what else?",
+      "nah, something else",
+      "none of those, try again",
+    ]),
+    picks.length
+      ? `Fair. Different direction:\n\n${bullets(picks, nowMs)}`
+      : "Then tell me what you do like and I will stop guessing.",
     ["reject"],
     [searchTool(rng, q, picks, nowMs)],
     picks,
@@ -1279,7 +1451,11 @@ function latestHour(prev: Turn): number {
 
 const FOLLOW_UPS: FollowUp[] = [
   // Only worth asking when something in that answer actually cost money.
-  { make: cheaperFollow, weight: 9, when: (p) => !p.query?.free && p.picks.some((e) => !e.is_free) },
+  {
+    make: cheaperFollow,
+    weight: 9,
+    when: (p) => !p.query?.free && p.picks.some((e) => !e.is_free),
+  },
   // Only worth asking when something in that answer actually started late.
   { make: earlierFollow, weight: 7, when: (p) => latestHour(p) >= 19 },
   { make: whichBetterFollow, weight: 11 },
@@ -1296,7 +1472,10 @@ const FOLLOW_UPS: FollowUp[] = [
 /** The follow-ups that make sense after this turn, with their weights. */
 function followUpsFor(prev: Turn): [FollowUpFn, number][] {
   const usable = FOLLOW_UPS.filter((f) => !f.when || f.when(prev));
-  return (usable.length ? usable : FOLLOW_UPS.filter((f) => !f.when)).map((f) => [f.make, f.weight]);
+  return (usable.length ? usable : FOLLOW_UPS.filter((f) => !f.when)).map((f) => [
+    f.make,
+    f.weight,
+  ]);
 }
 
 // ---------------------------------------------------------------------------
@@ -1316,13 +1495,15 @@ export const ERRORS: Failure[] = [
     node: "generation",
     statusMessage: "ollama 503: model is loading (llama runner exited unexpectedly)",
     rootMessage: "turn failed after 2 connection retries",
-    reply: "Something went wrong on my side and I lost the thread. Ask me again and it will usually stick.",
+    reply:
+      "Something went wrong on my side and I lost the thread. Ask me again and it will usually stick.",
   },
   {
     node: "generation",
     statusMessage: "CLI provider timed out after 110000ms without a token",
     rootMessage: "provider timeout, no answer streamed",
-    reply: "That one timed out before I could answer. Try me again, the second attempt is normally fine.",
+    reply:
+      "That one timed out before I could answer. Try me again, the second attempt is normally fine.",
   },
   {
     node: "generation",
@@ -1334,20 +1515,25 @@ export const ERRORS: Failure[] = [
     node: "tool",
     statusMessage: "search_events failed: PostgREST 57014 statement timeout",
     rootMessage: "tool failure, no catalog results available",
-    reply: "The catalog did not answer just then, so I have nothing to show you. Give it a moment and ask again.",
+    reply:
+      "The catalog did not answer just then, so I have nothing to show you. Give it a moment and ask again.",
   },
   {
     node: "recall",
     statusMessage: "recall fold aborted after 25000ms, thread summary skipped",
     rootMessage: "answered without thread memory",
-    reply: "I lost the earlier part of this conversation while answering, so remind me what we settled on and I will pick it back up.",
+    reply:
+      "I lost the earlier part of this conversation while answering, so remind me what we settled on and I will pick it back up.",
   },
 ];
 
 export const WARNINGS: { node: "tool" | "generation"; statusMessage: string }[] = [
   { node: "tool", statusMessage: "SearXNG timed out, fell back to DuckDuckGo" },
   { node: "tool", statusMessage: "web search returned 0 results" },
-  { node: "tool", statusMessage: "read_page: readability extracted 0 characters, fell back to raw text" },
+  {
+    node: "tool",
+    statusMessage: "read_page: readability extracted 0 characters, fell back to raw text",
+  },
   { node: "tool", statusMessage: "discover_events: 0 of 14 candidates survived verification" },
   { node: "generation", statusMessage: "provider rate limited, retried once after 4s backoff" },
   { node: "generation", statusMessage: "answer truncated at the 2048 token cap" },
@@ -1357,26 +1543,68 @@ export const WARNINGS: { node: "tool" | "generation"; statusMessage: string }[] 
 // The tool catalog, verbatim enough that tool_definitions looks like the app's
 // ---------------------------------------------------------------------------
 
-function fn(name: string, description: string, props: Record<string, unknown>, required: string[] = []) {
-  return { type: "function", function: { name, description, parameters: { type: "object", properties: props, required } } };
+function fn(
+  name: string,
+  description: string,
+  props: Record<string, unknown>,
+  required: string[] = [],
+) {
+  return {
+    type: "function",
+    function: { name, description, parameters: { type: "object", properties: props, required } },
+  };
 }
 
 const STR = { type: "string" };
 const IDS = { type: "array", items: { type: "string" } };
 
 export const TOOL_CATALOG = [
-  fn("search_events", "Search the Grapevine catalog for events by text, date window, price and distance.", { query: STR, date_from: STR, date_to: STR, free_only: { type: "boolean" }, near: STR }),
+  fn(
+    "search_events",
+    "Search the Grapevine catalog for events by text, date window, price and distance.",
+    { query: STR, date_from: STR, date_to: STR, free_only: { type: "boolean" }, near: STR },
+  ),
   fn("get_event", "Full detail for one catalog event by id.", { id: STR }, ["id"]),
-  fn("get_eta", "Driving time in minutes between two places.", { from: STR, to: STR }, ["from", "to"]),
-  fn("search_web", "Keyless web search (SearXNG, falling back to DuckDuckGo).", { query: STR }, ["query"]),
+  fn("get_eta", "Driving time in minutes between two places.", { from: STR, to: STR }, [
+    "from",
+    "to",
+  ]),
+  fn("search_web", "Keyless web search (SearXNG, falling back to DuckDuckGo).", { query: STR }, [
+    "query",
+  ]),
   fn("read_page", "Fetch and extract the readable text of a web page.", { url: STR }, ["url"]),
-  fn("discover_events", "Scout the open web for events missing from the catalog, verify them against their source, and optionally commit.", { query: STR, commit: { type: "boolean" } }, ["query"]),
+  fn(
+    "discover_events",
+    "Scout the open web for events missing from the catalog, verify them against their source, and optionally commit.",
+    { query: STR, commit: { type: "boolean" } },
+    ["query"],
+  ),
   fn("show_on_map", "Pin events on the user's live map by id.", { ids: IDS }, ["ids"]),
-  fn("propose_calendar", "Draft calendar invites for events, for the user to confirm.", { ids: IDS }, ["ids"]),
-  fn("set_filters", "Reshape the user's live map filters.", { free_only: { type: "boolean" }, rare_only: { type: "boolean" }, farmers: STR, hide_categories: IDS, near_minutes: { type: "number" }, near: STR }),
-  fn("save_calendar", "Save confirmed events to the user's Grapevine calendar.", { ids: IDS }, ["ids"]),
-  fn("set_rarity", "Change how rare an event is considered on the map.", { id: STR, rarity: STR }, ["id", "rarity"]),
-  fn("update_interests", "Record what the visitor likes and wants less of.", { loves: IDS, avoids: IDS }),
+  fn(
+    "propose_calendar",
+    "Draft calendar invites for events, for the user to confirm.",
+    { ids: IDS },
+    ["ids"],
+  ),
+  fn("set_filters", "Reshape the user's live map filters.", {
+    free_only: { type: "boolean" },
+    rare_only: { type: "boolean" },
+    farmers: STR,
+    hide_categories: IDS,
+    near_minutes: { type: "number" },
+    near: STR,
+  }),
+  fn("save_calendar", "Save confirmed events to the user's Grapevine calendar.", { ids: IDS }, [
+    "ids",
+  ]),
+  fn("set_rarity", "Change how rare an event is considered on the map.", { id: STR, rarity: STR }, [
+    "id",
+    "rarity",
+  ]),
+  fn("update_interests", "Record what the visitor likes and wants less of.", {
+    loves: IDS,
+    avoids: IDS,
+  }),
 ];
 
 // ---------------------------------------------------------------------------
@@ -1475,17 +1703,30 @@ export function constraintViolations(turns: Turn[]): Audit {
       if (seen.has(p.id)) continue;
       freshPicks++;
       const say = (what: string): void => {
-        out.push(`turn ${i + 1} ${turn.intent}: ${what} (${p.title}, ${priceLabel(p)}, ${p.hood ?? "no hood"})`);
+        out.push(
+          `turn ${i + 1} ${turn.intent}: ${what} (${p.title}, ${priceLabel(p)}, ${p.hood ?? "no hood"})`,
+        );
       };
       if (q.free && !p.is_free) say("free thread answered with a paid event");
-      if (q.kids && !KID_TAGS.test(`${p.tags.join(" ")} ${p.title}`) && p.category !== "market" && p.category !== "community") {
+      if (
+        q.kids &&
+        !KID_TAGS.test(`${p.tags.join(" ")} ${p.title}`) &&
+        p.category !== "market" &&
+        p.category !== "community"
+      ) {
         say("kid-friendly thread answered with an event that is not");
       }
-      if (q.hood && p.hood !== q.hood) say(`${q.hood} thread answered with something in ${p.hood ?? "no hood"}`);
-      if (q.maxDollars !== undefined && !turn.query?.free && (p.dollars === null || p.dollars > q.maxDollars)) {
+      if (q.hood && p.hood !== q.hood)
+        say(`${q.hood} thread answered with something in ${p.hood ?? "no hood"}`);
+      if (
+        q.maxDollars !== undefined &&
+        !turn.query?.free &&
+        (p.dollars === null || p.dollars > q.maxDollars)
+      ) {
         say(`under-$${q.maxDollars} thread answered with something dearer`);
       }
-      if (q.dow && !q.dow.includes(ptWeekday(p.startMs))) say("wrong night for what the thread asked");
+      if (q.dow && !q.dow.includes(ptWeekday(p.startMs)))
+        say("wrong night for what the thread asked");
     }
   }
   return { violations: out, constrained, freshPicks };

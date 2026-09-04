@@ -219,9 +219,7 @@ async function allModels(): Promise<ModelRow[]> {
 
 async function ensureLocalModels(): Promise<void> {
   const existing = await allModels();
-  const byName = new Map(
-    existing.filter((m) => !m.isLangfuseManaged).map((m) => [m.modelName, m]),
-  );
+  const byName = new Map(existing.filter((m) => !m.isLangfuseManaged).map((m) => [m.modelName, m]));
   for (const m of LOCAL_MODELS) {
     const body = {
       modelName: m.modelName,
@@ -310,7 +308,13 @@ function clearModelMatchCache(): void {
   try {
     const before = execFileSync(
       "docker",
-      ["exec", "langfuse-redis-1", "sh", "-lc", `${cli} KEYS 'model-price-tiers:grapevine-local:*'`],
+      [
+        "exec",
+        "langfuse-redis-1",
+        "sh",
+        "-lc",
+        `${cli} KEYS 'model-price-tiers:grapevine-local:*'`,
+      ],
       { encoding: "utf8" },
     )
       .split(/\r?\n/)
@@ -1023,7 +1027,10 @@ const PROMPTS: PromptSpec[] = [
         type: "chat",
         prompt: [
           { role: "system", content: "{{system_prompt}}" },
-          { role: "system", content: "Earlier in this conversation (running summary): {{summary}}" },
+          {
+            role: "system",
+            content: "Earlier in this conversation (running summary): {{summary}}",
+          },
           { type: "placeholder", name: "history" },
           { role: "user", content: "{{question}}" },
         ],
@@ -1244,8 +1251,7 @@ const PROMPTS: PromptSpec[] = [
     versions: [
       {
         type: "text",
-        prompt:
-          "Tool limit reached — answer the user now using only what you've already gathered.",
+        prompt: "Tool limit reached — answer the user now using only what you've already gathered.",
         labels: ["production"],
         tags: ["agent", "tools"],
         config: { max_tool_rounds: 6, node: "finalize", source: "server/src/agent/graph.ts" },
@@ -1296,7 +1302,10 @@ const PROMPTS: PromptSpec[] = [
         prompt: REFUSALS,
         labels: ["production"],
         tags: ["guardrail", "copy"],
-        config: { source: "server/src/agent/guardrails.ts", surfaces: ["input rail", "output rail"] },
+        config: {
+          source: "server/src/agent/guardrails.ts",
+          surfaces: ["input rail", "output rail"],
+        },
         commitMessage:
           "The two canned refusals, verbatim. A refusal that breaks character to explain itself has already leaked the thing the rail was protecting, so both stay in the concierge's voice.",
       },
@@ -1359,7 +1368,9 @@ async function ensurePrompts(): Promise<void> {
         ...(version.config ? { config: version.config } : {}),
         commitMessage: version.commitMessage,
       } as never);
-      console.log(`prompt version created: ${spec.name} v${i + 1} [${(version.labels ?? []).join(", ") || "no label"}]`);
+      console.log(
+        `prompt version created: ${spec.name} v${i + 1} [${(version.labels ?? []).join(", ") || "no label"}]`,
+      );
     }
   }
 }

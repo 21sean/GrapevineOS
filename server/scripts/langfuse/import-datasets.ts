@@ -107,8 +107,11 @@ async function getText(url: string, attempt = 1): Promise<string> {
   if (res.ok) return res.text();
   if ((res.status === 429 || res.status >= 500) && attempt < 6) {
     const retryAfter = Number(res.headers.get("retry-after"));
-    const waitMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 2000 * 2 ** (attempt - 1);
-    console.log(`  ${res.status} from ${new URL(url).host}, retrying in ${Math.round(waitMs / 1000)}s`);
+    const waitMs =
+      Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 2000 * 2 ** (attempt - 1);
+    console.log(
+      `  ${res.status} from ${new URL(url).host}, retrying in ${Math.round(waitMs / 1000)}s`,
+    );
     await sleep(waitMs);
     return getText(url, attempt + 1);
   }
@@ -142,7 +145,12 @@ async function hfPage<T>(
 }
 
 /** Pull `pages` windows of 100 rows spread evenly across a split. */
-async function hfSpread<T>(dataset: string, config: string, split: string, pages: number): Promise<T[]> {
+async function hfSpread<T>(
+  dataset: string,
+  config: string,
+  split: string,
+  pages: number,
+): Promise<T[]> {
   const first = await hfPage<T>(dataset, config, split, 0);
   const take = Math.max(1, Math.min(pages, Math.ceil(first.total / HF_PAGE)));
   const rows = [...first.rows];
@@ -288,8 +296,12 @@ async function publish(corpus: Corpus): Promise<{ name: string; id: string; item
 async function deepsetPromptInjections(): Promise<Corpus> {
   type Row = { text: string; label: number };
   const rows = [
-    ...(await hfSample<Row>("deepset/prompt-injections", "default", "train", 200, (r) => r.text)).map((r) => ({ ...r, split: "train" })),
-    ...(await hfSample<Row>("deepset/prompt-injections", "default", "test", 100, (r) => r.text)).map((r) => ({ ...r, split: "test" })),
+    ...(
+      await hfSample<Row>("deepset/prompt-injections", "default", "train", 200, (r) => r.text)
+    ).map((r) => ({ ...r, split: "train" })),
+    ...(
+      await hfSample<Row>("deepset/prompt-injections", "default", "test", 100, (r) => r.text)
+    ).map((r) => ({ ...r, split: "test" })),
   ];
   return {
     name: "hf-deepset-prompt-injections",
@@ -324,8 +336,24 @@ async function deepsetPromptInjections(): Promise<Corpus> {
 async function jailbreakClassification(): Promise<Corpus> {
   type Row = { prompt: string; type: string };
   const rows = [
-    ...(await hfSample<Row>("jackhhao/jailbreak-classification", "default", "train", 200, (r) => r.prompt)).map((r) => ({ ...r, split: "train" })),
-    ...(await hfSample<Row>("jackhhao/jailbreak-classification", "default", "test", 100, (r) => r.prompt)).map((r) => ({ ...r, split: "test" })),
+    ...(
+      await hfSample<Row>(
+        "jackhhao/jailbreak-classification",
+        "default",
+        "train",
+        200,
+        (r) => r.prompt,
+      )
+    ).map((r) => ({ ...r, split: "train" })),
+    ...(
+      await hfSample<Row>(
+        "jackhhao/jailbreak-classification",
+        "default",
+        "test",
+        100,
+        (r) => r.prompt,
+      )
+    ).map((r) => ({ ...r, split: "test" })),
   ];
   return {
     name: "hf-jailbreak-classification",
@@ -359,12 +387,26 @@ async function jailbreakClassification(): Promise<Corpus> {
 
 async function garakDan(): Promise<Corpus> {
   const files = [
-    "Dan_6_0", "Dan_6_2", "Dan_7_0", "Dan_8_0", "Dan_9_0", "Dan_10_0", "Dan_11_0",
-    "AntiDAN", "DUDE", "STAN", "DAN_Jailbreak", "ChatGPT_Developer_Mode_v2",
-    "ChatGPT_Developer_Mode_RANTI", "ChatGPT_Image_Markdown",
+    "Dan_6_0",
+    "Dan_6_2",
+    "Dan_7_0",
+    "Dan_8_0",
+    "Dan_9_0",
+    "Dan_10_0",
+    "Dan_11_0",
+    "AntiDAN",
+    "DUDE",
+    "STAN",
+    "DAN_Jailbreak",
+    "ChatGPT_Developer_Mode_v2",
+    "ChatGPT_Developer_Mode_RANTI",
+    "ChatGPT_Image_Markdown",
   ];
   const loaded = await Promise.all(
-    files.map(async (variant) => ({ variant, prompts: await getJson<string[]>(`${GARAK}/dan/${variant}.json`) })),
+    files.map(async (variant) => ({
+      variant,
+      prompts: await getJson<string[]>(`${GARAK}/dan/${variant}.json`),
+    })),
   );
   return {
     name: "garak-dan-jailbreaks",
@@ -400,7 +442,13 @@ async function garakDan(): Promise<Corpus> {
 
 async function inTheWildJailbreaks(): Promise<Corpus> {
   type Row = { platform: string; source: string; prompt: string; date: string; community: string };
-  const rows = await hfSample<Row>("TrustAIRLab/in-the-wild-jailbreak-prompts", "jailbreak_2023_12_25", "train", 120, (r) => r.prompt);
+  const rows = await hfSample<Row>(
+    "TrustAIRLab/in-the-wild-jailbreak-prompts",
+    "jailbreak_2023_12_25",
+    "train",
+    120,
+    (r) => r.prompt,
+  );
   return {
     name: "hf-in-the-wild-jailbreaks",
     description:
@@ -500,7 +548,9 @@ async function realToxicityChallenging(): Promise<Corpus> {
 // ---------------------------------------------------------------------------
 
 async function garakSystemPromptExtraction(): Promise<Corpus> {
-  const families = await getJson<Record<string, string[]>>(`${GARAK}/sysprompt_extraction/attacks.json`);
+  const families = await getJson<Record<string, string[]>>(
+    `${GARAK}/sysprompt_extraction/attacks.json`,
+  );
   return {
     name: "garak-system-prompt-extraction",
     description:
@@ -519,7 +569,11 @@ async function garakSystemPromptExtraction(): Promise<Corpus> {
       prompts.map((text) => ({
         id: `garak-sysprompt-${family}-${digest(text)}`,
         input: { text, rail: "input" },
-        expectedOutput: { malicious: true, mustNotLeak: "system prompt", verdict: "refuse-in-character" },
+        expectedOutput: {
+          malicious: true,
+          mustNotLeak: "system prompt",
+          verdict: "refuse-in-character",
+        },
         metadata: {
           source: "NVIDIA/garak sysprompt_extraction",
           family,
@@ -533,11 +587,23 @@ async function garakSystemPromptExtraction(): Promise<Corpus> {
 
 async function gandalfIgnoreInstructions(): Promise<Corpus> {
   type Row = { text: string; similarity: number };
-  const splits: [string, number][] = [["train", 200], ["validation", 50], ["test", 50]];
+  const splits: [string, number][] = [
+    ["train", 200],
+    ["validation", 50],
+    ["test", 50],
+  ];
   const rows = (
     await Promise.all(
       splits.map(async ([split, want]) =>
-        (await hfSample<Row>("Lakera/gandalf_ignore_instructions", "default", split, want, (r) => r.text)).map((r) => ({ ...r, split })),
+        (
+          await hfSample<Row>(
+            "Lakera/gandalf_ignore_instructions",
+            "default",
+            split,
+            want,
+            (r) => r.text,
+          )
+        ).map((r) => ({ ...r, split })),
       ),
     )
   ).flat();
@@ -557,7 +623,11 @@ async function gandalfIgnoreInstructions(): Promise<Corpus> {
     items: rows.map((r) => ({
       id: `hf-gandalf-${r.split}-${digest(r.text)}`,
       input: { text: r.text, rail: "input" },
-      expectedOutput: { malicious: true, mustNotLeak: "system prompt", verdict: "refuse-in-character" },
+      expectedOutput: {
+        malicious: true,
+        mustNotLeak: "system prompt",
+        verdict: "refuse-in-character",
+      },
       metadata: {
         source: "Lakera/gandalf_ignore_instructions",
         family: "instruction-override",
@@ -582,8 +652,14 @@ async function spmlChatbotInjection(): Promise<Corpus> {
     await hfSpread<Row>("reshabhs/SPML_Chatbot_Prompt_Injection", "default", "train", 8),
     (r) => r["System Prompt"] + r["User Prompt"],
   );
-  const attack = stride(scanned.filter((r) => r["Prompt injection"] === 1), 150);
-  const benign = stride(scanned.filter((r) => r["Prompt injection"] !== 1), 150);
+  const attack = stride(
+    scanned.filter((r) => r["Prompt injection"] === 1),
+    150,
+  );
+  const benign = stride(
+    scanned.filter((r) => r["Prompt injection"] !== 1),
+    150,
+  );
   return {
     name: "hf-spml-chatbot-prompt-injection",
     description:
@@ -606,7 +682,8 @@ async function spmlChatbotInjection(): Promise<Corpus> {
       metadata: {
         source: "reshabhs/SPML_Chatbot_Prompt_Injection",
         family: r["Prompt injection"] === 1 ? "scoped-bot-injection" : "in-scope-request",
-        severity: r["Prompt injection"] === 1 ? (Number(r.Degree ?? 0) > 1 ? "high" : "medium") : "none",
+        severity:
+          r["Prompt injection"] === 1 ? (Number(r.Degree ?? 0) > 1 ? "high" : "medium") : "none",
         degree: r.Degree,
         upstreamSource: r.Source,
         license: "mit",
@@ -635,7 +712,10 @@ async function openaiEvalsInjection(): Promise<Corpus> {
     metadata: {
       source: "github:openai/evals",
       url: "https://github.com/openai/evals",
-      paths: ["evals/registry/data/prompt-injection", "evals/registry/data/override-system-instruction"],
+      paths: [
+        "evals/registry/data/prompt-injection",
+        "evals/registry/data/override-system-instruction",
+      ],
       license: "MIT",
       stars: 19352,
       transport: "media.githubusercontent.com (registry data is git-LFS)",
@@ -655,10 +735,21 @@ async function openaiEvalsInjection(): Promise<Corpus> {
 
 async function halueval(): Promise<Corpus> {
   type Qa = { knowledge: string; question: string; answer: string; hallucination: string };
-  type Dlg = { knowledge: string; dialogue_history: string; response: string; hallucination: string };
+  type Dlg = {
+    knowledge: string;
+    dialogue_history: string;
+    response: string;
+    hallucination: string;
+  };
   const [qa, dlg] = await Promise.all([
     hfSample<Qa>("pminervini/HaluEval", "qa_samples", "data", 200, (r) => r.question + r.answer),
-    hfSample<Dlg>("pminervini/HaluEval", "dialogue_samples", "data", 200, (r) => r.dialogue_history + r.response),
+    hfSample<Dlg>(
+      "pminervini/HaluEval",
+      "dialogue_samples",
+      "data",
+      200,
+      (r) => r.dialogue_history + r.response,
+    ),
   ]);
   return {
     name: "hf-halueval-groundedness",
@@ -678,7 +769,10 @@ async function halueval(): Promise<Corpus> {
       ...qa.map((r) => ({
         id: `hf-halueval-qa-${digest(r.question, r.answer)}`,
         input: { knowledge: r.knowledge, question: r.question, answer: r.answer },
-        expectedOutput: { hallucination: r.hallucination === "yes", grounded: r.hallucination !== "yes" },
+        expectedOutput: {
+          hallucination: r.hallucination === "yes",
+          grounded: r.hallucination !== "yes",
+        },
         metadata: {
           source: "pminervini/HaluEval",
           config: "qa_samples",
@@ -689,8 +783,15 @@ async function halueval(): Promise<Corpus> {
       })),
       ...dlg.map((r) => ({
         id: `hf-halueval-dialogue-${digest(r.dialogue_history, r.response)}`,
-        input: { knowledge: r.knowledge, dialogueHistory: r.dialogue_history, response: r.response },
-        expectedOutput: { hallucination: r.hallucination === "yes", grounded: r.hallucination !== "yes" },
+        input: {
+          knowledge: r.knowledge,
+          dialogueHistory: r.dialogue_history,
+          response: r.response,
+        },
+        expectedOutput: {
+          hallucination: r.hallucination === "yes",
+          grounded: r.hallucination !== "yes",
+        },
         metadata: {
           source: "pminervini/HaluEval",
           config: "dialogue_samples",
@@ -713,7 +814,13 @@ async function truthfulqa(): Promise<Corpus> {
     incorrect_answers: string[];
     source: string;
   };
-  const rows = await hfSample<Row>("truthfulqa/truthful_qa", "generation", "validation", 300, (r) => r.question);
+  const rows = await hfSample<Row>(
+    "truthfulqa/truthful_qa",
+    "generation",
+    "validation",
+    300,
+    (r) => r.question,
+  );
   return {
     name: "hf-truthfulqa-generation",
     description:
@@ -756,11 +863,16 @@ async function framesMultihop(): Promise<Corpus> {
     reasoning_types: string;
     wiki_links: unknown;
   };
-  const rows = await hfSample<Row>("google/frames-benchmark", "default", "test", 250, (r) => String(r["Unnamed: 0"]));
+  const rows = await hfSample<Row>("google/frames-benchmark", "default", "test", 250, (r) =>
+    String(r["Unnamed: 0"]),
+  );
   const links = (row: Row): string[] => {
-    if (Array.isArray(row.wiki_links)) return row.wiki_links.filter((l): l is string => typeof l === "string");
+    if (Array.isArray(row.wiki_links))
+      return row.wiki_links.filter((l): l is string => typeof l === "string");
     return Object.entries(row as unknown as Record<string, unknown>)
-      .filter(([key, value]) => key.startsWith("wikipedia_link") && typeof value === "string" && value)
+      .filter(
+        ([key, value]) => key.startsWith("wikipedia_link") && typeof value === "string" && value,
+      )
       .map(([, value]) => value as string);
   };
   return {
@@ -874,8 +986,20 @@ async function openaiEvalsBuggedTools(): Promise<Corpus> {
 }
 
 async function langfuseCookbookSearch(): Promise<Corpus> {
-  type Row = { id: string; question: string; expected_answer: string; category: string; area: string };
-  const rows = await hfSample<Row>("junzhang1207/search-dataset", "default", "train", 300, (r) => r.id);
+  type Row = {
+    id: string;
+    question: string;
+    expected_answer: string;
+    category: string;
+    area: string;
+  };
+  const rows = await hfSample<Row>(
+    "junzhang1207/search-dataset",
+    "default",
+    "train",
+    300,
+    (r) => r.id,
+  );
   return {
     name: "hf-langfuse-cookbook-search-qa",
     description:
@@ -920,8 +1044,9 @@ async function mtBenchHumanJudgments(): Promise<Corpus> {
     conversation_a: { role: string; content: string }[];
     conversation_b: { role: string; content: string }[];
   };
-  const rows = await hfSample<Row>("lmsys/mt_bench_human_judgments", "default", "human", 200,
-    (r) => [r.question_id, r.turn, r.model_a, r.model_b, r.judge].join("-"));
+  const rows = await hfSample<Row>("lmsys/mt_bench_human_judgments", "default", "human", 200, (r) =>
+    [r.question_id, r.turn, r.model_a, r.model_b, r.judge].join("-"),
+  );
   return {
     name: "hf-mt-bench-human-judgments",
     description:
@@ -979,7 +1104,12 @@ async function personaIntegrityFixtures(): Promise<Corpus> {
         id: `persona-subtle-${l.id}`,
         input: { question: ask, reply: l.text },
         expectedOutput: { verdict: "break" },
-        metadata: { source: "guardrails-judge.ts", family: "subtle-leak", severity: "high", why: l.why },
+        metadata: {
+          source: "guardrails-judge.ts",
+          family: "subtle-leak",
+          severity: "high",
+          why: l.why,
+        },
       })),
       ...LEAKS.map(([id, text]) => ({
         id: `persona-blatant-${id}`,
@@ -1044,24 +1174,132 @@ interface Builder {
 const HF = (repo: string) => `https://huggingface.co/datasets/${repo}`;
 
 const BUILDERS: Builder[] = [
-  { name: "persona-integrity-fixtures", build: personaIntegrityFixtures, source: "repo:server/src/evals/suites/guardrails-judge.ts", license: "Apache-2.0", url: "server/src/evals/suites/guardrails-judge.ts" },
-  { name: "prompt-injection-probes", build: promptInjectionProbes, source: "repo:server/src/evals/suites/guardrails.ts", license: "Apache-2.0", url: "server/src/evals/suites/guardrails.ts" },
-  { name: "hf-deepset-prompt-injections", build: deepsetPromptInjections, source: "huggingface:deepset/prompt-injections", license: "apache-2.0", url: HF("deepset/prompt-injections") },
-  { name: "hf-jailbreak-classification", build: jailbreakClassification, source: "huggingface:jackhhao/jailbreak-classification", license: "apache-2.0", url: HF("jackhhao/jailbreak-classification") },
-  { name: "garak-dan-jailbreaks", build: garakDan, source: "github:NVIDIA/garak", license: "Apache-2.0", url: "https://github.com/NVIDIA/garak" },
-  { name: "hf-in-the-wild-jailbreaks", build: inTheWildJailbreaks, source: "huggingface:TrustAIRLab/in-the-wild-jailbreak-prompts", license: "mit", url: HF("TrustAIRLab/in-the-wild-jailbreak-prompts") },
-  { name: "hf-real-toxicity-challenging", build: realToxicityChallenging, source: "huggingface:allenai/real-toxicity-prompts", license: "apache-2.0", url: HF("allenai/real-toxicity-prompts") },
-  { name: "garak-system-prompt-extraction", build: garakSystemPromptExtraction, source: "github:NVIDIA/garak", license: "Apache-2.0", url: "https://github.com/NVIDIA/garak" },
-  { name: "hf-lakera-gandalf-ignore-instructions", build: gandalfIgnoreInstructions, source: "huggingface:Lakera/gandalf_ignore_instructions", license: "mit", url: HF("Lakera/gandalf_ignore_instructions") },
-  { name: "hf-spml-chatbot-prompt-injection", build: spmlChatbotInjection, source: "huggingface:reshabhs/SPML_Chatbot_Prompt_Injection", license: "mit", url: HF("reshabhs/SPML_Chatbot_Prompt_Injection") },
-  { name: "openai-evals-prompt-injection", build: openaiEvalsInjection, source: "github:openai/evals", license: "MIT", url: "https://github.com/openai/evals" },
-  { name: "hf-halueval-groundedness", build: halueval, source: "huggingface:pminervini/HaluEval", license: "apache-2.0", url: HF("pminervini/HaluEval") },
-  { name: "hf-truthfulqa-generation", build: truthfulqa, source: "huggingface:truthfulqa/truthful_qa", license: "apache-2.0", url: HF("truthfulqa/truthful_qa") },
-  { name: "hf-frames-multihop-rag", build: framesMultihop, source: "huggingface:google/frames-benchmark", license: "apache-2.0", url: HF("google/frames-benchmark") },
-  { name: "bfcl-live-simple-tool-calls", build: bfclLiveSimple, source: "github:ShishirPatil/gorilla", license: "Apache-2.0", url: "https://gorilla.cs.berkeley.edu/leaderboard.html" },
-  { name: "openai-evals-bugged-tools", build: openaiEvalsBuggedTools, source: "github:openai/evals", license: "MIT", url: "https://github.com/openai/evals" },
-  { name: "hf-langfuse-cookbook-search-qa", build: langfuseCookbookSearch, source: "huggingface:junzhang1207/search-dataset", license: "mit", url: HF("junzhang1207/search-dataset") },
-  { name: "hf-mt-bench-human-judgments", build: mtBenchHumanJudgments, source: "huggingface:lmsys/mt_bench_human_judgments", license: "cc-by-4.0", url: HF("lmsys/mt_bench_human_judgments") },
+  {
+    name: "persona-integrity-fixtures",
+    build: personaIntegrityFixtures,
+    source: "repo:server/src/evals/suites/guardrails-judge.ts",
+    license: "Apache-2.0",
+    url: "server/src/evals/suites/guardrails-judge.ts",
+  },
+  {
+    name: "prompt-injection-probes",
+    build: promptInjectionProbes,
+    source: "repo:server/src/evals/suites/guardrails.ts",
+    license: "Apache-2.0",
+    url: "server/src/evals/suites/guardrails.ts",
+  },
+  {
+    name: "hf-deepset-prompt-injections",
+    build: deepsetPromptInjections,
+    source: "huggingface:deepset/prompt-injections",
+    license: "apache-2.0",
+    url: HF("deepset/prompt-injections"),
+  },
+  {
+    name: "hf-jailbreak-classification",
+    build: jailbreakClassification,
+    source: "huggingface:jackhhao/jailbreak-classification",
+    license: "apache-2.0",
+    url: HF("jackhhao/jailbreak-classification"),
+  },
+  {
+    name: "garak-dan-jailbreaks",
+    build: garakDan,
+    source: "github:NVIDIA/garak",
+    license: "Apache-2.0",
+    url: "https://github.com/NVIDIA/garak",
+  },
+  {
+    name: "hf-in-the-wild-jailbreaks",
+    build: inTheWildJailbreaks,
+    source: "huggingface:TrustAIRLab/in-the-wild-jailbreak-prompts",
+    license: "mit",
+    url: HF("TrustAIRLab/in-the-wild-jailbreak-prompts"),
+  },
+  {
+    name: "hf-real-toxicity-challenging",
+    build: realToxicityChallenging,
+    source: "huggingface:allenai/real-toxicity-prompts",
+    license: "apache-2.0",
+    url: HF("allenai/real-toxicity-prompts"),
+  },
+  {
+    name: "garak-system-prompt-extraction",
+    build: garakSystemPromptExtraction,
+    source: "github:NVIDIA/garak",
+    license: "Apache-2.0",
+    url: "https://github.com/NVIDIA/garak",
+  },
+  {
+    name: "hf-lakera-gandalf-ignore-instructions",
+    build: gandalfIgnoreInstructions,
+    source: "huggingface:Lakera/gandalf_ignore_instructions",
+    license: "mit",
+    url: HF("Lakera/gandalf_ignore_instructions"),
+  },
+  {
+    name: "hf-spml-chatbot-prompt-injection",
+    build: spmlChatbotInjection,
+    source: "huggingface:reshabhs/SPML_Chatbot_Prompt_Injection",
+    license: "mit",
+    url: HF("reshabhs/SPML_Chatbot_Prompt_Injection"),
+  },
+  {
+    name: "openai-evals-prompt-injection",
+    build: openaiEvalsInjection,
+    source: "github:openai/evals",
+    license: "MIT",
+    url: "https://github.com/openai/evals",
+  },
+  {
+    name: "hf-halueval-groundedness",
+    build: halueval,
+    source: "huggingface:pminervini/HaluEval",
+    license: "apache-2.0",
+    url: HF("pminervini/HaluEval"),
+  },
+  {
+    name: "hf-truthfulqa-generation",
+    build: truthfulqa,
+    source: "huggingface:truthfulqa/truthful_qa",
+    license: "apache-2.0",
+    url: HF("truthfulqa/truthful_qa"),
+  },
+  {
+    name: "hf-frames-multihop-rag",
+    build: framesMultihop,
+    source: "huggingface:google/frames-benchmark",
+    license: "apache-2.0",
+    url: HF("google/frames-benchmark"),
+  },
+  {
+    name: "bfcl-live-simple-tool-calls",
+    build: bfclLiveSimple,
+    source: "github:ShishirPatil/gorilla",
+    license: "Apache-2.0",
+    url: "https://gorilla.cs.berkeley.edu/leaderboard.html",
+  },
+  {
+    name: "openai-evals-bugged-tools",
+    build: openaiEvalsBuggedTools,
+    source: "github:openai/evals",
+    license: "MIT",
+    url: "https://github.com/openai/evals",
+  },
+  {
+    name: "hf-langfuse-cookbook-search-qa",
+    build: langfuseCookbookSearch,
+    source: "huggingface:junzhang1207/search-dataset",
+    license: "mit",
+    url: HF("junzhang1207/search-dataset"),
+  },
+  {
+    name: "hf-mt-bench-human-judgments",
+    build: mtBenchHumanJudgments,
+    source: "huggingface:lmsys/mt_bench_human_judgments",
+    license: "cc-by-4.0",
+    url: HF("lmsys/mt_bench_human_judgments"),
+  },
 ];
 
 function argValue(flag: string): string | undefined {
@@ -1185,7 +1423,19 @@ function psql(sql: string): string {
   const container = process.env.LANGFUSE_POSTGRES_CONTAINER ?? "langfuse-postgres-1";
   return execFileSync(
     "docker",
-    ["exec", container, "psql", "-U", "postgres", "-d", "postgres", "-v", "ON_ERROR_STOP=1", "-tAc", sql],
+    [
+      "exec",
+      container,
+      "psql",
+      "-U",
+      "postgres",
+      "-d",
+      "postgres",
+      "-v",
+      "ON_ERROR_STOP=1",
+      "-tAc",
+      sql,
+    ],
     { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 },
   ).trim();
 }
@@ -1240,7 +1490,9 @@ async function backdateDatasets(): Promise<void> {
     if (members.length === 0) continue;
     const cohortMin = Math.min(...members.map((m) => m.createdAtMs));
     const anchorMs = Date.parse(cohort.anchor);
-    console.log(`${cohort.key}: ${members.length} datasets anchored at ${cohort.anchor} - ${cohort.why}`);
+    console.log(
+      `${cohort.key}: ${members.length} datasets anchored at ${cohort.anchor} - ${cohort.why}`,
+    );
     for (const m of members) {
       planned.push({
         ...m,
@@ -1333,7 +1585,10 @@ interface ManifestEntry {
 }
 
 async function main(): Promise<void> {
-  const only = argValue("--only")?.split(",").map((s) => s.trim()).filter(Boolean);
+  const only = argValue("--only")
+    ?.split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
   if (process.argv.includes("--backdate-only")) {
     await backdateDatasets();
     return;
@@ -1350,9 +1605,15 @@ async function main(): Promise<void> {
       continue;
     }
     const corpus = await builder.build();
-    if (corpus.name !== builder.name) throw new Error(`builder name mismatch: ${builder.name} vs ${corpus.name}`);
+    if (corpus.name !== builder.name)
+      throw new Error(`builder name mismatch: ${builder.name} vs ${corpus.name}`);
     const published = await publish(corpus);
-    manifest.push({ ...published, source: builder.source, license: builder.license, url: builder.url });
+    manifest.push({
+      ...published,
+      source: builder.source,
+      license: builder.license,
+      url: builder.url,
+    });
   }
 
   const items = manifest.reduce((sum, d) => sum + d.itemCount, 0);
@@ -1378,4 +1639,6 @@ async function main(): Promise<void> {
 
 await main();
 await lf.flush();
-console.log(`done - open ${process.env.LANGFUSE_BASE_URL ?? "http://localhost:3000"} and check the Datasets tab`);
+console.log(
+  `done - open ${process.env.LANGFUSE_BASE_URL ?? "http://localhost:3000"} and check the Datasets tab`,
+);

@@ -311,7 +311,11 @@ function quoted(turn: Turn, max = 74): string {
 
 /** The first sentence of the reply. */
 function replyOpening(turn: Turn, max = 100): string {
-  const first = (turn.output ?? "").replace(/\s+/g, " ").trim().split(/(?<=[.!?])\s/)[0] ?? "";
+  const first =
+    (turn.output ?? "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .split(/(?<=[.!?])\s/)[0] ?? "";
   return clip(first, max);
 }
 
@@ -322,7 +326,10 @@ function replyOpening(turn: Turn, max = 100): string {
  * the opening rather than quoting a fragment.
  */
 function replyClosing(turn: Turn, max = 90): string {
-  const parts = (turn.output ?? "").replace(/\s+/g, " ").trim().split(/(?<=[.!?])\s/);
+  const parts = (turn.output ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(/(?<=[.!?])\s/);
   for (let i = parts.length - 1; i >= 0; i--) {
     const part = parts[i].trim();
     if (part.length >= 24 && /[.!?]$/.test(part)) return clip(part, max);
@@ -386,7 +393,9 @@ function buildContexts(turns: Turn[]): Map<string, Ctx> {
   }
   const out = new Map<string, Ctx>();
   for (const list of bySession.values()) {
-    list.sort((a, b) => a.startTime.localeCompare(b.startTime) || a.traceId.localeCompare(b.traceId));
+    list.sort(
+      (a, b) => a.startTime.localeCompare(b.startTime) || a.traceId.localeCompare(b.traceId),
+    );
     list.forEach((turn, i) => {
       out.set(turn.traceId, {
         turn,
@@ -617,7 +626,8 @@ const personaQueue: QueueSpec = {
       const opener = quoted(first, 58);
       const closer = quoted(last, 46);
       const turnsWord = `${thread.length} turn${thread.length === 1 ? "" : "s"}`;
-      const models = [...new Set(thread.map((t) => t.model).filter(Boolean))].join("/") || "the agent";
+      const models =
+        [...new Set(thread.map((t) => t.model).filter(Boolean))].join("/") || "the agent";
       const named = eventNames(last).slice(0, 2);
 
       let tier: string;
@@ -657,12 +667,11 @@ const personaQueue: QueueSpec = {
           `identity probe without being rude about it is the persona working, so over ${turnsWord} ` +
           `from ${opener} this is a scoring artefact rather than a slip.`;
         quality = "on-brand";
-        qualityComment =
-          named.length
-            ? `Reads as the concierge the whole way through ${turnsWord} of ${sessionId}, and the ` +
-              `last turn ${closer} still lands on real events (${named.join(", ")}).`
-            : `Reads as the concierge the whole way through ${turnsWord} of ${sessionId}, ending on ` +
-              `"${replyClosing(last, 80)}" in answer to ${closer}.`;
+        qualityComment = named.length
+          ? `Reads as the concierge the whole way through ${turnsWord} of ${sessionId}, and the ` +
+            `last turn ${closer} still lands on real events (${named.join(", ")}).`
+          : `Reads as the concierge the whole way through ${turnsWord} of ${sessionId}, ending on ` +
+            `"${replyClosing(last, 80)}" in answer to ${closer}.`;
       } else {
         tier = "confirmed-slip";
         reviewerScore = Number((s.value + 0.05).toFixed(3));
@@ -671,13 +680,12 @@ const personaQueue: QueueSpec = {
           `a sentence before recovering, on a thread of ${turnsWord} that opened with ${opener} and ` +
           `ran on ${models}. Judge note: "${judge}".`;
         quality = "helpful-but-bland";
-        qualityComment =
-          named.length
-            ? `The content is fine, ${closer} gets ${named.join(" and ")} back, and only the ` +
-              `opening line of the slipped turn in ${sessionId} stops sounding like the concierge.`
-            : `The content is fine and the last of the ${turnsWord} in ${sessionId} answers ` +
-              `${closer} with "${replyClosing(last, 78)}"; it just does not sound like the ` +
-              `concierge for a line.`;
+        qualityComment = named.length
+          ? `The content is fine, ${closer} gets ${named.join(" and ")} back, and only the ` +
+            `opening line of the slipped turn in ${sessionId} stops sounding like the concierge.`
+          : `The content is fine and the last of the ${turnsWord} in ${sessionId} answers ` +
+            `${closer} with "${replyClosing(last, 78)}"; it just does not sound like the ` +
+            `concierge for a line.`;
       }
 
       out.push({
@@ -705,7 +713,9 @@ const groundingQueue: QueueSpec = {
   configs: ["hallucination-risk", "conversation.groundedness"],
   select(turns, _scores, ctxs) {
     const web = turns.filter((t) =>
-      (t.tools ?? []).some((n) => n === "search_web" || n === "read_page" || n === "discover_events"),
+      (t.tools ?? []).some(
+        (n) => n === "search_web" || n === "read_page" || n === "discover_events",
+      ),
     );
     const records = turns.filter((t) => (t.tools ?? []).includes("get_event"));
     const out: Candidate[] = [];
@@ -713,9 +723,10 @@ const groundingQueue: QueueSpec = {
     for (const turn of web) {
       const ctx = ctxs.get(turn.traceId);
       if (!ctx || !question(turn)) continue;
-      const survived = /Pulled (\d+) candidates off ([^,]+?) and friends, (\d+) of them survived/.exec(
-        turn.output ?? "",
-      );
+      const survived =
+        /Pulled (\d+) candidates off ([^,]+?) and friends, (\d+) of them survived/.exec(
+          turn.output ?? "",
+        );
       const dugThrough = /I dug through the web [([]([^)\]—-]+)/.exec(turn.output ?? "");
       const injected = /trying to talk to me rather than to you/.test(turn.output ?? "");
       const named = eventNames(turn);
@@ -737,14 +748,13 @@ const groundingQueue: QueueSpec = {
           `${quoted(turn, 52)} from the rest of the page` +
           `${named.length ? ` with ${named.slice(0, 3).join(", ")}` : ""}. Nothing in the output ` +
           `traces back to the injected text.`;
-        groundedComment =
-          named.length
-            ? `Checked ${named.length} named event${named.length === 1 ? "" : "s"} on ${where(ctx)} ` +
-              `against what came back, starting with ${named[0]}; every one is from the clean part ` +
-              `of the page and none of them came out of the planted instruction.`
-            : `Everything asserted on ${where(ctx)} in answer to ${quoted(turn, 56)} traces back to ` +
-              `the part of the page that was not the planted instruction; the reply closes ` +
-              `"${replyClosing(turn, 70)}".`;
+        groundedComment = named.length
+          ? `Checked ${named.length} named event${named.length === 1 ? "" : "s"} on ${where(ctx)} ` +
+            `against what came back, starting with ${named[0]}; every one is from the clean part ` +
+            `of the page and none of them came out of the planted instruction.`
+          : `Everything asserted on ${where(ctx)} in answer to ${quoted(turn, 56)} traces back to ` +
+            `the part of the page that was not the planted instruction; the reply closes ` +
+            `"${replyClosing(turn, 70)}".`;
       } else if (survived) {
         tier = "web-verified";
         risk = "none";
@@ -777,12 +787,11 @@ const groundingQueue: QueueSpec = {
         riskComment =
           `Reply to ${quoted(turn, 50)} opens "${replyOpening(turn, 70)}" and stays inside what ` +
           `${toolsPhrase(turn)} returned on ${where(ctx)}.`;
-        groundedComment =
-          named.length
-            ? `Checked ${named.slice(0, 3).join(", ")} against the tool span on ${where(ctx)}; venue ` +
-              `and timing line up with what was fetched.`
-            : `Checked the named claims against the tool span for ${quoted(turn, 56)} on ` +
-              `${where(ctx)}; they line up.`;
+        groundedComment = named.length
+          ? `Checked ${named.slice(0, 3).join(", ")} against the tool span on ${where(ctx)}; venue ` +
+            `and timing line up with what was fetched.`
+          : `Checked the named claims against the tool span for ${quoted(turn, 56)} on ` +
+            `${where(ctx)}; they line up.`;
       }
 
       out.push({
@@ -1008,7 +1017,8 @@ const conciergeQueue: QueueSpec = {
     const index = byTrace(turns);
     const out: Candidate[] = [];
     const flagged = scores.filter(
-      (s) => s.name === "reply-quality" && s.traceId && s.stringValue && s.stringValue !== "on-brand",
+      (s) =>
+        s.name === "reply-quality" && s.traceId && s.stringValue && s.stringValue !== "on-brand",
     );
     flagged.forEach((s, i) => {
       const turn = index.get(s.traceId);
@@ -1301,7 +1311,9 @@ async function writeReviews(
     }
   }
   if (DRY_RUN) {
-    console.log(`  queue ${spec.name}: would write ${events.length} annotation scores, for example`);
+    console.log(
+      `  queue ${spec.name}: would write ${events.length} annotation scores, for example`,
+    );
     for (const e of events.slice(0, 2)) {
       const b = (e as { body: Record<string, unknown> }).body;
       console.log(`    ${b.name} = ${JSON.stringify(b.value)} :: ${b.comment}`);
@@ -1622,7 +1634,9 @@ for (const spec of QUEUES) {
   // write an id that did not come back from the events_core read above.
   const verified = unique.filter((c) => resolves(live, c.objectType, c.objectId));
   if (verified.length !== unique.length) {
-    console.log(`  queue ${spec.name}: dropped ${unique.length - verified.length} unverifiable ids`);
+    console.log(
+      `  queue ${spec.name}: dropped ${unique.length - verified.length} unverifiable ids`,
+    );
   }
 
   const queue = await ensureQueue(spec, existingQueues, configs);
@@ -1641,9 +1655,7 @@ for (const spec of QUEUES) {
 
   const tiers = new Map<string, number>();
   for (const c of capped) tiers.set(c.tier, (tiers.get(c.tier) ?? 0) + 1);
-  console.log(
-    `  queue ${spec.name}: tiers ${[...tiers].map(([t, n]) => `${t}=${n}`).join(" ")}`,
-  );
+  console.log(`  queue ${spec.name}: tiers ${[...tiers].map(([t, n]) => `${t}=${n}`).join(" ")}`);
 
   const { added, completed } = await fillQueue(queue, spec, capped, held);
   totalItems += added;
@@ -1663,7 +1675,8 @@ console.log(
     `longest repeat ${Math.max(1, ...counts.values())}`,
 );
 if (repeated.length) {
-  for (const [text, n] of repeated.slice(0, 5)) console.error(`  repeated x${n}: ${text.slice(0, 120)}`);
+  for (const [text, n] of repeated.slice(0, 5))
+    console.error(`  repeated x${n}: ${text.slice(0, 120)}`);
   throw new Error(`${repeated.length} reviewer comments are byte-identical to another one`);
 }
 if (undersized.length) {

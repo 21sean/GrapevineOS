@@ -144,7 +144,7 @@ const MAX_TOOL_ROUNDS = 6;
 /** How many out-of-window messages accumulate before the recall node folds
  *  them into the running summary. Bounds the extra generation to at most one
  *  per few turns instead of one per turn. */
-const SUMMARY_STRIDE = 8;
+export const SUMMARY_STRIDE = 8;
 
 /** The fold itself is bounded: a summary that takes half the turn budget is
  *  worse than a lost detail. On abort the fold is skipped, never the turn. */
@@ -167,7 +167,7 @@ const modelRetry: RetryPolicy = {
  * that split across chunk boundaries. Some models emit these even with the
  * thinking flag off.
  */
-function thinkStripper(): (chunk: string) => string {
+export function thinkStripper(): (chunk: string) => string {
   let inThink = false;
   let pending = "";
   const partialSuffix = (s: string, tag: string): string => {
@@ -209,7 +209,7 @@ function thinkStripper(): (chunk: string) => string {
 }
 
 /** How much thread history the model sees; older turns stay checkpointed. */
-const HISTORY_WINDOW = 24;
+export const HISTORY_WINDOW = 24;
 
 /** Durable: threads survive restarts. Fails soft to per-process memory. */
 const checkpointer = new SupabaseSaver();
@@ -302,11 +302,33 @@ export interface GraphDeps {
 }
 
 /** Trailing window that never starts on an orphaned tool result. */
-function windowed(messages: BaseMessage[]): BaseMessage[] {
+export function windowed(messages: BaseMessage[]): BaseMessage[] {
   if (messages.length <= HISTORY_WINDOW) return messages;
   const recent = [...messages.slice(-HISTORY_WINDOW)];
   while (recent.length && recent[0].getType() === "tool") recent.shift();
   return recent;
+}
+
+/**
+ * How many messages have scrolled out of the window since the last fold, or
+ * null when fewer than SUMMARY_STRIDE have, so the recall node folds at most
+ * once every few turns rather than every turn.
+ */
+export function recallOverflow(messageCount: number, summarized: number): number | null {
+  const overflow = messageCount - HISTORY_WINDOW;
+  return overflow - summarized >= SUMMARY_STRIDE ? overflow : null;
+}
+
+/** After the model: tools when it asked for any, otherwise the turn is over. */
+export function routeAfterAgent(state: Pick<State, "messages">): "tools" | typeof END {
+  const last = state.messages[state.messages.length - 1];
+  if (!last) return END;
+  return isAIMessage(last) && last.tool_calls?.length ? "tools" : END;
+}
+
+/** After the content rail: back to the model, or to the no-tools finalize once the budget is spent. */
+export function routeAfterRail(state: Pick<State, "toolRounds">): "agent" | "finalize" {
+  return state.toolRounds >= MAX_TOOL_ROUNDS ? "finalize" : "agent";
 }
 
 // ---------------------------------------------------------------------------
@@ -504,7 +526,8 @@ export function buildAgentGraph(deps: GraphDeps) {
       emit(config, {
         type: "notice",
         code: "guardrails",
-        message: "The reply broke character (model identity leak) and was replaced by the persona rail.",
+        message:
+          "The reply broke character (model identity leak) and was replaced by the persona rail.",
       });
       const refusal = personaRefusalMessage(city);
       emit(config, { type: "replace", text: refusal });
@@ -594,8 +617,8 @@ export function buildAgentGraph(deps: GraphDeps) {
    */
   async function recallNode(state: State, config: LangGraphRunnableConfig) {
     if (!llm) return {};
-    const overflow = state.messages.length - HISTORY_WINDOW;
-    if (overflow - state.summarized < SUMMARY_STRIDE) return {};
+    const overflow = recallOverflow(state.messages.length, state.summarized);
+    if (overflow === null) return {};
     const fold = state.messages
       .slice(state.summarized, overflow)
       .map((m) => {
@@ -771,15 +794,6 @@ export function buildAgentGraph(deps: GraphDeps) {
     return replacements.length ? { messages: replacements } : {};
   }
 
-  function routeAfterAgent(state: State): "tools" | typeof END {
-    const last = state.messages[state.messages.length - 1];
-    return isAIMessage(last) && last.tool_calls?.length ? "tools" : END;
-  }
-
-  function routeAfterRail(state: State): "agent" | "finalize" {
-    return state.toolRounds >= MAX_TOOL_ROUNDS ? "finalize" : "agent";
-  }
-
   // One policy per provider (budget.ts): CLI models get a longer idle leash
   // (their tool phases stream nothing) and no retry (a re-run spends real
   // subscription tokens on a duplicate turn).
@@ -788,24 +802,26 @@ export function buildAgentGraph(deps: GraphDeps) {
     ? { timeout: { idleTimeout: policy.idleTimeoutMs } }
     : { retryPolicy: modelRetry, timeout: { idleTimeout: policy.idleTimeoutMs } };
 
-  return new StateGraph(AgentState)
-    // No retry on the rails: a retried scan records the same decision twice,
-    // and a distribution that double-counts its retries is worse than one
-    // that misses them.
-    .addNode("input_rail", inputRailNode, { ends: ["recall", END] })
-    // Best-effort by construction (it catches everything), so no policies.
-    .addNode("recall", recallNode)
-    .addNode("agent", agentNode, modelNodePolicy)
-    // No retry/timeout here: tools stream UI frames as they run, so a re-run
-    // would duplicate them, and each call already catches its own failures.
-    .addNode("tools", toolsNode)
-    .addNode("content_rail", contentRailNode)
-    .addNode("finalize", finalizeNode, modelNodePolicy)
-    .addEdge(START, "input_rail")
-    .addEdge("recall", "agent")
-    .addConditionalEdges("agent", routeAfterAgent, ["tools", END])
-    .addEdge("tools", "content_rail")
-    .addConditionalEdges("content_rail", routeAfterRail, ["agent", "finalize"])
-    .addEdge("finalize", END)
-    .compile({ checkpointer: deps.ephemeral ? new MemorySaver() : checkpointer });
+  return (
+    new StateGraph(AgentState)
+      // No retry on the rails: a retried scan records the same decision twice,
+      // and a distribution that double-counts its retries is worse than one
+      // that misses them.
+      .addNode("input_rail", inputRailNode, { ends: ["recall", END] })
+      // Best-effort by construction (it catches everything), so no policies.
+      .addNode("recall", recallNode)
+      .addNode("agent", agentNode, modelNodePolicy)
+      // No retry/timeout here: tools stream UI frames as they run, so a re-run
+      // would duplicate them, and each call already catches its own failures.
+      .addNode("tools", toolsNode)
+      .addNode("content_rail", contentRailNode)
+      .addNode("finalize", finalizeNode, modelNodePolicy)
+      .addEdge(START, "input_rail")
+      .addEdge("recall", "agent")
+      .addConditionalEdges("agent", routeAfterAgent, ["tools", END])
+      .addEdge("tools", "content_rail")
+      .addConditionalEdges("content_rail", routeAfterRail, ["agent", "finalize"])
+      .addEdge("finalize", END)
+      .compile({ checkpointer: deps.ephemeral ? new MemorySaver() : checkpointer })
+  );
 }

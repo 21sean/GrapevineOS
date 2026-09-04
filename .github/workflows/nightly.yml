@@ -1,0 +1,40 @@
+name: nightly
+
+# The suites that need a model: the guardrail classifier, its calibration
+# against the labelled corpus, the LLM judge, and the PyRIT red team. They
+# run on a self-hosted runner with Ollama and the models installed (see
+# docs/setup.md); without one registered, the job simply waits and the
+# scheduled run times out, so the workflow only triggers on the upstream
+# repository. Run it by hand from the Actions tab on a fork that has a runner.
+on:
+  schedule:
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+
+jobs:
+  model-suites:
+    if: github.repository == '21sean/grapevine' || github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Model suites
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          MAPBOX_SECRET_TOKEN: ci-placeholder
+        run: >
+          npm run evals -- --json
+          --suite guardrails --suite guardrails-calibration
+          --suite guardrails-judge --suite guardrails-redteam
+          > nightly.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nightly-evals
+          path: nightly.json

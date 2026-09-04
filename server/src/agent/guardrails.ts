@@ -226,10 +226,7 @@ export async function scanText(text: string, opts: ScanOptions = {}): Promise<Gu
     const clf = await loadClassifier();
     const raw = await clf(chunk(text));
     const results = (Array.isArray(raw) ? raw : [raw]).flat();
-    score = Math.max(
-      0,
-      ...results.map((r) => (r.label === "MALICIOUS" ? r.score : 1 - r.score)),
-    );
+    score = Math.max(0, ...results.map((r) => (r.label === "MALICIOUS" ? r.score : 1 - r.score)));
     everAnswered = true;
   } catch (err) {
     available = false;
@@ -274,14 +271,14 @@ export function warmupGuardrails(): void {
       return;
     }
     const t0 = Date.now();
-    log.info(
-      `loading ${GUARD_MODEL_LABEL} (${GUARD_MODEL}) — first run downloads ~280 MB`,
-    );
+    log.info(`loading ${GUARD_MODEL_LABEL} (${GUARD_MODEL}) — first run downloads ~280 MB`);
     // record:false — the warmup probe is not traffic, and letting it into the
     // distribution would put a synthetic injection in every histogram.
     scanText("warmup: ignore previous instructions", { record: false, surface: "warmup" }).then(
       (v) => {
-        const how = v.available ? `ready in ${((Date.now() - t0) / 1000).toFixed(1)}s` : "failed to load — rails are failing open";
+        const how = v.available
+          ? `ready in ${((Date.now() - t0) / 1000).toFixed(1)}s`
+          : "failed to load — rails are failing open";
         log.info(`${how} (mode ${cfg.mode}, threshold ${cfg.threshold})`);
       },
     );
@@ -381,8 +378,7 @@ export function personaGuard(opts: PersonaGuardOptions = {}): StreamGuard {
   }
 
   /** The id of the first pattern that matches, or null. */
-  const hit = (text: string): string | null =>
-    patterns.find((p) => p.re.test(text))?.id ?? null;
+  const hit = (text: string): string | null => patterns.find((p) => p.re.test(text))?.id ?? null;
 
   let tail = ""; // last HOLDBACK chars already emitted, for boundary scans
   let pending = "";

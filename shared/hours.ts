@@ -27,8 +27,7 @@ const DAY_TOKENS = ["mo", "tu", "we", "th", "fr", "sa", "su"];
 
 // A leading weekday selector ("Mo-Fr", "Sa,Su", "Mo-We,Fr") then the rest of
 // the rule. An empty selector means the rule applies to every day.
-const RULE =
-  /^((?:(?:mo|tu|we|th|fr|sa|su)(?:\s*-\s*(?:mo|tu|we|th|fr|sa|su))?\s*,?\s*)*)(.*)$/i;
+const RULE = /^((?:(?:mo|tu|we|th|fr|sa|su)(?:\s*-\s*(?:mo|tu|we|th|fr|sa|su))?\s*,?\s*)*)(.*)$/i;
 
 function toMinutes(hhmm: string): number | null {
   const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm.trim());
@@ -48,7 +47,9 @@ function expandDays(selector: string): number[] {
   for (const part of text.split(",")) {
     const chunk = part.trim();
     if (!chunk) continue;
-    const range = chunk.split("-").map((s) => DAY_TOKENS.indexOf(s.trim().slice(0, 2).toLowerCase()));
+    const range = chunk
+      .split("-")
+      .map((s) => DAY_TOKENS.indexOf(s.trim().slice(0, 2).toLowerCase()));
     if (range.some((i) => i < 0)) return [];
     if (range.length === 1) {
       out.add(range[0]);

@@ -1,3 +1,4 @@
+import { readNdjson } from "./ndjson"
 import { accessToken } from "./supabase"
 import type {
   AgentCapabilities,
@@ -61,7 +62,9 @@ export const api = {
   events: () => fetch("/api/events").then((r) => json<CityEvent[]>(r)),
 
   me: () =>
-    fetch("/api/me").then((r) => json<{ user: User | null; isAdmin: boolean }>(r)),
+    fetch("/api/me").then((r) =>
+      json<{ user: User | null; isAdmin: boolean }>(r)
+    ),
 
   savePrefs: (prefs: {
     filters?: Filters
@@ -92,7 +95,7 @@ export const api = {
     const params = new URLSearchParams({ to: to.join(",") })
     if (from) params.set("from", from.join(","))
     return fetch(`/api/eta?${params}`).then((r) =>
-      json<{ minutes: number | null; km: number | null }>(r),
+      json<{ minutes: number | null; km: number | null }>(r)
     )
   },
 
@@ -101,7 +104,7 @@ export const api = {
     const params = new URLSearchParams({ minutes: String(minutes) })
     if (center) params.set("center", center.join(","))
     return fetch(`/api/isochrone?${params}`).then((r) =>
-      json<{ polygons: [number, number][][][] }>(r),
+      json<{ polygons: [number, number][][][] }>(r)
     )
   },
 
@@ -112,18 +115,18 @@ export const api = {
    */
   venue: (id: string) =>
     fetch(`/api/events/${id}/venue`).then((r) =>
-      json<{ venue: VenueDetails | null }>(r),
+      json<{ venue: VenueDetails | null }>(r)
     ),
 
   rate: (id: string) =>
     fetch(`/api/events/${id}/rate`, { method: "POST" }).then((r) =>
-      json<CityEvent>(r),
+      json<CityEvent>(r)
     ),
 
   /** The signed-in user's reactions (going / went / not for me). */
   reactions: () =>
     fetch("/api/reactions").then((r) =>
-      json<{ reactions: { eventId: string; reaction: Reaction }[] }>(r),
+      json<{ reactions: { eventId: string; reaction: Reaction }[] }>(r)
     ),
 
   setReaction: (id: string, reaction: Reaction | null) =>
@@ -135,7 +138,8 @@ export const api = {
 
   // ---------- web push (reminders + leave-by alerts + weekly digest) ----------
 
-  pushKey: () => fetch("/api/push/key").then((r) => json<{ publicKey: string }>(r)),
+  pushKey: () =>
+    fetch("/api/push/key").then((r) => json<{ publicKey: string }>(r)),
 
   pushStatus: (endpoint: string) =>
     fetch("/api/push/status", {
@@ -149,7 +153,7 @@ export const api = {
         weeklyDigest: boolean
         leaveBy: boolean
         rareFinds: boolean
-      }>(r),
+      }>(r)
     ),
 
   pushSubscribe: (
@@ -159,7 +163,7 @@ export const api = {
       weeklyDigest?: boolean
       leaveBy?: boolean
       rareFinds?: boolean
-    },
+    }
   ) =>
     fetch("/api/push/subscribe", {
       method: "POST",
@@ -174,7 +178,7 @@ export const api = {
       weeklyDigest?: boolean
       leaveBy?: boolean
       rareFinds?: boolean
-    },
+    }
   ) =>
     fetch("/api/push/prefs", {
       method: "PUT",
@@ -199,7 +203,7 @@ export const api = {
 
   ollamaHealth: () =>
     fetch("/api/ollama/health").then((r) =>
-      json<{ ok: boolean; url: string; version: string | null }>(r),
+      json<{ ok: boolean; url: string; version: string | null }>(r)
     ),
 
   ollamaModels: () =>
@@ -212,13 +216,13 @@ export const api = {
           parameterSize: string
           capabilities: string[]
         }[]
-      >(r),
+      >(r)
     ),
 
   /** CLI chat providers (claude/codex/gemini) installed on the server machine. */
   providers: (refresh = false) =>
     fetch(`/api/providers${refresh ? "?refresh=1" : ""}`).then((r) =>
-      json<{ providers: CliProviderStatus[] }>(r),
+      json<{ providers: CliProviderStatus[] }>(r)
     ),
 
   /** models.dev provider logo as raw SVG text (inlined to inherit currentColor). */
@@ -246,7 +250,7 @@ export const api = {
             vision?: boolean
           }[]
         }[]
-      >(r),
+      >(r)
     ),
 
   /** Local hardware the server detected — drives the can-it-run badges. */
@@ -257,45 +261,33 @@ export const api = {
         vramGB: number | null
         gpu: string | null
         unifiedMemory: boolean
-      }>(r),
+      }>(r)
     ),
 
   /** Streams NDJSON pull progress; calls onProgress with 0–100 (or -1 while indeterminate). */
   async pullModel(
     model: string,
-    onProgress: (pct: number, status: string) => void,
+    onProgress: (pct: number, status: string) => void
   ): Promise<void> {
     const res = await fetch("/api/ollama/pull", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model }),
     })
-    if (!res.ok || !res.body) throw new Error(await res.text())
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ""
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split("\n")
-      buffer = lines.pop() ?? ""
-      for (const line of lines) {
-        if (!line.trim()) continue
-        try {
-          const msg = JSON.parse(line)
-          if (msg.error) throw new Error(msg.error)
-          const pct =
-            msg.total && msg.completed
-              ? Math.round((msg.completed / msg.total) * 100)
-              : -1
-          onProgress(pct, msg.status ?? "")
-        } catch (err) {
-          if (err instanceof SyntaxError) continue
-          throw err
-        }
+    await readNdjson(res, (line) => {
+      const msg = line as {
+        error?: string
+        total?: number
+        completed?: number
+        status?: string
       }
-    }
+      if (msg.error) throw new Error(msg.error)
+      const pct =
+        msg.total && msg.completed
+          ? Math.round((msg.completed / msg.total) * 100)
+          : -1
+      onProgress(pct, msg.status ?? "")
+    })
   },
 
   /**
@@ -318,7 +310,7 @@ export const api = {
       effort?: string
     },
     onFrame: (frame: AgentFrame) => void,
-    signal?: AbortSignal,
+    signal?: AbortSignal
   ): Promise<void> {
     const res = await fetch("/api/agent/chat", {
       method: "POST",
@@ -326,26 +318,7 @@ export const api = {
       body: JSON.stringify(body),
       signal,
     })
-    if (!res.ok || !res.body) throw new Error(await res.text())
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ""
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split("\n")
-      buffer = lines.pop() ?? ""
-      for (const line of lines) {
-        if (!line.trim()) continue
-        try {
-          onFrame(JSON.parse(line) as AgentFrame)
-        } catch (err) {
-          if (err instanceof SyntaxError) continue
-          throw err
-        }
-      }
-    }
+    await readNdjson(res, (frame) => onFrame(frame as AgentFrame))
   },
 
   calendarStatus: () =>
@@ -353,12 +326,12 @@ export const api = {
 
   calendarAdd: (id: string) =>
     fetch(`/api/calendar/events/${id}`, { method: "POST" }).then((r) =>
-      json<CalendarStatus & { googleSynced: boolean; warning?: string }>(r),
+      json<CalendarStatus & { googleSynced: boolean; warning?: string }>(r)
     ),
 
   calendarRemove: (id: string) =>
     fetch(`/api/calendar/events/${id}`, { method: "DELETE" }).then((r) =>
-      json<CalendarStatus>(r),
+      json<CalendarStatus>(r)
     ),
 
   /** Hand the provider_refresh_token from the OAuth return to the server. */
@@ -371,13 +344,13 @@ export const api = {
 
   calendarDisconnect: () =>
     fetch("/api/calendar/google/disconnect", { method: "POST" }).then((r) =>
-      json<CalendarStatus>(r),
+      json<CalendarStatus>(r)
     ),
 
   /** The user's Google Calendar between two ISO instants (the popup window). */
   gcalEvents: (from: string, to: string) =>
     fetch(
-      `/api/calendar/google/events?${new URLSearchParams({ from, to })}`,
+      `/api/calendar/google/events?${new URLSearchParams({ from, to })}`
     ).then((r) => json<{ events: GcalEvent[] }>(r)),
 
   gcalCreate: (body: GcalEventPatch) =>
@@ -401,21 +374,23 @@ export const api = {
 
   /** Ask Grapevine history — signed-in users only, ownership checked server-side. */
   chatThreads: () =>
-    fetch("/api/chat/threads").then((r) => json<{ threads: ChatThreadMeta[] }>(r)),
+    fetch("/api/chat/threads").then((r) =>
+      json<{ threads: ChatThreadMeta[] }>(r)
+    ),
 
   chatThread: (id: string) =>
     fetch(`/api/chat/threads/${encodeURIComponent(id)}`).then((r) =>
-      json<{ id: string; messages: ChatMessage[] }>(r),
+      json<{ id: string; messages: ChatMessage[] }>(r)
     ),
 
   chatThreadDelete: (id: string) =>
-    fetch(`/api/chat/threads/${encodeURIComponent(id)}`, { method: "DELETE" }).then(
-      (r) => json<{ ok: boolean }>(r),
-    ),
+    fetch(`/api/chat/threads/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }).then((r) => json<{ ok: boolean }>(r)),
 
   inbox: () =>
     fetch("/api/inbox").then((r) =>
-      json<{ configured: boolean; emails: InboxEmail[] }>(r),
+      json<{ configured: boolean; emails: InboxEmail[] }>(r)
     ),
 
   reprocessInbox: (key: string) =>
@@ -454,7 +429,7 @@ export const api = {
 
   discoverySearches: () =>
     fetch("/api/discovery/searches").then((r) =>
-      json<{ searches: DiscoverySearch[] }>(r),
+      json<{ searches: DiscoverySearch[] }>(r)
     ),
 
   addDiscoverySearch: (query: string, cadenceHours: number) =>
@@ -467,14 +442,16 @@ export const api = {
 
   patchDiscoverySearch: (
     id: string,
-    patch: { active?: boolean; cadenceHours?: number },
+    patch: { active?: boolean; cadenceHours?: number }
   ) =>
     fetch(`/api/discovery/searches/${encodeURIComponent(id)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...(patch.active !== undefined && { active: patch.active }),
-        ...(patch.cadenceHours !== undefined && { cadence_hours: patch.cadenceHours }),
+        ...(patch.cadenceHours !== undefined && {
+          cadence_hours: patch.cadenceHours,
+        }),
       }),
     }).then((r) => json<DiscoverySearch>(r)),
 
@@ -503,7 +480,7 @@ export const api = {
   async runEvals(
     suites: string[] | undefined,
     onFrame: (frame: EvalFrame) => void,
-    signal?: AbortSignal,
+    signal?: AbortSignal
   ): Promise<void> {
     const res = await fetch("/api/evals/run", {
       method: "POST",
@@ -511,32 +488,13 @@ export const api = {
       body: JSON.stringify(suites?.length ? { suites } : {}),
       signal,
     })
-    if (!res.ok || !res.body) throw new Error(await res.text())
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ""
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split("\n")
-      buffer = lines.pop() ?? ""
-      for (const line of lines) {
-        if (!line.trim()) continue
-        try {
-          onFrame(JSON.parse(line) as EvalFrame)
-        } catch (err) {
-          if (err instanceof SyntaxError) continue
-          throw err
-        }
-      }
-    }
+    await readNdjson(res, (frame) => onFrame(frame as EvalFrame))
   },
 
   /** Past conversations, each with its rail decisions and newest eval. */
   conversationMonitor: (limit = 25) =>
     fetch(`/api/evals/conversations?limit=${limit}`).then((r) =>
-      json<{ threads: ConversationMonitorRow[] }>(r),
+      json<{ threads: ConversationMonitorRow[] }>(r)
     ),
 
   /** Judge one thread on the local Ollama judge. Tens of seconds — spin. */
@@ -553,25 +511,32 @@ export const api = {
    * makes the drift number a comparison rather than a vibe.
    */
   guardrails: (windowDays = 7) =>
-    fetch(`/api/guardrails?window=${windowDays}`).then((r) => json<GuardrailDashboard>(r)),
+    fetch(`/api/guardrails?window=${windowDays}`).then((r) =>
+      json<GuardrailDashboard>(r)
+    ),
 
   /** The review queue. Highest-scoring unlabelled decisions by default. */
-  guardrailScans: (params: {
-    rail?: GuardrailRail
-    blocked?: boolean
-    unlabelled?: boolean
-    minScore?: number
-    order?: "recent" | "score"
-    limit?: number
-  } = {}) => {
+  guardrailScans: (
+    params: {
+      rail?: GuardrailRail
+      blocked?: boolean
+      unlabelled?: boolean
+      minScore?: number
+      order?: "recent" | "score"
+      limit?: number
+    } = {}
+  ) => {
     const q = new URLSearchParams()
     if (params.rail) q.set("rail", params.rail)
     if (params.blocked !== undefined) q.set("blocked", String(params.blocked))
     if (params.unlabelled) q.set("unlabelled", "true")
-    if (params.minScore !== undefined) q.set("min_score", String(params.minScore))
+    if (params.minScore !== undefined)
+      q.set("min_score", String(params.minScore))
     if (params.order) q.set("order", params.order)
     if (params.limit) q.set("limit", String(params.limit))
-    return fetch(`/api/guardrails/scans?${q}`).then((r) => json<{ scans: GuardrailScan[] }>(r))
+    return fetch(`/api/guardrails/scans?${q}`).then((r) =>
+      json<{ scans: GuardrailScan[] }>(r)
+    )
   },
 
   /** Record a judgement. `null` clears one. */
@@ -588,7 +553,9 @@ export const api = {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
-    }).then((r) => json<{ mode: GuardrailMode; threshold: number; note?: string }>(r)),
+    }).then((r) =>
+      json<{ mode: GuardrailMode; threshold: number; note?: string }>(r)
+    ),
 
   // ---------- what the chat can do, and the user's watches ----------
 
@@ -598,7 +565,9 @@ export const api = {
 
   /** The signed-in user's scheduled web searches ("watches") and the cap. */
   watches: () =>
-    fetch("/api/me/watches").then((r) => json<{ watches: DiscoverySearch[]; max: number }>(r)),
+    fetch("/api/me/watches").then((r) =>
+      json<{ watches: DiscoverySearch[]; max: number }>(r)
+    ),
 
   addWatch: (query: string, cadenceHours: number) =>
     fetch("/api/me/watches", {
@@ -607,18 +576,23 @@ export const api = {
       body: JSON.stringify({ query, cadence_hours: cadenceHours }),
     }).then((r) => json<DiscoverySearch>(r)),
 
-  patchWatch: (id: string, patch: { active?: boolean; cadenceHours?: number }) =>
+  patchWatch: (
+    id: string,
+    patch: { active?: boolean; cadenceHours?: number }
+  ) =>
     fetch(`/api/me/watches/${encodeURIComponent(id)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...(patch.active !== undefined && { active: patch.active }),
-        ...(patch.cadenceHours !== undefined && { cadence_hours: patch.cadenceHours }),
+        ...(patch.cadenceHours !== undefined && {
+          cadence_hours: patch.cadenceHours,
+        }),
       }),
     }).then((r) => json<DiscoverySearch>(r)),
 
   deleteWatch: (id: string) =>
-    fetch(`/api/me/watches/${encodeURIComponent(id)}`, { method: "DELETE" }).then((r) =>
-      json<{ ok: boolean }>(r),
-    ),
+    fetch(`/api/me/watches/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }).then((r) => json<{ ok: boolean }>(r)),
 }

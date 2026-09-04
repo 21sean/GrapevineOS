@@ -283,7 +283,8 @@ export async function stopInbox(): Promise<void> {
 }
 
 function startRealtime(): void {
-  channel = db.channel("raw_emails_inserts")
+  channel = db
+    .channel("raw_emails_inserts")
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "raw_emails" }, () => {
       realtimeDeliveries++;
       kickInbox();

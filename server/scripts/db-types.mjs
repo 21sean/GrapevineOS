@@ -15,14 +15,17 @@ const here = (rel) => fileURLToPath(new URL(rel, import.meta.url));
 
 function envValue(key) {
   if (process.env[key]) return process.env[key];
-  let text = "";
+  let text;
   try {
     text = readFileSync(here("../.env"), "utf8");
   } catch {
     return undefined;
   }
   const line = text.split(/\r?\n/).find((l) => l.startsWith(`${key}=`));
-  return line?.slice(key.length + 1).trim().replace(/^["']|["']$/g, "");
+  return line
+    ?.slice(key.length + 1)
+    .trim()
+    .replace(/^["']|["']$/g, "");
 }
 
 const url = envValue("SUPABASE_URL");
@@ -41,7 +44,9 @@ try {
   );
 } catch (err) {
   console.error(String(err.stdout ?? err.message).slice(0, 400));
-  console.error("\nThe Supabase CLI could not generate types. Run `supabase login` once, or set SUPABASE_ACCESS_TOKEN.");
+  console.error(
+    "\nThe Supabase CLI could not generate types. Run `supabase login` once, or set SUPABASE_ACCESS_TOKEN.",
+  );
   process.exit(1);
 }
 if (!types.startsWith("export type Json")) {

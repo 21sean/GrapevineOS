@@ -242,7 +242,8 @@ export function makeTools(ctx: AgentCtx, chat: ChatContext) {
         ok: true,
         saved,
         google_synced: googleSynced,
-        note: "Saved to the user's Grapevine calendar" + (googleSynced ? " and Google Calendar" : ""),
+        note:
+          "Saved to the user's Grapevine calendar" + (googleSynced ? " and Google Calendar" : ""),
       });
     },
 

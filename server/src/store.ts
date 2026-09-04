@@ -47,10 +47,7 @@ const log = logger("store");
  * local days stay distinct). Recurring events key on title + the recurrence
  * rule (a stable "series key"), so re-ingesting next week's newsletter
  * updates the one series row instead of spawning a duplicate per occurrence. */
-export function eventKey(
-  e: Pick<CityEvent, "title" | "start" | "recurrence">,
-  tz: string,
-): string {
+export function eventKey(e: Pick<CityEvent, "title" | "start" | "recurrence">, tz: string): string {
   const title = e.title.toLowerCase().replace(/[^a-z0-9]/g, "");
   const rule = normalizeRRule(e.recurrence);
   return rule ? `${title}|${rule}` : `${title}|${dayInTz(e.start, tz)}`;
@@ -122,7 +119,6 @@ function rowToGuardrailScan(r: {
     label: (r.label as GuardrailLabel | null) ?? null,
   };
 }
-
 
 function rowToEvent(r: Tables<"events">): CityEvent {
   return {
@@ -283,24 +279,14 @@ export const store = {
   },
 
   async eventById(id: string): Promise<CityEvent | undefined> {
-    const { data } = await db
-      .from("events")
-      .select("*")
-      .eq("id", id)
-      .maybeSingle()
-      .throwOnError();
+    const { data } = await db.from("events").select("*").eq("id", id).maybeSingle().throwOnError();
     return data ? rowToEvent(data) : undefined;
   },
 
   /** Removes events by id (retention sweep). Returns how many rows went. */
   async deleteEvents(ids: string[]): Promise<number> {
     if (!ids.length) return 0;
-    const { data } = await db
-      .from("events")
-      .delete()
-      .in("id", ids)
-      .select("id")
-      .throwOnError();
+    const { data } = await db.from("events").delete().in("id", ids).select("id").throwOnError();
     return data.length;
   },
 
@@ -480,7 +466,8 @@ export const store = {
    * and the TTL covers a write from another process.
    */
   async settings(): Promise<Settings> {
-    if (settingsCache && Date.now() - settingsCache.at < SETTINGS_TTL_MS) return settingsCache.value;
+    if (settingsCache && Date.now() - settingsCache.at < SETTINGS_TTL_MS)
+      return settingsCache.value;
     const value = await this.settingsUncached();
     settingsCache = { at: Date.now(), value };
     return value;
@@ -793,10 +780,10 @@ export const store = {
   },
 
   /** Decrypts the stored refresh token, or null when not connected. */
-  async googleCalendarToken(userId: string): Promise<{ refreshToken: string; scope: string } | null> {
-    const { data } = await db
-      .rpc("google_calendar_get", { p_user_id: userId })
-      .throwOnError();
+  async googleCalendarToken(
+    userId: string,
+  ): Promise<{ refreshToken: string; scope: string } | null> {
+    const { data } = await db.rpc("google_calendar_get", { p_user_id: userId }).throwOnError();
     const row = data?.[0];
     return row ? { refreshToken: row.refresh_token, scope: row.scope } : null;
   },
@@ -962,11 +949,7 @@ export const store = {
         })
         .throwOnError();
     } else {
-      await db
-        .from("chat_threads")
-        .update({ provider })
-        .eq("id", threadId)
-        .throwOnError();
+      await db.from("chat_threads").update({ provider }).eq("id", threadId).throwOnError();
     }
     await db
       .from("chat_messages")
@@ -1007,10 +990,7 @@ export const store = {
     }
     await db
       .from("event_reactions")
-      .upsert(
-        { user_id: userId, event_id: eventId, reaction },
-        { onConflict: "user_id,event_id" },
-      )
+      .upsert({ user_id: userId, event_id: eventId, reaction }, { onConflict: "user_id,event_id" })
       .throwOnError();
   },
 
@@ -1143,15 +1123,17 @@ export const store = {
    * two places a threshold is actually wrong. `rail` and `blocked` narrow it;
    * `unlabelled` hides rows somebody has already judged.
    */
-  async guardrailScans(opts: {
-    rail?: GuardrailRail;
-    blocked?: boolean;
-    unlabelled?: boolean;
-    /** Only rows at or above this score -- the near-miss band. */
-    minScore?: number;
-    order?: "recent" | "score";
-    limit?: number;
-  } = {}): Promise<GuardrailScan[]> {
+  async guardrailScans(
+    opts: {
+      rail?: GuardrailRail;
+      blocked?: boolean;
+      unlabelled?: boolean;
+      /** Only rows at or above this score -- the near-miss band. */
+      minScore?: number;
+      order?: "recent" | "score";
+      limit?: number;
+    } = {},
+  ): Promise<GuardrailScan[]> {
     let q = db
       .from("guardrail_scans")
       .select(
@@ -1228,9 +1210,7 @@ export const store = {
    * Postgres function for the same reason guardrail_stats is one.
    */
   async conversationMonitor(limit = 25): Promise<ConversationMonitorRow[]> {
-    const { data } = await db
-      .rpc("conversation_monitor", { p_limit: limit })
-      .throwOnError();
+    const { data } = await db.rpc("conversation_monitor", { p_limit: limit }).throwOnError();
     return (data ?? []) as unknown as ConversationMonitorRow[];
   },
 
@@ -1289,5 +1269,4 @@ export const store = {
       ms: data.ms,
     };
   },
-
 };

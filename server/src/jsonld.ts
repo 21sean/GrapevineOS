@@ -87,7 +87,11 @@ function typesOf(o: Record<string, unknown>): string[] {
  * object value rather than guessing a shape. `seen` guards the cyclic
  * references that @id-based graphs can produce.
  */
-function collectEvents(node: unknown, out: Record<string, unknown>[], seen = new Set<unknown>()): void {
+function collectEvents(
+  node: unknown,
+  out: Record<string, unknown>[],
+  seen = new Set<unknown>(),
+): void {
   if (Array.isArray(node)) {
     for (const n of node) collectEvents(n, out, seen);
     return;
@@ -232,7 +236,9 @@ function toCandidate(o: Record<string, unknown>, sourceUrl: string): JsonLdCandi
   const coords = geo(o);
   const { price, free, url } = pricing(o);
   const category =
-    typesOf(o).map((t) => TYPE_CATEGORY[t]).find((c): c is Category => Boolean(c)) ?? "community";
+    typesOf(o)
+      .map((t) => TYPE_CATEGORY[t])
+      .find((c): c is Category => Boolean(c)) ?? "community";
 
   const rawPerformer = prop(o, "performer");
   const performers = (Array.isArray(rawPerformer) ? rawPerformer : [rawPerformer])

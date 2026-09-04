@@ -110,7 +110,9 @@ const server = app.listen(port, () => {
   );
   logAdminPosture();
   if (mcpAuthMode() === "open") {
-    log.warn("MCP_OPEN=1: /mcp accepts unauthenticated callers, and their writes act on AGENT_USER_EMAIL");
+    log.warn(
+      "MCP_OPEN=1: /mcp accepts unauthenticated callers, and their writes act on AGENT_USER_EMAIL",
+    );
   }
   startInboxPoll();
   startPushScheduler();
@@ -118,7 +120,9 @@ const server = app.listen(port, () => {
   startRetentionSweep();
   startEvalSweep();
   warmupGuardrails();
-  startMcpServer().catch((err) => log.error({ err: String(err).slice(0, 300) }, "mcp failed to start"));
+  startMcpServer().catch((err) =>
+    log.error({ err: String(err).slice(0, 300) }, "mcp failed to start"),
+  );
 });
 
 // Shutdown order: loops stop, listening stops, chat streams are told, then

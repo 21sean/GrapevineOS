@@ -156,11 +156,25 @@ function schedulePrefsSync(get: () => GrapevineState) {
   if (!get().user) return
   clearTimeout(prefsTimer)
   prefsTimer = setTimeout(() => {
-    const { user, filters, interests, pinnedIds, hiddenIds, mutedVenues, mutedSources } =
-      get()
+    const {
+      user,
+      filters,
+      interests,
+      pinnedIds,
+      hiddenIds,
+      mutedVenues,
+      mutedSources,
+    } = get()
     if (user)
       api
-        .savePrefs({ filters, interests, pinnedIds, hiddenIds, mutedVenues, mutedSources })
+        .savePrefs({
+          filters,
+          interests,
+          pinnedIds,
+          hiddenIds,
+          mutedVenues,
+          mutedSources,
+        })
         .catch(() => {})
   }, 800)
 }
@@ -227,7 +241,9 @@ export const useGrapevine = create<GrapevineState>()(
           ? await api
               .reactions()
               .then((r) =>
-                Object.fromEntries(r.reactions.map((x) => [x.eventId, x.reaction])),
+                Object.fromEntries(
+                  r.reactions.map((x) => [x.eventId, x.reaction])
+                )
               )
               .catch(() => null)
           : null
@@ -266,7 +282,10 @@ export const useGrapevine = create<GrapevineState>()(
       setInterestsOpen: (interestsOpen) => set({ interestsOpen }),
 
       setCarousel(on) {
-        set({ carouselOn: on, ...(on && { detailOpen: false, selectedId: null }) })
+        set({
+          carouselOn: on,
+          ...(on && { detailOpen: false, selectedId: null }),
+        })
       },
 
       advanceCarousel: (carouselIdx) => set({ carouselIdx }),
@@ -279,7 +298,11 @@ export const useGrapevine = create<GrapevineState>()(
       setMapTheme: (mapTheme) => set({ mapTheme }),
 
       resetMapLayers: () =>
-        set({ mapLayers: { ...DEFAULT_MAP_LAYERS }, trafficOn: true, mapTheme: "auto" }),
+        set({
+          mapLayers: { ...DEFAULT_MAP_LAYERS },
+          trafficOn: true,
+          mapTheme: "auto",
+        }),
 
       setUserPos: (userPos) => set({ userPos }),
       setRailWidth: (railWidth) => set({ railWidth }),
@@ -290,7 +313,10 @@ export const useGrapevine = create<GrapevineState>()(
 
       setAskOpen(askOpen) {
         // Opening pauses the tour; closing retires the agent's map pins.
-        set({ askOpen, ...(askOpen ? { carouselOn: false } : { agentHighlight: null }) })
+        set({
+          askOpen,
+          ...(askOpen ? { carouselOn: false } : { agentHighlight: null }),
+        })
       },
 
       setSignInOpen: (signInOpen) => set({ signInOpen }),
@@ -311,7 +337,11 @@ export const useGrapevine = create<GrapevineState>()(
 
       setAgentHighlight(ids, fit = true) {
         set({
-          agentHighlight: { ids, fit, seq: (get().agentHighlight?.seq ?? 0) + 1 },
+          agentHighlight: {
+            ids,
+            fit,
+            seq: (get().agentHighlight?.seq ?? 0) + 1,
+          },
         })
       },
 
@@ -384,7 +414,7 @@ export const useGrapevine = create<GrapevineState>()(
       unmuteVenue(venue) {
         set({
           mutedVenues: get().mutedVenues.filter(
-            (v) => v.toLowerCase() !== venue.toLowerCase(),
+            (v) => v.toLowerCase() !== venue.toLowerCase()
           ),
         })
         schedulePrefsSync(get)
@@ -400,7 +430,7 @@ export const useGrapevine = create<GrapevineState>()(
       unmuteSource(source) {
         set({
           mutedSources: get().mutedSources.filter(
-            (v) => v.toLowerCase() !== source.toLowerCase(),
+            (v) => v.toLowerCase() !== source.toLowerCase()
           ),
         })
         schedulePrefsSync(get)
@@ -419,7 +449,10 @@ export const useGrapevine = create<GrapevineState>()(
         set({ user: null, calendar: null })
         // Whether Admin stays visible depends on who is signed in now, so ask
         // the server again rather than guess.
-        api.me().then((me) => set({ isAdmin: me.isAdmin })).catch(() => set({ isAdmin: false }))
+        api
+          .me()
+          .then((me) => set({ isAdmin: me.isAdmin }))
+          .catch(() => set({ isAdmin: false }))
       },
 
       upsertEvent(e) {
@@ -480,11 +513,12 @@ export const useGrapevine = create<GrapevineState>()(
         if (version < 5 && p && typeof p === "object") {
           p.mapLayers = {
             ...DEFAULT_MAP_LAYERS,
-            ...(p.mapLayers as Partial<Record<MapLayerKey, boolean>> | undefined),
+            ...(p.mapLayers as
+              Partial<Record<MapLayerKey, boolean>> | undefined),
           }
         }
         return persisted as GrapevineState
       },
-    },
-  ),
+    }
+  )
 )

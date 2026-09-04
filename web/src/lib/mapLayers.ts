@@ -74,5 +74,5 @@ export type MapLayerKey = (typeof BASEMAP_LAYERS)[number]["key"]
 
 /** Everything visible by default — mirrors the Standard style out of the box. */
 export const DEFAULT_MAP_LAYERS = Object.fromEntries(
-  BASEMAP_LAYERS.map((l) => [l.key, true]),
+  BASEMAP_LAYERS.map((l) => [l.key, true])
 ) as Record<MapLayerKey, boolean>

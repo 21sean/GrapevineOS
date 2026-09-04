@@ -17,7 +17,7 @@ logger.error = (msg, opts) => {
   if (code === "ECONNREFUSED" && msg.includes("proxy error")) {
     logger.warnOnce(
       "[vite] api (localhost:8787) isn't up yet — proxied requests fail until " +
-        "it binds. Normal on startup and while `tsx watch` restarts the server.",
+        "it binds. Normal on startup and while `tsx watch` restarts the server."
     )
     return
   }
@@ -36,7 +36,10 @@ const whileApiBoots: ProxyOptions["configure"] = (proxy) => {
   })
 }
 
-const api: ProxyOptions = { target: "http://localhost:8787", configure: whileApiBoots }
+const api: ProxyOptions = {
+  target: "http://localhost:8787",
+  configure: whileApiBoots,
+}
 
 // https://vite.dev/config/
 export default defineConfig({

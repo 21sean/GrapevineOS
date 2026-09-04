@@ -275,7 +275,9 @@ export async function pyritUnavailable(): Promise<string | null> {
     child.stderr.on("data", (d: Buffer) => (err += d.toString()));
     child.on("error", (e) => resolve(`could not run ${python}: ${String(e).slice(0, 120)}`));
     child.on("close", (code) =>
-      resolve(code === 0 ? null : `PyRIT is not installed — ${INSTALL_HINT}\n${err.trim().slice(-300)}`),
+      resolve(
+        code === 0 ? null : `PyRIT is not installed — ${INSTALL_HINT}\n${err.trim().slice(-300)}`,
+      ),
     );
   });
   // A failed probe is remembered too: retrying a missing virtualenv once per

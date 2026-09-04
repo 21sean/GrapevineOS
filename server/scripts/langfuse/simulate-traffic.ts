@@ -103,7 +103,10 @@ const SEED = Number(flag("seed") ?? 20260901);
 const FROM = Date.parse(`${flag("from") ?? "2026-07-05"}T00:00:00Z`);
 // Strictly before live tracing switched on, so simulated turns cannot be
 // mistaken for the three real traces the running app produced.
-const TO = Math.min(Date.parse(`${flag("to") ?? "2026-09-01"}T23:59:59Z`), LIVE_TRACING_SINCE - 60_000);
+const TO = Math.min(
+  Date.parse(`${flag("to") ?? "2026-09-01"}T23:59:59Z`),
+  LIVE_TRACING_SINCE - 60_000,
+);
 const TURN_TARGET = Number(flag("turns") ?? 1200);
 const SKIP_SCORES = has("no-scores");
 // Session-id prefix. Smoke runs use their own so their rows can be deleted
@@ -120,12 +123,12 @@ const PT_OFFSET_HOURS = 7;
 
 /** Evening peak, lunchtime bump, nobody awake between 2 and 6. */
 const HOUR_WEIGHT = [
-  0.30, 0.14, 0.04, 0.02, 0.02, 0.03, 0.10, 0.28, 0.42, 0.50, 0.55, 0.70,
-  0.95, 0.88, 0.58, 0.52, 0.62, 0.95, 1.20, 1.60, 1.55, 1.20, 0.78, 0.48,
+  0.3, 0.14, 0.04, 0.02, 0.02, 0.03, 0.1, 0.28, 0.42, 0.5, 0.55, 0.7, 0.95, 0.88, 0.58, 0.52, 0.62,
+  0.95, 1.2, 1.6, 1.55, 1.2, 0.78, 0.48,
 ];
 
 /** Thursday through Saturday carry the week. */
-const DOW_WEIGHT = [0.85, 0.58, 0.60, 0.78, 1.10, 1.40, 1.35];
+const DOW_WEIGHT = [0.85, 0.58, 0.6, 0.78, 1.1, 1.4, 1.35];
 
 /** A burst is a launch, a festival week, or a link that did the rounds. */
 const BURSTS: [string, string, number][] = [
@@ -165,7 +168,15 @@ function pickHour(rng: Rng): number {
 
 /** Many one-turn sessions, a fat tail, a few genuinely long conversations. */
 const SESSION_LENGTH: [number, number][] = [
-  [1, 34], [2, 20], [3, 15], [4, 10], [5, 7], [6, 6], [8, 4], [10, 2.5], [12, 1.5],
+  [1, 34],
+  [2, 20],
+  [3, 15],
+  [4, 10],
+  [5, 7],
+  [6, 6],
+  [8, 4],
+  [10, 2.5],
+  [12, 1.5],
 ];
 
 // ---------------------------------------------------------------------------
@@ -185,15 +196,105 @@ interface ModelSpec {
 }
 
 const MODELS: [ModelSpec, number][] = [
-  [{ model: "qwen3.6:35b-a3b-q4_K_M", genName: "qwen3.6:35b-a3b-q4_K_M", provider: "ollama", surface: "chat", ttft: [520, 2400], total: [3800, 15000] }, 30],
-  [{ model: "qwen3.6:27b", genName: "qwen3.6:27b", provider: "ollama", surface: "chat", ttft: [600, 2600], total: [4200, 17000] }, 11],
-  [{ model: "gpt-oss:120b", genName: "gpt-oss:120b", provider: "ollama", surface: "chat", ttft: [900, 3200], total: [6000, 22000] }, 7],
-  [{ model: "laguna-xs-2.1:latest", genName: "laguna-xs-2.1:latest", provider: "ollama", surface: "chat", ttft: [180, 700], total: [900, 4200] }, 5],
-  [{ model: "claude-sonnet-5", genName: "CliChatModel", provider: "claude", surface: "chat-cli", ttft: [1100, 3400], total: [5000, 21000] }, 15],
-  [{ model: "claude-opus-5", genName: "CliChatModel", provider: "claude", surface: "chat-cli", ttft: [1500, 4200], total: [8000, 30000] }, 11],
-  [{ model: "gpt-5.2", genName: "CliChatModel", provider: "codex", surface: "chat-cli", ttft: [1200, 3800], total: [6000, 24000] }, 9],
-  [{ model: "gpt-5.4-mini", genName: "CliChatModel", provider: "codex", surface: "chat-cli", ttft: [700, 2000], total: [3000, 11000] }, 6],
-  [{ model: "gemini-3-pro-preview", genName: "CliChatModel", provider: "gemini", surface: "chat-cli", ttft: [1000, 3000], total: [5000, 19000] }, 6],
+  [
+    {
+      model: "qwen3.6:35b-a3b-q4_K_M",
+      genName: "qwen3.6:35b-a3b-q4_K_M",
+      provider: "ollama",
+      surface: "chat",
+      ttft: [520, 2400],
+      total: [3800, 15000],
+    },
+    30,
+  ],
+  [
+    {
+      model: "qwen3.6:27b",
+      genName: "qwen3.6:27b",
+      provider: "ollama",
+      surface: "chat",
+      ttft: [600, 2600],
+      total: [4200, 17000],
+    },
+    11,
+  ],
+  [
+    {
+      model: "gpt-oss:120b",
+      genName: "gpt-oss:120b",
+      provider: "ollama",
+      surface: "chat",
+      ttft: [900, 3200],
+      total: [6000, 22000],
+    },
+    7,
+  ],
+  [
+    {
+      model: "laguna-xs-2.1:latest",
+      genName: "laguna-xs-2.1:latest",
+      provider: "ollama",
+      surface: "chat",
+      ttft: [180, 700],
+      total: [900, 4200],
+    },
+    5,
+  ],
+  [
+    {
+      model: "claude-sonnet-5",
+      genName: "CliChatModel",
+      provider: "claude",
+      surface: "chat-cli",
+      ttft: [1100, 3400],
+      total: [5000, 21000],
+    },
+    15,
+  ],
+  [
+    {
+      model: "claude-opus-5",
+      genName: "CliChatModel",
+      provider: "claude",
+      surface: "chat-cli",
+      ttft: [1500, 4200],
+      total: [8000, 30000],
+    },
+    11,
+  ],
+  [
+    {
+      model: "gpt-5.2",
+      genName: "CliChatModel",
+      provider: "codex",
+      surface: "chat-cli",
+      ttft: [1200, 3800],
+      total: [6000, 24000],
+    },
+    9,
+  ],
+  [
+    {
+      model: "gpt-5.4-mini",
+      genName: "CliChatModel",
+      provider: "codex",
+      surface: "chat-cli",
+      ttft: [700, 2000],
+      total: [3000, 11000],
+    },
+    6,
+  ],
+  [
+    {
+      model: "gemini-3-pro-preview",
+      genName: "CliChatModel",
+      provider: "gemini",
+      surface: "chat-cli",
+      ttft: [1000, 3000],
+      total: [5000, 19000],
+    },
+    6,
+  ],
 ];
 
 /**
@@ -216,7 +317,11 @@ function releaseFor(ms: number): string {
 
 function graphVersionFor(ms: number): string {
   const key = new Date(ms).toISOString().slice(0, 10);
-  return key < "2026-08-01" ? "agent-graph@5" : key < "2026-08-20" ? "agent-graph@6" : "agent-graph@7";
+  return key < "2026-08-01"
+    ? "agent-graph@5"
+    : key < "2026-08-20"
+      ? "agent-graph@6"
+      : "agent-graph@7";
 }
 
 /** The concierge prompt really was rewritten twice across this window. */
@@ -273,7 +378,8 @@ function buildPlan(rng: Rng): SessionPlan[] {
   const totalWeight = weights.reduce((a, b) => a + b, 0);
 
   // Sessions needed to land on the turn target, given the length mix.
-  const meanTurns = SESSION_LENGTH.reduce((s, [n, w]) => s + n * w, 0) /
+  const meanTurns =
+    SESSION_LENGTH.reduce((s, [n, w]) => s + n * w, 0) /
     SESSION_LENGTH.reduce((s, [, w]) => s + w, 0);
   const sessionTarget = Math.max(1, Math.round(TURN_TARGET / meanTurns));
 
@@ -301,9 +407,17 @@ function buildPlan(rng: Rng): SessionPlan[] {
         userName: person.name,
         startMs,
         turnCount: weighted(rng, SESSION_LENGTH),
-        environment: weighted(rng, [["default", 88], ["staging", 8], ["development", 4]] as [string, number][]),
+        environment: weighted(rng, [
+          ["default", 88],
+          ["staging", 8],
+          ["development", 4],
+        ] as [string, number][]),
         spec,
-        effort: weighted(rng, [["balanced", 70], ["quick", 20], ["deep", 10]] as [string, number][]),
+        effort: weighted(rng, [
+          ["balanced", 70],
+          ["quick", 20],
+          ["deep", 10],
+        ] as [string, number][]),
       });
     }
   });
@@ -337,7 +451,6 @@ interface TurnOutcome {
   railContent: number | null;
   turn: Turn;
 }
-
 
 /**
  * Trace identity: the attributes that have to appear on EVERY span in a turn,
@@ -461,23 +574,26 @@ function emitTurn(
 
   // --- input rail -----------------------------------------------------------
   const railMs = between(rng, 22, 90);
-  const rail = stamp(startObservation(
-    "input_rail",
-    {
-      input: { text: turn.userText, surface: spec.surface },
-      output: {
-        rail: "input",
-        score: Number(railIn.toFixed(4)),
-        decision: turn.blocked ? "blocked" : railIn > 0.45 ? "would block" : "pass",
+  const rail = stamp(
+    startObservation(
+      "input_rail",
+      {
+        input: { text: turn.userText, surface: spec.surface },
+        output: {
+          rail: "input",
+          score: Number(railIn.toFixed(4)),
+          decision: turn.blocked ? "blocked" : railIn > 0.45 ? "would block" : "pass",
+        },
+        level: turn.blocked ? "WARNING" : "DEFAULT",
+        ...(turn.blocked ? { statusMessage: `input rail blocked at ${railIn.toFixed(3)}` } : {}),
+        version,
+        environment: plan.environment,
+        metadata: nodeMeta(1, "input_rail"),
       },
-      level: turn.blocked ? "WARNING" : "DEFAULT",
-      ...(turn.blocked ? { statusMessage: `input rail blocked at ${railIn.toFixed(3)}` } : {}),
-      version,
-      environment: plan.environment,
-      metadata: nodeMeta(1, "input_rail"),
-    },
-    { startTime: new Date(t), parentSpanContext: parent, asType: "guardrail" },
-  ), ident);
+      { startTime: new Date(t), parentSpanContext: parent, asType: "guardrail" },
+    ),
+    ident,
+  );
   rail.end(new Date(t + railMs));
   spans++;
   t += railMs;
@@ -488,38 +604,60 @@ function emitTurn(
     // --- recall fold, on threads long enough to have scrolled history -------
     if (turnIndex >= 3 && rng() < 0.55) {
       const recallMs = between(rng, 900, 4200);
-      const recall = stamp(startObservation(
-        "recall",
-        {
-          input: { messages: turnIndex + 1, window: 24, stride: 8 },
-          output: { summary: `${plan.userName.split(" ")[0]} is working through ${turn.intent.replace(/-/g, " ")} options, leaning to what is nearby and not expensive.`, summarized: turnIndex - 1 },
-          level: failure?.node === "recall" ? "ERROR" : "DEFAULT",
-          ...(failure?.node === "recall" ? { statusMessage: failure.statusMessage } : {}),
-          version,
-          environment: plan.environment,
-          metadata: nodeMeta(2, "recall"),
-        },
-        { startTime: new Date(t), parentSpanContext: parent, asType: "chain" },
-      ), ident);
+      const recall = stamp(
+        startObservation(
+          "recall",
+          {
+            input: { messages: turnIndex + 1, window: 24, stride: 8 },
+            output: {
+              summary: `${plan.userName.split(" ")[0]} is working through ${turn.intent.replace(/-/g, " ")} options, leaning to what is nearby and not expensive.`,
+              summarized: turnIndex - 1,
+            },
+            level: failure?.node === "recall" ? "ERROR" : "DEFAULT",
+            ...(failure?.node === "recall" ? { statusMessage: failure.statusMessage } : {}),
+            version,
+            environment: plan.environment,
+            metadata: nodeMeta(2, "recall"),
+          },
+          { startTime: new Date(t), parentSpanContext: parent, asType: "chain" },
+        ),
+        ident,
+      );
       const recallCtx = recall.otelSpan.spanContext();
       const inTok = between(rng, 600, 2400);
       const outTok = between(rng, 40, 180);
-      const rgen = stamp(startObservation(
-        spec.genName,
-        {
-          model: spec.model,
-          modelParameters: { temperature: 0.2, num_ctx: 8192 },
-          input: [{ role: "system", content: "Fold the turns that scrolled out of the window into a running summary." }],
-          output: { role: "assistant", content: "Summary updated." },
-          usageDetails: { input: inTok, output: outTok, total: inTok + outTok },
-          completionStartTime: new Date(t + between(rng, 200, 900)),
-          prompt: { name: "thread-recall-summarizer", version: startMs < Date.parse("2026-08-10") ? 1 : 2, isFallback: false },
-          version,
-          environment: plan.environment,
-          metadata: { ls_integration: "langchain_chat_model", ls_model_type: "chat", node: "recall" },
-        },
-        { startTime: new Date(t + 30), parentSpanContext: recallCtx, asType: "generation" },
-      ), ident);
+      const rgen = stamp(
+        startObservation(
+          spec.genName,
+          {
+            model: spec.model,
+            modelParameters: { temperature: 0.2, num_ctx: 8192 },
+            input: [
+              {
+                role: "system",
+                content: "Fold the turns that scrolled out of the window into a running summary.",
+              },
+            ],
+            output: { role: "assistant", content: "Summary updated." },
+            usageDetails: { input: inTok, output: outTok, total: inTok + outTok },
+            completionStartTime: new Date(t + between(rng, 200, 900)),
+            prompt: {
+              name: "thread-recall-summarizer",
+              version: startMs < Date.parse("2026-08-10") ? 1 : 2,
+              isFallback: false,
+            },
+            version,
+            environment: plan.environment,
+            metadata: {
+              ls_integration: "langchain_chat_model",
+              ls_model_type: "chat",
+              node: "recall",
+            },
+          },
+          { startTime: new Date(t + 30), parentSpanContext: recallCtx, asType: "generation" },
+        ),
+        ident,
+      );
       rgen.end(clampEnd(new Date(t + 30), t + recallMs - 20));
       recall.end(new Date(t + recallMs));
       spans += 2;
@@ -528,34 +666,44 @@ function emitTurn(
 
     // --- event digest -------------------------------------------------------
     const digestMs = between(rng, 40, 190);
-    const digest = stamp(startObservation(
-      "digest",
-      {
-        input: { window_days: 14, filters: { city: "san-diego" }, intent: turn.intent },
-        output: { candidates: turn.picks.length, ids: turn.picks.map((p) => p.id), catalog_scanned: between(rng, 180, 1003) },
-        version,
-        environment: plan.environment,
-        metadata: { node: "digest", ls_integration: "langgraph" },
-      },
-      { startTime: new Date(t), parentSpanContext: parent, asType: "retriever" },
-    ), ident);
+    const digest = stamp(
+      startObservation(
+        "digest",
+        {
+          input: { window_days: 14, filters: { city: "san-diego" }, intent: turn.intent },
+          output: {
+            candidates: turn.picks.length,
+            ids: turn.picks.map((p) => p.id),
+            catalog_scanned: between(rng, 180, 1003),
+          },
+          version,
+          environment: plan.environment,
+          metadata: { node: "digest", ls_integration: "langgraph" },
+        },
+        { startTime: new Date(t), parentSpanContext: parent, asType: "retriever" },
+      ),
+      ident,
+    );
     const digestCtx = digest.otelSpan.spanContext();
     if (rng() < 0.18) {
       const embedMs = between(rng, 14, 70);
       const embTok = between(rng, 12, 60);
-      const emb = stamp(startObservation(
-        "embed_query",
-        {
-          model: EMBED_MODEL,
-          input: turn.userText,
-          output: { dimensions: 768 },
-          usageDetails: { input: embTok, output: 0, total: embTok },
-          version,
-          environment: plan.environment,
-          metadata: { node: "digest" },
-        },
-        { startTime: new Date(t + 5), parentSpanContext: digestCtx, asType: "embedding" },
-      ), ident);
+      const emb = stamp(
+        startObservation(
+          "embed_query",
+          {
+            model: EMBED_MODEL,
+            input: turn.userText,
+            output: { dimensions: 768 },
+            usageDetails: { input: embTok, output: 0, total: embTok },
+            version,
+            environment: plan.environment,
+            metadata: { node: "digest" },
+          },
+          { startTime: new Date(t + 5), parentSpanContext: digestCtx, asType: "embedding" },
+        ),
+        ident,
+      );
       emb.end(new Date(t + 5 + embedMs));
       spans++;
     }
@@ -578,44 +726,53 @@ function emitTurn(
       statusMessage?: string,
     ): { id: string; ms: number } => {
       const ttft = between(rng, spec.ttft[0], spec.ttft[1]);
-      const totalMs = Math.max(ttft + 120, between(rng, spec.total[0], spec.total[1]) * (withTools ? 0.55 : 1));
+      const totalMs = Math.max(
+        ttft + 120,
+        between(rng, spec.total[0], spec.total[1]) * (withTools ? 0.55 : 1),
+      );
       const inTok = between(rng, 1400, 3600) + turn.picks.length * 90;
       const outTok = withTools ? between(rng, 40, 180) : between(rng, 120, 700);
-      const gen = stamp(startObservation(
-        spec.genName,
-        {
-          model: spec.model,
-          modelParameters: {
-            temperature: plan.effort === "deep" ? 0.7 : 0.4,
-            top_p: 0.95,
-            num_ctx: 16384,
-            max_tokens: 2048,
+      const gen = stamp(
+        startObservation(
+          spec.genName,
+          {
+            model: spec.model,
+            modelParameters: {
+              temperature: plan.effort === "deep" ? 0.7 : 0.4,
+              top_p: 0.95,
+              num_ctx: 16384,
+              max_tokens: 2048,
+            },
+            input: {
+              messages: [
+                {
+                  role: "system",
+                  content: `You are Grapevine, San Diego's events concierge. Today is ${new Date(startMs).toISOString().slice(0, 10)}. Digest: ${turn.picks.length} candidate events.`,
+                },
+                { role: "user", content: turn.userText },
+              ],
+              tools: TOOL_CATALOG,
+            },
+            output,
+            usageDetails: { input: inTok, output: outTok, total: inTok + outTok },
+            completionStartTime: new Date(at + ttft),
+            prompt: promptLink,
+            level,
+            ...(statusMessage ? { statusMessage } : {}),
+            version,
+            environment: plan.environment,
+            metadata: {
+              ls_integration: "langchain_chat_model",
+              ls_model_type: "chat",
+              ls_provider: spec.genName,
+              node: label,
+              effort: plan.effort,
+            },
           },
-          input: {
-            messages: [
-              { role: "system", content: `You are Grapevine, San Diego's events concierge. Today is ${new Date(startMs).toISOString().slice(0, 10)}. Digest: ${turn.picks.length} candidate events.` },
-              { role: "user", content: turn.userText },
-            ],
-            tools: TOOL_CATALOG,
-          },
-          output,
-          usageDetails: { input: inTok, output: outTok, total: inTok + outTok },
-          completionStartTime: new Date(at + ttft),
-          prompt: promptLink,
-          level,
-          ...(statusMessage ? { statusMessage } : {}),
-          version,
-          environment: plan.environment,
-          metadata: {
-            ls_integration: "langchain_chat_model",
-            ls_model_type: "chat",
-            ls_provider: spec.genName,
-            node: label,
-            effort: plan.effort,
-          },
-        },
-        { startTime: new Date(at), parentSpanContext: parent, asType: "generation" },
-      ), ident);
+          { startTime: new Date(at), parentSpanContext: parent, asType: "generation" },
+        ),
+        ident,
+      );
       const id = gen.otelSpan.spanContext().spanId;
       gen.end(clampEnd(new Date(at), at + totalMs));
       spans++;
@@ -644,43 +801,48 @@ function emitTurn(
         },
         "DEFAULT",
       );
-      genSpanId = first.id;
       t += first.ms;
 
       const toolsMs = turn.toolCalls.reduce((s, c) => s + c.ms, 0) + 40;
-      const tools = stamp(startObservation(
-        "tools",
-        {
-          input: { calls: turn.toolCalls.map((c) => c.name) },
-          output: { round: 1, results: turn.toolCalls.length },
-          level: toolFailed ? "ERROR" : warning?.node === "tool" ? "WARNING" : "DEFAULT",
-          ...(toolFailed ? { statusMessage: failure.statusMessage } : {}),
-          ...(warning?.node === "tool" ? { statusMessage: warning.statusMessage } : {}),
-          version,
-          environment: plan.environment,
-          metadata: nodeMeta(3, "tools"),
-        },
-        { startTime: new Date(t), parentSpanContext: parent, asType: "chain" },
-      ), ident);
+      const tools = stamp(
+        startObservation(
+          "tools",
+          {
+            input: { calls: turn.toolCalls.map((c) => c.name) },
+            output: { round: 1, results: turn.toolCalls.length },
+            level: toolFailed ? "ERROR" : warning?.node === "tool" ? "WARNING" : "DEFAULT",
+            ...(toolFailed ? { statusMessage: failure.statusMessage } : {}),
+            ...(warning?.node === "tool" ? { statusMessage: warning.statusMessage } : {}),
+            version,
+            environment: plan.environment,
+            metadata: nodeMeta(3, "tools"),
+          },
+          { startTime: new Date(t), parentSpanContext: parent, asType: "chain" },
+        ),
+        ident,
+      );
       const toolsCtx = tools.otelSpan.spanContext();
       let tt = t;
       turn.toolCalls.forEach((c, i) => {
         const failThis = toolFailed && i === 0;
         const warnThis = warning?.node === "tool" && i === turn.toolCalls.length - 1;
-        const obs = stamp(startObservation(
-          c.name,
-          {
-            input: c.args,
-            output: failThis ? { error: failure.statusMessage } : c.result,
-            level: failThis ? "ERROR" : warnThis ? "WARNING" : "DEFAULT",
-            ...(failThis ? { statusMessage: failure.statusMessage } : {}),
-            ...(warnThis ? { statusMessage: warning.statusMessage } : {}),
-            version,
-            environment: plan.environment,
-            metadata: { toolCallId: `call_${plan.id}_${turnIndex}_${i}`, round: 1 },
-          },
-          { startTime: new Date(tt), parentSpanContext: toolsCtx, asType: "tool" },
-        ), ident);
+        const obs = stamp(
+          startObservation(
+            c.name,
+            {
+              input: c.args,
+              output: failThis ? { error: failure.statusMessage } : c.result,
+              level: failThis ? "ERROR" : warnThis ? "WARNING" : "DEFAULT",
+              ...(failThis ? { statusMessage: failure.statusMessage } : {}),
+              ...(warnThis ? { statusMessage: warning.statusMessage } : {}),
+              version,
+              environment: plan.environment,
+              metadata: { toolCallId: `call_${plan.id}_${turnIndex}_${i}`, round: 1 },
+            },
+            { startTime: new Date(tt), parentSpanContext: toolsCtx, asType: "tool" },
+          ),
+          ident,
+        );
         obs.end(new Date(tt + c.ms));
         spans++;
         tt += c.ms;
@@ -692,20 +854,30 @@ function emitTurn(
       // The content rail only runs when something untrusted came back.
       if (turn.fetchedWeb) {
         const crMs = between(rng, 40, 150);
-        const score = turn.intent === "indirect-injection" ? 0.72 + rng() * 0.27 : Math.pow(rng(), 3) * 0.2;
-        const cr = stamp(startObservation(
-          "content_rail",
-          {
-            input: { chars: between(rng, 2000, 28000), source: "read_page" },
-            output: { rail: "content", score: Number(score.toFixed(4)), decision: score > 0.45 ? "blocked" : "pass" },
-            level: score > 0.45 ? "WARNING" : "DEFAULT",
-            ...(score > 0.45 ? { statusMessage: `content rail neutralised fetched text at ${score.toFixed(3)}` } : {}),
-            version,
-            environment: plan.environment,
-            metadata: nodeMeta(4, "content_rail"),
-          },
-          { startTime: new Date(t), parentSpanContext: parent, asType: "guardrail" },
-        ), ident);
+        const score =
+          turn.intent === "indirect-injection" ? 0.72 + rng() * 0.27 : Math.pow(rng(), 3) * 0.2;
+        const cr = stamp(
+          startObservation(
+            "content_rail",
+            {
+              input: { chars: between(rng, 2000, 28000), source: "read_page" },
+              output: {
+                rail: "content",
+                score: Number(score.toFixed(4)),
+                decision: score > 0.45 ? "blocked" : "pass",
+              },
+              level: score > 0.45 ? "WARNING" : "DEFAULT",
+              ...(score > 0.45
+                ? { statusMessage: `content rail neutralised fetched text at ${score.toFixed(3)}` }
+                : {}),
+              version,
+              environment: plan.environment,
+              metadata: nodeMeta(4, "content_rail"),
+            },
+            { startTime: new Date(t), parentSpanContext: parent, asType: "guardrail" },
+          ),
+          ident,
+        );
         cr.end(new Date(t + crMs));
         spans++;
         t += crMs;
@@ -715,19 +887,22 @@ function emitTurn(
       // Round two: the answer, or the finalize node when the budget is spent.
       if (!toolFailed && rng() < 0.03) {
         const finMs = between(rng, 900, 4000);
-        const fin = stamp(startObservation(
-          "finalize",
-          {
-            input: { reason: "tool budget spent", rounds: 6 },
-            output: replyText,
-            level: "WARNING",
-            statusMessage: "answered without tools after 6 rounds",
-            version,
-            environment: plan.environment,
-            metadata: nodeMeta(5, "finalize"),
-          },
-          { startTime: new Date(t), parentSpanContext: parent, asType: "span" },
-        ), ident);
+        const fin = stamp(
+          startObservation(
+            "finalize",
+            {
+              input: { reason: "tool budget spent", rounds: 6 },
+              output: replyText,
+              level: "WARNING",
+              statusMessage: "answered without tools after 6 rounds",
+              version,
+              environment: plan.environment,
+              metadata: nodeMeta(5, "finalize"),
+            },
+            { startTime: new Date(t), parentSpanContext: parent, asType: "span" },
+          ),
+          ident,
+        );
         fin.end(new Date(t + finMs));
         spans++;
         t += finMs;
@@ -738,7 +913,11 @@ function emitTurn(
         false,
         { role: "assistant", content: replyText },
         toolFailed ? "ERROR" : genWarned ? "WARNING" : "DEFAULT",
-        toolFailed ? "answered without tool results" : genWarned ? warning.statusMessage : undefined,
+        toolFailed
+          ? "answered without tool results"
+          : genWarned
+            ? warning.statusMessage
+            : undefined,
       );
       genSpanId = second.id;
       t += second.ms;
@@ -759,19 +938,28 @@ function emitTurn(
     if (!failure && rng() < 0.2) {
       const orMs = between(rng, 4, 26);
       const tripped = rng() < 0.06;
-      const or = stamp(startObservation(
-        "output_rail",
-        {
-          input: { chars: replyText.length },
-          output: { rail: "output", tripped, decision: tripped ? "replaced with refusal" : "pass" },
-          level: tripped ? "WARNING" : "DEFAULT",
-          ...(tripped ? { statusMessage: "persona guard tripped on a model-identity phrase" } : {}),
-          version,
-          environment: plan.environment,
-          metadata: { node: "output_rail", deterministic: true },
-        },
-        { startTime: new Date(t), parentSpanContext: parent, asType: "guardrail" },
-      ), ident);
+      const or = stamp(
+        startObservation(
+          "output_rail",
+          {
+            input: { chars: replyText.length },
+            output: {
+              rail: "output",
+              tripped,
+              decision: tripped ? "replaced with refusal" : "pass",
+            },
+            level: tripped ? "WARNING" : "DEFAULT",
+            ...(tripped
+              ? { statusMessage: "persona guard tripped on a model-identity phrase" }
+              : {}),
+            version,
+            environment: plan.environment,
+            metadata: { node: "output_rail", deterministic: true },
+          },
+          { startTime: new Date(t), parentSpanContext: parent, asType: "guardrail" },
+        ),
+        ident,
+      );
       or.end(new Date(t + orMs));
       spans++;
       t += orMs;
@@ -786,17 +974,20 @@ function emitTurn(
     // identity attached: the worker's type mapper reads that attribute first
     // (ObservationTypeMapper.js, LangfuseObservationTypeDirectMapping priority 1).
     if (rng() < 0.015) {
-      const ev = stamp(startObservation(
-        "rate-limit-hit",
-        {
-          input: { userId: plan.userEmail },
-          level: "WARNING",
-          statusMessage: "30 messages per hour cap reached",
-          version,
-          environment: plan.environment,
-        },
-        { startTime: new Date(t), parentSpanContext: parent, asType: "span" },
-      ), { ...ident, "langfuse.observation.type": "event" });
+      const ev = stamp(
+        startObservation(
+          "rate-limit-hit",
+          {
+            input: { userId: plan.userEmail },
+            level: "WARNING",
+            statusMessage: "30 messages per hour cap reached",
+            version,
+            environment: plan.environment,
+          },
+          { startTime: new Date(t), parentSpanContext: parent, asType: "span" },
+        ),
+        { ...ident, "langfuse.observation.type": "event" },
+      );
       ev.end(new Date(t));
       spans++;
     }
@@ -805,36 +996,46 @@ function emitTurn(
   // --- inline judge -----------------------------------------------------------
   if (!turn.blocked && !failure && rng() < 0.1) {
     const evalMs = between(rng, 1500, 6500);
-    const ev = stamp(startObservation(
-      "evaluator",
-      {
-        input: { transcript_turns: turnIndex + 1, metric: "helpfulness" },
-        output: { score: Number((0.55 + rng() * 0.45).toFixed(2)), verdict: "pass" },
-        version,
-        environment: plan.environment,
-        metadata: { judge: JUDGE_MODEL, criteria: "helpfulness" },
-      },
-      { startTime: new Date(t), parentSpanContext: parent, asType: "evaluator" },
-    ), ident);
+    const ev = stamp(
+      startObservation(
+        "evaluator",
+        {
+          input: { transcript_turns: turnIndex + 1, metric: "helpfulness" },
+          output: { score: Number((0.55 + rng() * 0.45).toFixed(2)), verdict: "pass" },
+          version,
+          environment: plan.environment,
+          metadata: { judge: JUDGE_MODEL, criteria: "helpfulness" },
+        },
+        { startTime: new Date(t), parentSpanContext: parent, asType: "evaluator" },
+      ),
+      ident,
+    );
     const evCtx = ev.otelSpan.spanContext();
     const jIn = between(rng, 900, 3000);
     const jOut = between(rng, 60, 240);
-    const jgen = stamp(startObservation(
-      JUDGE_MODEL,
-      {
-        model: JUDGE_MODEL,
-        modelParameters: { temperature: 0, format: "json" },
-        input: [{ role: "system", content: "Grade the concierge on helpfulness." }],
-        output: { score: 0.82, reason: "Named real venues and respected the budget." },
-        usageDetails: { input: jIn, output: jOut, total: jIn + jOut },
-        completionStartTime: new Date(t + between(rng, 200, 800)),
-        prompt: { name: "conversation-judge/helpfulness", version: judgeVersion(startMs), isFallback: false },
-        version,
-        environment: plan.environment,
-        metadata: { judge: true },
-      },
-      { startTime: new Date(t + 20), parentSpanContext: evCtx, asType: "generation" },
-    ), ident);
+    const jgen = stamp(
+      startObservation(
+        JUDGE_MODEL,
+        {
+          model: JUDGE_MODEL,
+          modelParameters: { temperature: 0, format: "json" },
+          input: [{ role: "system", content: "Grade the concierge on helpfulness." }],
+          output: { score: 0.82, reason: "Named real venues and respected the budget." },
+          usageDetails: { input: jIn, output: jOut, total: jIn + jOut },
+          completionStartTime: new Date(t + between(rng, 200, 800)),
+          prompt: {
+            name: "conversation-judge/helpfulness",
+            version: judgeVersion(startMs),
+            isFallback: false,
+          },
+          version,
+          environment: plan.environment,
+          metadata: { judge: true },
+        },
+        { startTime: new Date(t + 20), parentSpanContext: evCtx, asType: "generation" },
+      ),
+      ident,
+    );
     jgen.end(clampEnd(new Date(t + 20), t + evalMs - 10));
     ev.end(new Date(t + evalMs));
     spans += 2;
@@ -882,11 +1083,7 @@ const JUDGE_COMMENTS = {
   ],
 } as const;
 
-function buildScores(
-  rng: Rng,
-  plan: SessionPlan,
-  outcomes: TurnOutcome[],
-): DatedScore[] {
+function buildScores(rng: Rng, plan: SessionPlan, outcomes: TurnOutcome[]): DatedScore[] {
   const out: DatedScore[] = [];
   const env = plan.environment;
 
@@ -954,7 +1151,9 @@ function buildScores(
           configId: CONFIG.userFeedback,
           environment: env,
           source: "API",
-          comment: up ? undefined : choice(rng, ["not what I asked", "those are all miles away", "wrong night"]),
+          comment: up
+            ? undefined
+            : choice(rng, ["not what I asked", "those are all miles away", "wrong night"]),
         },
       });
     }
@@ -990,7 +1189,12 @@ function buildScores(
       });
     }
     if (rng() < 0.06) {
-      const label = weighted(rng, [["on-brand", 6], ["helpful-but-bland", 3], ["off-brand", 1], ["wrong", 0.6]] as [string, number][]);
+      const label = weighted(rng, [
+        ["on-brand", 6],
+        ["helpful-but-bland", 3],
+        ["off-brand", 1],
+        ["wrong", 0.6],
+      ] as [string, number][]);
       out.push({
         at,
         body: {
@@ -1071,12 +1275,26 @@ function describe(plans: SessionPlan[], catalog: CatalogEvent[]): void {
     byEnv.set(p.environment, (byEnv.get(p.environment) ?? 0) + 1);
     turns += p.turnCount;
   }
-  console.log(`plan: ${plans.length} sessions, ~${turns} turns, ${byUser.size} visitors, catalog ${catalog.length} events`);
-  console.log(`window: ${new Date(FROM).toISOString().slice(0, 10)} .. ${new Date(TO).toISOString().slice(0, 16)}`);
+  console.log(
+    `plan: ${plans.length} sessions, ~${turns} turns, ${byUser.size} visitors, catalog ${catalog.length} events`,
+  );
+  console.log(
+    `window: ${new Date(FROM).toISOString().slice(0, 10)} .. ${new Date(TO).toISOString().slice(0, 16)}`,
+  );
   console.log(`environments: ${[...byEnv].map(([k, v]) => `${k} ${v}`).join(", ")}`);
-  console.log(`models: ${[...byModel].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(", ")}`);
+  console.log(
+    `models: ${[...byModel]
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, v]) => `${k} ${v}`)
+      .join(", ")}`,
+  );
   const top = [...byUser].sort((a, b) => b[1] - a[1]);
-  console.log(`heaviest: ${top.slice(0, 3).map(([k, v]) => `${k} ${v}`).join(", ")}; singles: ${top.filter(([, v]) => v === 1).length}`);
+  console.log(
+    `heaviest: ${top
+      .slice(0, 3)
+      .map(([k, v]) => `${k} ${v}`)
+      .join(", ")}; singles: ${top.filter(([, v]) => v === 1).length}`,
+  );
   const days = [...byDay].sort();
   console.log(`per-day sessions: ${days.map(([d, n]) => `${d.slice(5)}:${n}`).join(" ")}`);
 }
@@ -1095,7 +1313,9 @@ async function main(): Promise<void> {
   if (DRY_RUN) {
     const sample = plans[Math.floor(plans.length / 2)];
     const convo = buildConversation(rng, sample.startMs, Math.max(2, sample.turnCount), catalog);
-    console.log(`\n--- sample session ${sample.id} (${sample.userEmail}, ${sample.spec.model}, ${sample.environment}) ---`);
+    console.log(
+      `\n--- sample session ${sample.id} (${sample.userEmail}, ${sample.spec.model}, ${sample.environment}) ---`,
+    );
     convo.forEach((turn, i) => {
       console.log(`\n[turn ${i + 1}] ${turn.intent}  tags=${turn.tags.join(",")}`);
       console.log(`  user: ${turn.userText}`);
@@ -1103,24 +1323,26 @@ async function main(): Promise<void> {
       console.log(`  tools: ${turn.toolCalls.map((c) => c.name).join(", ") || "none"}`);
     });
     console.log("\n--- span tree it would emit ---");
-    console.log([
-      "ask-grapevine (AGENT)  session.id, user.id, tags, release, version, trace metadata",
-      "  (every child below carries the same session.id, user.id, trace name, tags and release)",
-      "  input_rail (GUARDRAIL)",
-      "  recall (CHAIN)            [threads past turn 3]",
-      `    ${sample.spec.genName} (GENERATION)  prompt thread-recall-summarizer`,
-      "  digest (RETRIEVER)",
-      "    embed_query (EMBEDDING) [about 1 turn in 6]",
-      `  ${sample.spec.genName} (GENERATION)  tools + tool_calls, usage, TTFT, prompt grapevine-concierge`,
-      "  tools (CHAIN)",
-      "    search_events / show_on_map / ... (TOOL)",
-      "  content_rail (GUARDRAIL)  [turns that fetched a page]",
-      `  ${sample.spec.genName} (GENERATION)  the answer`,
-      "  output_rail (GUARDRAIL)   [about 1 turn in 5]",
-      "  rate-limit-hit (EVENT)    [rare]",
-      "  evaluator (EVALUATOR)     [about 1 turn in 10]",
-      `    ${JUDGE_MODEL} (GENERATION)  prompt conversation-judge/helpfulness`,
-    ].join("\n"));
+    console.log(
+      [
+        "ask-grapevine (AGENT)  session.id, user.id, tags, release, version, trace metadata",
+        "  (every child below carries the same session.id, user.id, trace name, tags and release)",
+        "  input_rail (GUARDRAIL)",
+        "  recall (CHAIN)            [threads past turn 3]",
+        `    ${sample.spec.genName} (GENERATION)  prompt thread-recall-summarizer`,
+        "  digest (RETRIEVER)",
+        "    embed_query (EMBEDDING) [about 1 turn in 6]",
+        `  ${sample.spec.genName} (GENERATION)  tools + tool_calls, usage, TTFT, prompt grapevine-concierge`,
+        "  tools (CHAIN)",
+        "    search_events / show_on_map / ... (TOOL)",
+        "  content_rail (GUARDRAIL)  [turns that fetched a page]",
+        `  ${sample.spec.genName} (GENERATION)  the answer`,
+        "  output_rail (GUARDRAIL)   [about 1 turn in 5]",
+        "  rate-limit-hit (EVENT)    [rare]",
+        "  evaluator (EVALUATOR)     [about 1 turn in 10]",
+        `    ${JUDGE_MODEL} (GENERATION)  prompt conversation-judge/helpfulness`,
+      ].join("\n"),
+    );
     console.log("\ndry run: nothing was ingested.");
     return;
   }
@@ -1145,7 +1367,9 @@ async function main(): Promise<void> {
     }
     console.log(`
 audit: ${checked} turns across ${plans.length} conversations`);
-    console.log(`  ${constrained} follow-ups inherited a real constraint, ${freshPicks} newly named events checked`);
+    console.log(
+      `  ${constrained} follow-ups inherited a real constraint, ${freshPicks} newly named events checked`,
+    );
     console.log(`  ${found.length} constraint violations`);
     for (const line of found.slice(0, 40)) console.log(`  ${line}`);
     if (found.length > 40) console.log(`  ... and ${found.length - 40} more`);
@@ -1186,7 +1410,9 @@ audit: ${checked} turns across ${plans.length} conversations`);
 
   console.log(`flushing ${spans} spans...`);
   await finishTracing();
-  console.log(`ingested ${turns} turns / ${spans} spans in ${Math.round((Date.now() - started) / 1000)}s`);
+  console.log(
+    `ingested ${turns} turns / ${spans} spans in ${Math.round((Date.now() - started) / 1000)}s`,
+  );
 
   if (!SKIP_SCORES) {
     console.log(`posting ${scores.length} backdated scores...`);

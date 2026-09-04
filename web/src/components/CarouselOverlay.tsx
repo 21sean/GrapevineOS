@@ -51,10 +51,10 @@ export function CarouselOverlay() {
   // Derived primitives instead of the raw clock: a tick re-renders the card
   // only when the live flag or the printed time range actually changes.
   const live = useGrapevine((s) =>
-    event ? isLive(event, s.now, s.settings?.tz ?? "UTC") : false,
+    event ? isLive(event, s.now, s.settings?.tz ?? "UTC") : false
   )
   const range = useGrapevine((s) =>
-    event ? timeRange(event, s.settings?.tz ?? "UTC", s.now) : "",
+    event ? timeRange(event, s.settings?.tz ?? "UTC", s.now) : ""
   )
 
   // Touch: a horizontal flick on the card is the mobile prev/next. The card
@@ -70,7 +70,13 @@ export function CarouselOverlay() {
 
   const onSwipeStart = (e: React.PointerEvent) => {
     if (!isMobile) return
-    swipe.current = { pointerId: e.pointerId, x: e.clientX, y: e.clientY, dx: 0, active: false }
+    swipe.current = {
+      pointerId: e.pointerId,
+      x: e.clientX,
+      y: e.clientY,
+      dx: 0,
+      active: false,
+    }
   }
 
   const onSwipeMove = (e: React.PointerEvent) => {
@@ -110,7 +116,9 @@ export function CarouselOverlay() {
     el.style.transform = ""
     if (s.active && Math.abs(s.dx) > SWIPE_COMMIT && tour.length > 1) {
       advanceCarousel(
-        s.dx < 0 ? (idx + 1) % tour.length : (idx - 1 + tour.length) % tour.length,
+        s.dx < 0
+          ? (idx + 1) % tour.length
+          : (idx - 1 + tour.length) % tour.length
       )
     }
   }
@@ -161,7 +169,7 @@ export function CarouselOverlay() {
         style={isMobile ? { bottom: MOBILE_BOTTOM } : undefined}
         className={cn(
           "glass absolute left-1/2 z-10 -translate-x-1/2 rounded-full",
-          !isMobile && "bottom-6",
+          !isMobile && "bottom-6"
         )}
       >
         <button
@@ -192,7 +200,7 @@ export function CarouselOverlay() {
         "glass absolute z-10 overflow-hidden rounded-xl",
         isMobile
           ? "inset-x-3 touch-none transition-transform duration-200 select-none"
-          : "bottom-6 left-1/2 max-w-[calc(100vw-2rem)] -translate-x-1/2",
+          : "bottom-6 left-1/2 max-w-[calc(100vw-2rem)] -translate-x-1/2"
       )}
     >
       {/* scraped artwork as a dimmed backdrop; dominant color while it loads */}

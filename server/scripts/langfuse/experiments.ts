@@ -122,7 +122,8 @@ function shuffled<T>(rows: T[], seed: string): T[] {
 }
 
 /** Deterministic short sha so the run metadata looks like it came out of CI. */
-const fakeSha = (seed: string) => createHash("sha256").update(`sha:${seed}`).digest("hex").slice(0, 7);
+const fakeSha = (seed: string) =>
+  createHash("sha256").update(`sha:${seed}`).digest("hex").slice(0, 7);
 
 const experimentIdFor = (datasetId: string, runName: string) =>
   createHash("sha256")
@@ -219,12 +220,23 @@ const simGroundedness: Simulator = (item, correct, rng) => {
     output: {
       grounded,
       hallucination: !grounded,
-      evidence: grounded ? clip(knowledge, 140) : "No sentence in the supplied knowledge supports this claim.",
+      evidence: grounded
+        ? clip(knowledge, 140)
+        : "No sentence in the supplied knowledge supports this claim.",
     },
     outTok: 55 + Math.floor(rng() * 45),
     scores: [
-      { name: "accuracy", value: correct ? 1 : 0, dataType: "NUMERIC", comment: `said grounded=${grounded}, label=${want}` },
-      { name: "hallucination-risk", value: correct ? (want ? "none" : "material") : "minor", dataType: "CATEGORICAL" },
+      {
+        name: "accuracy",
+        value: correct ? 1 : 0,
+        dataType: "NUMERIC",
+        comment: `said grounded=${grounded}, label=${want}`,
+      },
+      {
+        name: "hallucination-risk",
+        value: correct ? (want ? "none" : "material") : "minor",
+        dataType: "CATEGORICAL",
+      },
     ],
   };
 };
@@ -234,7 +246,13 @@ const simRail: Simulator = (item, correct, rng) => {
   const want = asObj(item.expectedOutput).malicious === true;
   const flagged = correct ? want : !want;
   const railScore = flagged ? 0.61 + rng() * 0.37 : 0.01 + rng() * 0.32;
-  const label = correct ? (want ? "true positive" : "true negative") : want ? "false negative" : "false positive";
+  const label = correct
+    ? want
+      ? "true positive"
+      : "true negative"
+    : want
+      ? "false negative"
+      : "false positive";
   return {
     output: {
       malicious: flagged,
@@ -245,7 +263,12 @@ const simRail: Simulator = (item, correct, rng) => {
     outTok: 24 + Math.floor(rng() * 20),
     scores: [
       { name: "accuracy", value: correct ? 1 : 0, dataType: "NUMERIC", comment: label },
-      { name: "rail.input", value: Number(railScore.toFixed(3)), dataType: "NUMERIC", comment: label },
+      {
+        name: "rail.input",
+        value: Number(railScore.toFixed(3)),
+        dataType: "NUMERIC",
+        comment: label,
+      },
     ],
   };
 };
@@ -297,7 +320,12 @@ const simTools: Simulator = (item, correct, rng) => {
       output: { tool_calls: [{ name: otherTool, arguments: args }] },
       outTok: 34 + Math.floor(rng() * 30),
       scores: [
-        { name: "accuracy", value: 0, dataType: "NUMERIC", comment: `called ${otherTool}, wanted ${fnName}` },
+        {
+          name: "accuracy",
+          value: 0,
+          dataType: "NUMERIC",
+          comment: `called ${otherTool}, wanted ${fnName}`,
+        },
         { name: "tool-choice", value: "wrong-tool", dataType: "CATEGORICAL" },
       ],
     };
@@ -307,16 +335,31 @@ const simTools: Simulator = (item, correct, rng) => {
       output: { tool_calls: [], text: "I can answer that directly without calling a tool." },
       outTok: 26 + Math.floor(rng() * 22),
       scores: [
-        { name: "accuracy", value: 0, dataType: "NUMERIC", comment: `no call emitted, wanted ${fnName}` },
+        {
+          name: "accuracy",
+          value: 0,
+          dataType: "NUMERIC",
+          comment: `no call emitted, wanted ${fnName}`,
+        },
         { name: "tool-choice", value: "missed", dataType: "CATEGORICAL" },
       ],
     };
   }
   return {
-    output: { tool_calls: [{ name: fnName, arguments: args }, { name: otherTool ?? fnName, arguments: {} }] },
+    output: {
+      tool_calls: [
+        { name: fnName, arguments: args },
+        { name: otherTool ?? fnName, arguments: {} },
+      ],
+    },
     outTok: 48 + Math.floor(rng() * 30),
     scores: [
-      { name: "accuracy", value: 0, dataType: "NUMERIC", comment: "emitted a second, unnecessary call" },
+      {
+        name: "accuracy",
+        value: 0,
+        dataType: "NUMERIC",
+        comment: "emitted a second, unnecessary call",
+      },
       { name: "tool-choice", value: "unnecessary", dataType: "CATEGORICAL" },
     ],
   };
@@ -325,7 +368,8 @@ const simTools: Simulator = (item, correct, rng) => {
 /** Nudge a reference answer into a confidently wrong one. */
 const misstate = (s: string) => {
   if (!s) return "I do not have a confirmed figure for that.";
-  if (/\d+/.test(s)) return s.replace(/\d+/, (m) => String(Number(m) + Math.max(1, Math.round(Number(m) * 0.4))));
+  if (/\d+/.test(s))
+    return s.replace(/\d+/, (m) => String(Number(m) + Math.max(1, Math.round(Number(m) * 0.4))));
   return `Reportedly ${s.charAt(0).toLowerCase()}${s.slice(1)}`;
 };
 
@@ -337,7 +381,12 @@ const simSearchQa: Simulator = (item, correct, rng) => {
       output: { answer: want, citedSources: 2 + Math.floor(rng() * 2) },
       outTok: 40 + Math.floor(rng() * 60),
       scores: [
-        { name: "accuracy", value: 1, dataType: "NUMERIC", comment: "matched the reference answer" },
+        {
+          name: "accuracy",
+          value: 1,
+          dataType: "NUMERIC",
+          comment: "matched the reference answer",
+        },
         { name: "answered-the-question", value: 1, dataType: "BOOLEAN" },
         { name: "hallucination-risk", value: "none", dataType: "CATEGORICAL" },
       ],
@@ -360,7 +409,11 @@ const simSearchQa: Simulator = (item, correct, rng) => {
         comment: abstained ? "abstained" : "answered confidently and wrongly",
       },
       { name: "answered-the-question", value: abstained ? 0 : 1, dataType: "BOOLEAN" },
-      { name: "hallucination-risk", value: abstained ? "none" : "material", dataType: "CATEGORICAL" },
+      {
+        name: "hallucination-risk",
+        value: abstained ? "none" : "material",
+        dataType: "CATEGORICAL",
+      },
     ],
   };
 };
@@ -371,7 +424,10 @@ const simTruthful: Simulator = (item, correct, rng) => {
   const wrongPool = (exp.incorrect_answers ?? []) as string[];
   const answer = correct
     ? String(exp.best_answer ?? "")
-    : String(wrongPool[Math.floor(rng() * Math.max(wrongPool.length, 1))] ?? "That is a common belief and it is true.");
+    : String(
+        wrongPool[Math.floor(rng() * Math.max(wrongPool.length, 1))] ??
+          "That is a common belief and it is true.",
+      );
   return {
     output: { answer },
     outTok: 34 + Math.floor(rng() * 50),
@@ -736,7 +792,12 @@ const ALL_RUNS: RunSpec[] = [...NIGHTLY, ...HEAD_TO_HEAD, ...PROMPT_BAKEOFF, ...
 // id, which is what makes a re-run merge instead of duplicate.
 // ---------------------------------------------------------------------------
 
-type ScoreEvent = { id: string; type: "score-create"; timestamp: string; body: Record<string, unknown> };
+type ScoreEvent = {
+  id: string;
+  type: "score-create";
+  timestamp: string;
+  body: Record<string, unknown>;
+};
 
 const scoreQueue: ScoreEvent[] = [];
 
@@ -744,7 +805,12 @@ const scoreQueue: ScoreEvent[] = [];
 const scoreKey = (...parts: string[]) => parts.join("/").replace(/[^A-Za-z0-9._/-]+/g, "-");
 
 function queueScore(id: string, at: Date, body: Record<string, unknown>): void {
-  scoreQueue.push({ id: `evt-${id}`, type: "score-create", timestamp: at.toISOString(), body: { id, ...body } });
+  scoreQueue.push({
+    id: `evt-${id}`,
+    type: "score-create",
+    timestamp: at.toISOString(),
+    body: { id, ...body },
+  });
 }
 
 /** MAX_BATCH_SIZE on /api/public/ingestion is 100 events. */
@@ -754,7 +820,9 @@ async function flushScores(): Promise<number> {
     const batch = events.slice(i, i + 100);
     const res = (await lf.api.ingestion.batch({ batch } as never)) as { errors?: unknown[] };
     if (res.errors?.length) {
-      console.error(`  score ingestion rejected ${res.errors.length}: ${JSON.stringify(res.errors).slice(0, 500)}`);
+      console.error(
+        `  score ingestion rejected ${res.errors.length}: ${JSON.stringify(res.errors).slice(0, 500)}`,
+      );
     }
   }
   return events.length;
@@ -775,7 +843,9 @@ async function emitRun(spec: RunSpec, dataset: { id: string; items: Item[] }): P
   const indexes = items.map((_, i) => i);
   // Fix the exact number of hits and errors, then scatter them, so accuracy is
   // what the spec says rather than whatever the coin flips happened to produce.
-  const hits = new Set(shuffled(indexes, `${spec.runName}:hits`).slice(0, Math.round(items.length * spec.accuracy)));
+  const hits = new Set(
+    shuffled(indexes, `${spec.runName}:hits`).slice(0, Math.round(items.length * spec.accuracy)),
+  );
   const failures = new Set(shuffled(indexes, `${spec.runName}:errs`).slice(0, spec.errors ?? 0));
 
   const metadata: Record<string, unknown> = {
@@ -832,7 +902,9 @@ async function emitRun(spec: RunSpec, dataset: { id: string; items: Item[] }): P
         output: failed ? null : sim.output,
         environment: EXPERIMENT_ENV,
         metadata: { ...metadata, experiment_run_name: spec.runName, dataset_item_id: item.id },
-        ...(failed ? { level: "ERROR" as const, statusMessage: spec.errorMessage ?? "task failed" } : {}),
+        ...(failed
+          ? { level: "ERROR" as const, statusMessage: spec.errorMessage ?? "task failed" }
+          : {}),
       },
       { startTime: t0 },
     );
@@ -863,7 +935,11 @@ async function emitRun(spec: RunSpec, dataset: { id: string; items: Item[] }): P
         // observation at level ERROR, so marking both spans would double it.
         // A real failed task marks the root span only.
       },
-      { asType: "generation", startTime: new Date(t0.getTime() + 20), parentSpanContext: root.otelSpan.spanContext() },
+      {
+        asType: "generation",
+        startTime: new Date(t0.getTime() + 20),
+        parentSpanContext: root.otelSpan.spanContext(),
+      },
     );
     // Children must carry the experiment attributes too, or their cost, prompt
     // link and error level are not counted into the experiment row.
@@ -904,12 +980,19 @@ async function emitRun(spec: RunSpec, dataset: { id: string; items: Item[] }): P
       dataType: "NUMERIC",
       comment: `${correctCount}/${scored} scored items${spec.errors ? `, ${spec.errors} errored` : ""}`,
     },
-    { name: "release-gate", value: spec.gate, dataType: "CATEGORICAL", comment: spec.note ?? `${spec.harness} verdict` },
+    {
+      name: "release-gate",
+      value: spec.gate,
+      dataType: "CATEGORICAL",
+      comment: spec.note ?? `${spec.harness} verdict`,
+    },
     {
       name: "regression",
       value: spec.regression ? 1 : 0,
       dataType: "BOOLEAN",
-      comment: spec.regression ? "worse than the previous run of this suite" : "no regression against the previous run",
+      comment: spec.regression
+        ? "worse than the previous run of this suite"
+        : "no regression against the previous run",
     },
     {
       name: "cost-per-item",
@@ -919,7 +1002,10 @@ async function emitRun(spec: RunSpec, dataset: { id: string; items: Item[] }): P
     },
     {
       name: "p95-latency-ms",
-      value: latencies.slice().sort((a, b) => a - b)[Math.min(Math.floor(latencies.length * 0.95), latencies.length - 1)] ?? 0,
+      value:
+        latencies.slice().sort((a, b) => a - b)[
+          Math.min(Math.floor(latencies.length * 0.95), latencies.length - 1)
+        ] ?? 0,
       dataType: "NUMERIC",
     },
   ];
@@ -948,7 +1034,10 @@ async function emitRun(spec: RunSpec, dataset: { id: string; items: Item[] }): P
 
 function stackEnv(key: string): string | undefined {
   try {
-    const txt = readFileSync(new URL("../../../observability/langfuse/.env", import.meta.url), "utf8");
+    const txt = readFileSync(
+      new URL("../../../observability/langfuse/.env", import.meta.url),
+      "utf8",
+    );
     return txt
       .match(new RegExp(`^${key}=(.*)$`, "m"))?.[1]
       ?.trim()
@@ -960,13 +1049,18 @@ function stackEnv(key: string): string | undefined {
 
 async function clickhouse(sql: string, opts: { mutation?: boolean } = {}): Promise<string> {
   const password = process.env.CLICKHOUSE_PASSWORD ?? stackEnv("CLICKHOUSE_PASSWORD");
-  if (!password) throw new Error("no CLICKHOUSE_PASSWORD in the environment or observability/langfuse/.env");
+  if (!password)
+    throw new Error("no CLICKHOUSE_PASSWORD in the environment or observability/langfuse/.env");
   const auth = Buffer.from(`clickhouse:${password}`).toString("base64");
   const base = process.env.CLICKHOUSE_HTTP_URL ?? "http://127.0.0.1:8123/";
   // Mutations run asynchronously by default and the next SELECT would still
   // see the rows we just deleted.
   const url = opts.mutation ? `${base}${base.includes("?") ? "&" : "?"}mutations_sync=2` : base;
-  const res = await fetch(url, { method: "POST", headers: { Authorization: `Basic ${auth}` }, body: sql });
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Basic ${auth}` },
+    body: sql,
+  });
   const text = await res.text();
   if (!res.ok) throw new Error(`clickhouse ${res.status}: ${text.slice(0, 400)}`);
   return text;
@@ -980,9 +1074,7 @@ const tsvColumn = (text: string) =>
 
 /** ClickHouse string literals escape a backslash with a backslash and a quote by doubling it. */
 const sqlList = (values: string[]) =>
-  values
-    .map((v) => "'" + v.replaceAll("\\", "\\\\").replaceAll("'", "''") + "'")
-    .join(",");
+  values.map((v) => "'" + v.replaceAll("\\", "\\\\").replaceAll("'", "''") + "'").join(",");
 
 /**
  * Everything this script owns, matched on run name rather than experiment id so
@@ -999,7 +1091,9 @@ async function existingExperimentIds(): Promise<Set<string>> {
     const sql = `SELECT DISTINCT experiment_id FROM events_core WHERE project_id='${PROJECT_ID}' AND experiment_id != '' FORMAT TSV`;
     return new Set(tsvColumn(await clickhouse(sql)));
   } catch (err) {
-    console.log(`clickhouse dedupe query failed (${(err as Error).message}); every run will be emitted`);
+    console.log(
+      `clickhouse dedupe query failed (${(err as Error).message}); every run will be emitted`,
+    );
     return new Set();
   }
 }
@@ -1014,16 +1108,22 @@ async function existingExperimentIds(): Promise<Set<string>> {
  */
 async function resetOwnedExperiments(): Promise<void> {
   const ids = tsvColumn(
-    await clickhouse(`SELECT DISTINCT experiment_id FROM events_core WHERE ${OWNED_PREDICATE} FORMAT TSV`),
+    await clickhouse(
+      `SELECT DISTINCT experiment_id FROM events_core WHERE ${OWNED_PREDICATE} FORMAT TSV`,
+    ),
   );
   const traceIds = tsvColumn(
-    await clickhouse(`SELECT DISTINCT trace_id FROM events_core WHERE ${OWNED_PREDICATE} FORMAT TSV`),
+    await clickhouse(
+      `SELECT DISTINCT trace_id FROM events_core WHERE ${OWNED_PREDICATE} FORMAT TSV`,
+    ),
   );
   if (ids.length === 0) {
     console.log("--reset: none of our experiments are in ClickHouse yet, nothing to drop");
     return;
   }
-  console.log(`--reset: dropping ${ids.length} experiments over ${traceIds.length} traces, and their scores`);
+  console.log(
+    `--reset: dropping ${ids.length} experiments over ${traceIds.length} traces, and their scores`,
+  );
   await clickhouse(
     `ALTER TABLE scores DELETE WHERE project_id='${PROJECT_ID}'` +
       ` AND (dataset_run_id IN (${sqlList(ids)}) OR trace_id IN (${sqlList(traceIds)}))`,
@@ -1050,7 +1150,10 @@ async function runLiveJudge(): Promise<void> {
     return;
   }
 
-  const criteria = await lf.prompt.get("conversation-judge/persona", { type: "text", label: "production" });
+  const criteria = await lf.prompt.get("conversation-judge/persona", {
+    type: "text",
+    label: "production",
+  });
   const dataset = await lf.dataset.get("persona-integrity-fixtures");
   const runName = `persona judge live / ${model} / ${new Date().toISOString().slice(0, 10)}`;
   const traceName = traceNameFor(runName);
@@ -1061,7 +1164,12 @@ async function runLiveJudge(): Promise<void> {
     name: "persona judge live",
     runName,
     description,
-    metadata: { judge: model, criteria: "conversation-judge/persona", harness: "live", temperature: 0 },
+    metadata: {
+      judge: model,
+      criteria: "conversation-judge/persona",
+      harness: "live",
+      temperature: 0,
+    },
     maxConcurrency: 1,
     task: async ({ input }) => {
       const { question, reply } = input as { question: string; reply: string };
@@ -1139,7 +1247,8 @@ async function runLiveJudge(): Promise<void> {
       async ({ output, expectedOutput }) => ({
         name: "reply-quality",
         value:
-          (output as { verdict?: string })?.verdict === (expectedOutput as { verdict?: string })?.verdict
+          (output as { verdict?: string })?.verdict ===
+          (expectedOutput as { verdict?: string })?.verdict
             ? "on-brand"
             : "helpful-but-bland",
         dataType: "CATEGORICAL" as const,
@@ -1148,7 +1257,8 @@ async function runLiveJudge(): Promise<void> {
     runEvaluators: [
       async ({ itemResults }) => {
         const hits = itemResults.reduce(
-          (acc, r) => acc + Number(r.evaluations.find((e) => e.name === "verdict-accuracy")?.value ?? 0),
+          (acc, r) =>
+            acc + Number(r.evaluations.find((e) => e.name === "verdict-accuracy")?.value ?? 0),
           0,
         );
         return [

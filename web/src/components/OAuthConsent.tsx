@@ -12,7 +12,11 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
 import { GitHubIcon, GoogleIcon } from "@/components/SignInDialog"
-import { signInWithProvider, supabase, type OAuthProvider } from "@/lib/supabase"
+import {
+  signInWithProvider,
+  supabase,
+  type OAuthProvider,
+} from "@/lib/supabase"
 
 /**
  * OAuth 2.1 consent page — the authorization UI Supabase Auth redirects to
@@ -45,17 +49,23 @@ type Phase =
     }
 
 export function OAuthConsent() {
-  const authorizationId = new URLSearchParams(window.location.search).get("authorization_id")
+  const authorizationId = new URLSearchParams(window.location.search).get(
+    "authorization_id"
+  )
   const [phase, setPhase] = useState<Phase>({ kind: "loading" })
   const [session, setSession] = useState<Session | null | undefined>(undefined)
-  const [busy, setBusy] = useState<"approve" | "deny" | OAuthProvider | null>(null)
+  const [busy, setBusy] = useState<"approve" | "deny" | OAuthProvider | null>(
+    null
+  )
 
   // Session tracking: getSession answers immediately; onAuthStateChange also
   // catches the async code-for-session exchange when we land back here from
   // the sign-in redirect (detectSessionInUrl).
   useEffect(() => {
     if (!supabase) return
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s))
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) =>
+      setSession(s)
+    )
     supabase.auth.getSession().then(({ data }) => {
       setSession((prev) => (prev === undefined ? data.session : prev))
     })
@@ -65,7 +75,10 @@ export function OAuthConsent() {
   // Once we know who's asking and who's signed in, fetch the request details.
   useEffect(() => {
     if (!supabase) {
-      setPhase({ kind: "error", message: "Sign-in isn't configured on this Grapevine." })
+      setPhase({
+        kind: "error",
+        message: "Sign-in isn't configured on this Grapevine.",
+      })
       return
     }
     if (!authorizationId) {
@@ -82,25 +95,28 @@ export function OAuthConsent() {
       return
     }
     let cancelled = false
-    void supabase.auth.oauth.getAuthorizationDetails(authorizationId).then(({ data, error }) => {
-      if (cancelled) return
-      if (error || !data) {
-        setPhase({
-          kind: "error",
-          message: error?.message ?? "Invalid or expired authorization request.",
-        })
-      } else if (!("authorization_id" in data)) {
-        // Already consented earlier — straight back to the client.
-        window.location.href = data.redirect_url
-      } else {
-        setPhase({
-          kind: "consent",
-          client: data.client,
-          scopes: (data.scope ?? "").split(" ").filter(Boolean),
-          email: data.user.email,
-        })
-      }
-    })
+    void supabase.auth.oauth
+      .getAuthorizationDetails(authorizationId)
+      .then(({ data, error }) => {
+        if (cancelled) return
+        if (error || !data) {
+          setPhase({
+            kind: "error",
+            message:
+              error?.message ?? "Invalid or expired authorization request.",
+          })
+        } else if (!("authorization_id" in data)) {
+          // Already consented earlier — straight back to the client.
+          window.location.href = data.redirect_url
+        } else {
+          setPhase({
+            kind: "consent",
+            client: data.client,
+            scopes: (data.scope ?? "").split(" ").filter(Boolean),
+            email: data.user.email,
+          })
+        }
+      })
     return () => {
       cancelled = true
     }
@@ -113,7 +129,10 @@ export function OAuthConsent() {
       await signInWithProvider(provider, window.location.href) // navigates away
     } catch (err) {
       setBusy(null)
-      setPhase({ kind: "error", message: String(err instanceof Error ? err.message : err) })
+      setPhase({
+        kind: "error",
+        message: String(err instanceof Error ? err.message : err),
+      })
     }
   }
 
@@ -122,12 +141,19 @@ export function OAuthConsent() {
     setBusy(decision)
     const call =
       decision === "approve"
-        ? supabase.auth.oauth.approveAuthorization(authorizationId, { skipBrowserRedirect: true })
-        : supabase.auth.oauth.denyAuthorization(authorizationId, { skipBrowserRedirect: true })
+        ? supabase.auth.oauth.approveAuthorization(authorizationId, {
+            skipBrowserRedirect: true,
+          })
+        : supabase.auth.oauth.denyAuthorization(authorizationId, {
+            skipBrowserRedirect: true,
+          })
     const { data, error } = await call
     if (error || !data) {
       setBusy(null)
-      setPhase({ kind: "error", message: error?.message ?? "The decision didn't go through." })
+      setPhase({
+        kind: "error",
+        message: error?.message ?? "The decision didn't go through.",
+      })
       return
     }
     window.location.href = data.redirect_url
@@ -137,7 +163,7 @@ export function OAuthConsent() {
     <main className="flex min-h-dvh items-center justify-center bg-background p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <span className="font-heading text-sm font-semibold italic tracking-tight text-muted-foreground">
+          <span className="font-heading text-sm font-semibold tracking-tight text-muted-foreground italic">
             Grapevine
           </span>
           {phase.kind === "consent" ? (
@@ -146,16 +172,18 @@ export function OAuthConsent() {
                 Allow {phase.client.name || "this app"}?
               </CardTitle>
               <CardDescription>
-                It wants to connect to your Grapevine account — search events, save to your
-                calendar, and tune your interests as you.
+                It wants to connect to your Grapevine account — search events,
+                save to your calendar, and tune your interests as you.
               </CardDescription>
             </>
           ) : phase.kind === "signin" ? (
             <>
-              <CardTitle className="font-heading text-xl">Sign in to continue</CardTitle>
+              <CardTitle className="font-heading text-xl">
+                Sign in to continue
+              </CardTitle>
               <CardDescription>
-                An app is asking to connect to Grapevine. Sign in first so the access is tied to
-                your account.
+                An app is asking to connect to Grapevine. Sign in first so the
+                access is tied to your account.
               </CardDescription>
             </>
           ) : (
@@ -178,12 +206,28 @@ export function OAuthConsent() {
 
           {phase.kind === "signin" && (
             <>
-              <Button variant="secondary" disabled={!!busy} onClick={() => void signIn("google")}>
-                {busy === "google" ? <Spinner data-icon="inline-start" /> : <GoogleIcon />}
+              <Button
+                variant="secondary"
+                disabled={!!busy}
+                onClick={() => void signIn("google")}
+              >
+                {busy === "google" ? (
+                  <Spinner data-icon="inline-start" />
+                ) : (
+                  <GoogleIcon />
+                )}
                 Continue with Google
               </Button>
-              <Button variant="secondary" disabled={!!busy} onClick={() => void signIn("github")}>
-                {busy === "github" ? <Spinner data-icon="inline-start" /> : <GitHubIcon />}
+              <Button
+                variant="secondary"
+                disabled={!!busy}
+                onClick={() => void signIn("github")}
+              >
+                {busy === "github" ? (
+                  <Spinner data-icon="inline-start" />
+                ) : (
+                  <GitHubIcon />
+                )}
                 Continue with GitHub
               </Button>
             </>
@@ -203,9 +247,12 @@ export function OAuthConsent() {
               )}
               <Separator />
               <p className="text-xs text-muted-foreground">
-                Signed in as <span className="font-medium text-foreground">{phase.email}</span>.
-                Everything the app does here happens as your account, and you can disconnect it
-                any time from the app's own settings.
+                Signed in as{" "}
+                <span className="font-medium text-foreground">
+                  {phase.email}
+                </span>
+                . Everything the app does here happens as your account, and you
+                can disconnect it any time from the app's own settings.
               </p>
             </>
           )}
@@ -222,7 +269,11 @@ export function OAuthConsent() {
               {busy === "deny" && <Spinner data-icon="inline-start" />}
               Deny
             </Button>
-            <Button className="flex-1" disabled={!!busy} onClick={() => void decide("approve")}>
+            <Button
+              className="flex-1"
+              disabled={!!busy}
+              onClick={() => void decide("approve")}
+            >
               {busy === "approve" && <Spinner data-icon="inline-start" />}
               Approve
             </Button>

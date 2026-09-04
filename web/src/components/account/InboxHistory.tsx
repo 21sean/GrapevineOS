@@ -50,7 +50,8 @@ export function InboxHistory({
         const live = events.find((e) => e.id === snap.id)
         return live && !hasEnded(live, now, tz)
       })
-      if (evs.length > 0 || r.events.length === 0) out.push({ ...r, events: evs })
+      if (evs.length > 0 || r.events.length === 0)
+        out.push({ ...r, events: evs })
     }
     return out
   }, [history, events, now, tz])
