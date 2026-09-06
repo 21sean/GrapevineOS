@@ -1,0 +1,20 @@
+# Puts every Langfuse service, and the Grapevine alert bridge, behind the
+# "observability" profile when the root docker-compose.yml includes this
+# stack. Compose only reads this file through that include, so running
+# `docker compose up -d` from this directory still starts everything, the way
+# the vendored README says.
+services:
+  langfuse-worker:
+    profiles: [observability]
+  langfuse-web:
+    profiles: [observability]
+  clickhouse:
+    profiles: [observability]
+  minio:
+    profiles: [observability]
+  redis:
+    profiles: [observability]
+  postgres:
+    profiles: [observability]
+  grapevine-bridge:
+    profiles: [observability]

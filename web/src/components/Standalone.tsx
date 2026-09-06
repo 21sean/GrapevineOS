@@ -1,4 +1,5 @@
 import { lazy, Suspense } from "react"
+import { ROUTES } from "@/lib/routes"
 
 /**
  * Full-page routes that render outside the map app shell — the OAuth 2.1
@@ -17,9 +18,9 @@ const TermsOfService = lazy(() =>
 export default function Standalone() {
   const path = window.location.pathname
   const page =
-    path === "/privacy" ? (
+    path === ROUTES.privacy ? (
       <PrivacyPolicy />
-    ) : path === "/terms" ? (
+    ) : path === ROUTES.terms ? (
       <TermsOfService />
     ) : (
       <OAuthConsent />

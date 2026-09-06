@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import { ROUTES } from "@/lib/routes"
 
 /**
  * Standalone legal pages — Privacy Policy and Terms of Service. Rendered at
@@ -38,10 +39,10 @@ function Shell({ title, children }: { title: string; children: ReactNode }) {
           {children}
         </div>
         <footer className="mt-16 flex gap-4 border-t border-foreground/10 pt-6 text-sm text-muted-foreground">
-          <a className="hover:text-foreground" href="/privacy">
+          <a className="hover:text-foreground" href={ROUTES.privacy}>
             Privacy
           </a>
-          <a className="hover:text-foreground" href="/terms">
+          <a className="hover:text-foreground" href={ROUTES.terms}>
             Terms
           </a>
           <a className="hover:text-foreground" href="/">

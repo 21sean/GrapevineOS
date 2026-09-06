@@ -26,3 +26,4 @@ server/.evals/
 server/redteam/.venv/
 __pycache__/
 *.pyc
+!web/public/og-image.png

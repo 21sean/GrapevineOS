@@ -12,6 +12,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DiscoveryTab } from "@/components/admin/DiscoveryTab"
 import { InboxTab } from "@/components/admin/InboxTab"
+import { IngestTab } from "@/components/admin/IngestTab"
 import { MonitoringTab } from "@/components/admin/MonitoringTab"
 import { ModelsTab } from "@/components/admin/ModelsTab"
 import { ProvidersTab } from "@/components/admin/ProvidersTab"
@@ -23,6 +24,7 @@ import { cn } from "@/lib/utils"
 const TABS = [
   { value: "models", label: "Models", Panel: ModelsTab },
   { value: "providers", label: "Providers", Panel: ProvidersTab },
+  { value: "ingest", label: "Ingest", Panel: IngestTab },
   { value: "discover", label: "Discover", Panel: DiscoveryTab },
   { value: "inbox", label: "Inbox", Panel: InboxTab },
   { value: "sources", label: "Sources", Panel: SourcesTab },

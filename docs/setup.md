@@ -1,39 +1,47 @@
 # Grapevine setup and operations
 
 Setup, deployment, and infrastructure notes. For what Grapevine is and how it
-is built, see the [README](../README.md).
+is built, see the [README](../README.md); for the agent's design, see
+[agent-architecture.md](agent-architecture.md).
 
 ## Quick start
 
-```bash
-npm install          # root (concurrently)
-npm --prefix web install
-npm --prefix server install
+The README's "Ten minutes to ⌘K" is the short version. In full:
 
+```bash
+npm install          # one install for the server, the web app and the worker
+npm run doctor       # says exactly what is missing, and how to fix it
 npm run dev          # api  -> http://localhost:8787
                      # web  -> http://localhost:5174
 ```
 
 Requirements:
 
-- **Node 22+**
+- **Node 22+** (`.nvmrc` says which; `nvm use` reads it)
 - **[Ollama](https://ollama.com)** running locally with at least one chat
   model (`ollama pull qwen3:8b` works fine; pick it in Admin → Models).
   No GPU? Chat and/or newsletter extraction can instead run through a
-  subscription-authed CLI — Claude Code (`claude -p`), OpenAI Codex, Gemini
-  CLI, or GitHub Copilot CLI — picked per role in **Admin → Providers**; each
+  subscription-authed CLI, Claude Code (`claude -p`), OpenAI Codex, Gemini
+  CLI, or GitHub Copilot CLI, picked per role in **Admin → Providers**; each
   logs in with its own account, no API keys
 - **Supabase**: copy `server/.env.example` to `server/.env` and set
   `SUPABASE_URL` and `SUPABASE_SECRET_KEY` from your project's dashboard
-  (Settings → API). For sign-in, also set `VITE_SUPABASE_URL` and
-  `VITE_SUPABASE_PUBLISHABLE_KEY` in `web/.env.local` and enable the
-  Google/GitHub providers (see **Auth** below)
+  (Settings → API); copy `web/.env.example` to `web/.env.local` and set
+  `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` there. Apply the
+  schema with the Supabase CLI (`supabase link --project-ref <ref>`, then
+  `supabase db push`). For sign-in, enable the Google/GitHub providers (see
+  **Auth** below)
 - **Mapbox**: a scoped public token (`pk.`, styles/tiles/fonts only) as
   `VITE_MAPBOX_TOKEN` in `web/.env.local`, and a secret token (`sk.`) as
   `MAPBOX_SECRET_TOKEN` in `server/.env`. Tick **`places:read`** on the secret
   token to get the venue card (hours, photos, accessibility, busy times) in the
   event panel; without it everything else still works and the card is omitted.
   See [mapbox-places.md](mapbox-places.md) for the preview quota
+
+`npm run doctor` checks all of the above, plus whether the schema reached the
+project and whether the two ports are free, and prints the fix for anything
+missing. A fresh database has no events: paste a newsletter into
+Admin → Ingest or run a search in Admin → Discover to fill the map.
 
 ## The email worker
 
@@ -61,6 +69,8 @@ Workers logs in the dashboard) shows exactly what happened to a delivery.
 
 ```bash
 cd workers/email-ingest
+# wrangler.toml ships with placeholders: put your account id and the id of a
+# KV namespace you created (npx wrangler kv namespace create RAW_EMAILS) in it.
 export CLOUDFLARE_API_TOKEN=...    # "Edit Cloudflare Workers" token
 export CLOUDFLARE_ACCOUNT_ID=...   # dashboard → Workers & Pages
 npx wrangler secret put SUPABASE_SECRET_KEY   # once, same key as server/.env
@@ -89,8 +99,13 @@ paused project in one click.
 All app data lives in a Supabase Postgres project (free tier): `events`,
 `sources`, `users` (profiles for `auth.users`), `user_google_calendar`
 (Vault-backed), `calendar_entries`, `event_reactions`, `chat_threads`,
-`chat_messages`, `push_subscriptions`, `ingests`, `raw_emails`,
-`discovery_searches`, `app_settings`, `place_lookups`, `place_details`.
+`chat_messages`, `chat_checkpoints` and `chat_checkpoint_writes` (the
+agent's durable memory), `guardrail_scans`, `conversation_evals`,
+`push_subscriptions`, `push_keys`, `push_sends`, `ingests`, `raw_emails`,
+`discovery_searches` (server-wide searches and per-user watches),
+`app_settings`, `place_lookups`, `place_details`, and `trips`,
+`trip_expenses`, `day_plans`, `day_plan_items`, which are reserved for trip
+planning and not read by the app yet.
 
 - **Schema** is tracked in `supabase/migrations/` and applied with
   `supabase db push`; [CONTRIBUTING.md](../CONTRIBUTING.md) has the rule that
@@ -101,15 +116,18 @@ All app data lives in a Supabase Postgres project (free tier): `events`,
   Express API and uses Supabase solely for auth.
 - **Secrets**: the Google Calendar refresh token lives in Supabase Vault,
   not a plaintext column; service-role-only RPCs are the read/write path.
-- **Connections**: everything uses supabase-js/PostgREST over HTTPS. No raw
-  Postgres connections, nothing to pool, free-tier friendly.
+- **Connections**: everything uses supabase-js/PostgREST over HTTPS,
+  including the agent's checkpointer. No raw Postgres connections, nothing
+  to pool, free-tier friendly.
 - **Housekeeping**: nightly pg_cron purges keep storage flat: raw emails
   (30d), push-send dedupe keys (60d), ingest logs (180d), and cached Mapbox
-  _misses_ (90d, so transient failures heal). Mapbox hits — geocodes and
-  venue records alike — are kept permanently.
+  _misses_ (90d, so transient failures heal). Mapbox hits, geocodes and venue
+  records alike, are kept permanently. The server's own nightly sweep trims
+  past events and chat checkpoints (`EVENT_RETENTION_DAYS`,
+  `CHAT_CHECKPOINT_RETENTION_DAYS`).
 - **Types**: `server/src/db-types.ts` is generated. Regenerate after schema
-  changes with `npm run db:types` from `server/`; it reads the project ref
-  from `SUPABASE_URL` and needs the CLI signed in (`supabase login`, or
+  changes with `npm run db:types -w server`; it reads the project ref from
+  `SUPABASE_URL` and needs the CLI signed in (`supabase login`, or
   `SUPABASE_ACCESS_TOKEN` in the environment).
 
 ## Auth (Supabase Auth: Google + GitHub)
@@ -126,8 +144,8 @@ round trip per request.
 - **Identity model**: `auth.users` is the source of truth;
   `public.users` is a profile row (same uuid) kept in sync by a DB trigger,
   so every FK (`calendar_entries`, `event_reactions`, `chat_threads`,
-  `push_subscriptions`) hangs off a stable id. Accounts with the same
-  verified email are linked to one user automatically.
+  `push_subscriptions`, `discovery_searches.user_id`) hangs off a stable id.
+  Accounts with the same verified email are linked to one user automatically.
 - **Google Calendar sync** is an incremental consent: a signed-in user
   clicks Connect, supabase-js re-runs the Google flow with the
   `calendar.events` scope + offline access, and the returned refresh token
@@ -137,6 +155,11 @@ round trip per request.
   minted on demand and cached in memory only.
 - **Session state** lives with GoTrue (the old `sessions` table and its
   cron purge are gone).
+- **Admin**: on a laptop (`NODE_ENV` unset) the admin surface is open to
+  anyone who can reach the port. Set `ADMIN_EMAILS` to restrict it to
+  signed-in accounts, and `NODE_ENV=production` on a deployed server, which
+  closes it entirely when `ADMIN_EMAILS` is unset. [SECURITY.md](../SECURITY.md)
+  has the full table.
 
 One-time dashboard setup (Authentication → Sign In / Providers):
 
@@ -171,28 +194,54 @@ One-time dashboard setup (Authentication → Sign In / Providers):
 ## Web discovery (scheduled searches)
 
 Web discovery (Admin → Discover; `discover_events` over MCP;
-`/api/ext/v1/discovery/*` over REST) needs no keys: search uses SearXNG when
-`SEARXNG_URL` is set and falls back to keyless DuckDuckGo scraping, and both
-extraction and verification run through the provider picked in
-**Admin → Providers** (local Ollama by default). Tuning lives in `server/.env`:
+`/api/ext/v1/discovery/*` over REST; watches from the chat) needs no keys:
+search uses SearXNG when `SEARXNG_URL` is set (see **The optional stack**)
+and falls back to keyless DuckDuckGo scraping, and both extraction and
+verification run through the provider picked in **Admin → Providers** (local
+Ollama by default). Tuning lives in `server/.env`:
 
-- `DISCOVERY_MIN_CONFIDENCE` (default `0.7`) — verifier confidence a
+- `DISCOVERY_MIN_CONFIDENCE` (default `0.7`): verifier confidence a
   candidate needs before it can be added; candidates corroborated by 2+
   independent pages clear `0.5`.
-- `DISCOVERY_TICK_SECONDS` (default `300`) — how often the scheduler checks
+- `DISCOVERY_TICK_SECONDS` (default `300`): how often the scheduler checks
   whether a saved search is due. Each check is one cheap query; runs
   themselves are serialized and never overlap.
-- `DISCOVERY_SCHEDULE=0` — disable the scheduler entirely (one-off runs from
+- `DISCOVERY_SCHEDULE=0`: disable the scheduler entirely (one-off runs from
   the admin UI / MCP / REST still work).
 
 A run reads at most a handful of pages and makes one extraction plus one
 verification LLM call per readable page, so a daily cadence is light even on
-a laptop GPU.
+a laptop GPU. Watches, the searches a signed-in person owns, share the
+scheduler and are capped at five per account.
+
+## The optional stack
+
+Two services add tracing and sturdier search. Neither is needed for the map
+or the agent, and both are one flag on the root compose file:
+
+```bash
+docker compose --profile observability up -d   # Langfuse on http://localhost:3000
+docker compose --profile search up -d          # SearXNG on http://localhost:8888
+docker compose --profile observability --profile search down
+```
+
+- **Langfuse** is the vendored stack under `observability/langfuse`
+  (`README.md` there covers first sign-in, the seeding scripts and the alert
+  bridge). Copy the project keys from its `.env` into `server/.env` as
+  `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY`, restart the API, and every
+  chat turn becomes a trace. The compose override there enables Langfuse's
+  code evaluators with an unsandboxed dispatcher; [SECURITY.md](../SECURITY.md)
+  says why that is only acceptable on localhost.
+- **SearXNG** reads `observability/searxng/settings.yml`, which turns on the
+  JSON format the server needs and turns off the rate limiter for a private
+  instance. Set `SEARXNG_URL=http://localhost:8888` in `server/.env`.
+
+`npm run doctor` reports both when their settings are present.
 
 ## MCP for Claude Desktop / claude.ai (custom connector, OAuth)
 
 The MCP endpoint speaks real OAuth 2.1, with Supabase Auth as the
-authorization server — the same accounts that sign in on the web app. Adding
+authorization server, the same accounts that sign in on the web app. Adding
 the connector is: paste the `/mcp` URL, a browser window opens, sign in with
 Google/GitHub, approve. No key ever appears in the dialog or the URL. Under
 the hood: the server answers unauthenticated requests with `401` +
@@ -206,11 +255,11 @@ above):
 
 1. **Authentication → OAuth Server**: enable the OAuth 2.1 server (beta),
    set **Authorization Path** to `/oauth/consent`, and enable **dynamic
-   client registration** (that's what lets connectors register themselves —
+   client registration** (that's what lets connectors register themselves;
    without it you'd pre-register each client by hand).
 2. **Authentication → URL Configuration**: the Site URL must be the origin
    that serves the web app (`http://localhost:5174` in dev, your production
-   origin when deployed) — the consent page lives at Site URL +
+   origin when deployed); the consent page lives at Site URL +
    `/oauth/consent`. Add `<origin>/oauth/consent` to the redirect allow-list
    so mid-consent sign-in can land back there.
 
@@ -234,7 +283,25 @@ calendar, tune interests, fix rarities, run verified web discovery, and
 manage scheduled searches. Writes act on the account that signed in.
 Headless scripts (no browser) can still send `AGENT_API_KEY` as an
 `X-Agent-Key` header; those writes act on `AGENT_USER_EMAIL`. `MCP_OPEN=1`
-drops auth entirely for local tinkering.
+drops auth entirely for local tinkering; never set it on a reachable host.
+Account → Claude in the app shows the same URL together with two prompts
+worth scheduling in a Claude account.
+
+## Health, logs and shutdown
+
+- `GET /healthz` answers as soon as the process is up (503 once a shutdown
+  has begun); `GET /readyz` answers 200 when the database and the
+  checkpointer tables answer and 503 while they do not, with the reasons in
+  the body; `GET /version` reports the release (`GRAPEVINE_RELEASE`) and the
+  commit.
+- Logs are JSON lines (pino) with a request id on every line and on the
+  `X-Request-Id` response header; the agent's `done` frame carries the same
+  id as `requestId`, so a chat turn can be found in the logs and in Langfuse
+  from the browser. `LOG_LEVEL` sets the level.
+- `SIGTERM` (or `SIGINT`) stops the schedulers, stops accepting connections,
+  aborts in-flight chat streams with a notice so the tab can retry, flushes
+  the telemetry queues, and exits within a time cap. `/healthz` answers 503
+  during the drain, so a supervisor sees the handover.
 
 ## Running the production build locally
 
@@ -243,9 +310,9 @@ compiles. Build it, start the API, then serve the bundle with Vite's preview
 server:
 
 ```bash
-npm run build                             # tsc -b && vite build → web/dist
-npm --prefix server run start             # api -> http://localhost:8787
-npm --prefix web run preview -- --port 5174   # web -> http://localhost:5174
+npm run build                          # tsc -b && vite build -> web/dist
+npm run start -w server                # api -> http://localhost:8787
+npm run preview -w web -- --port 5174  # web -> http://localhost:5174
 ```
 
 Preview inherits the dev proxy, so `/api` is forwarded to the API

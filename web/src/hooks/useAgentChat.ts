@@ -7,7 +7,6 @@ import {
   type ChatItem,
   type Proposal,
 } from "@/lib/chatReducer"
-import { useChatPrefs } from "@/lib/chatPrefs"
 import { useGrapevine } from "@/lib/store"
 import { DEFAULT_FILTERS, normalizeFilters, type AgentFrame } from "@/lib/types"
 
@@ -154,7 +153,7 @@ export function useAgentChat() {
       ])
 
       const s = useGrapevine.getState()
-      const { model, effort } = useChatPrefs.getState()
+      const { chatModel: model, chatEffort: effort } = s
       abortRef.current?.abort()
       const ac = new AbortController()
       abortRef.current = ac

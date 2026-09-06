@@ -14,6 +14,7 @@ import {
   supabase,
   type OAuthProvider,
 } from "@/lib/supabase"
+import { ROUTES } from "@/lib/routes"
 import { useGrapevine } from "@/lib/store"
 
 /**
@@ -88,14 +89,14 @@ export function SignInDialog() {
           By continuing you agree to our{" "}
           <a
             className="underline underline-offset-2 hover:text-foreground"
-            href="/terms"
+            href={ROUTES.terms}
           >
             Terms
           </a>{" "}
           and{" "}
           <a
             className="underline underline-offset-2 hover:text-foreground"
-            href="/privacy"
+            href={ROUTES.privacy}
           >
             Privacy Policy
           </a>

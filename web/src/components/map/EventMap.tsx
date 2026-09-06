@@ -15,6 +15,7 @@ import {
 import {
   BOOKED_COLOR,
   CATEGORY_META,
+  DEFAULT_CITY,
   type Category,
   type CityEvent,
 } from "@/lib/types"
@@ -46,7 +47,7 @@ const MARKER_LIFT = 16
 
 // Seed camera so the map boots (WebGL, style, tiles) in parallel with the API
 // fetch instead of behind it; settings recenter it on arrival if they differ.
-const FALLBACK_CENTER: [number, number] = [-117.1611, 32.7157] // San Diego
+const FALLBACK_CENTER = DEFAULT_CITY.center
 
 // Traffic source+layer are added on first toggle, not at style load — the
 // layer starts hidden by default, so eager-adding only buys a wasted TileJSON

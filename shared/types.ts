@@ -138,6 +138,17 @@ export interface IngestRecord {
 }
 
 /** Bounds for a scheduled search's cadence, in hours between runs. */
+/**
+ * The city a fresh install describes until app_settings says otherwise. The
+ * server's default settings row, the map's first viewport and the timezone the
+ * client falls back to before settings load all read this one record.
+ */
+export const DEFAULT_CITY = {
+  city: "San Diego, CA",
+  center: [-117.1611, 32.7157] as [number, number],
+  tz: "America/Los_Angeles",
+};
+
 export const CADENCE_MIN_HOURS = 1;
 export const CADENCE_MAX_HOURS = 336;
 export const CADENCE_DEFAULT_HOURS = 24;

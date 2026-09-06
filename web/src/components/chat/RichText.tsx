@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { EventChip } from "@/components/AgentChat"
+import { EventChip } from "@/components/chat/EventChip"
 
 /** Matches the [Title](event:id) grammar the system prompt asks for. */
 export const EVENT_LINK_RE = /\[([^\]]+)\]\(event:([^)\s]+)\)/g

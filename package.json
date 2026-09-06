@@ -21,7 +21,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "contracts:check": "npm run contracts:check -w server",
-    "evals": "npm run evals -w server --"
+    "evals": "npm run evals -w server --",
+    "doctor": "node scripts/doctor.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

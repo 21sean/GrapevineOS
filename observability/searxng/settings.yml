@@ -1,0 +1,14 @@
+# SearXNG for the "search" profile in the root docker-compose.yml. A private
+# instance bound to localhost, so the rate limiter is off; the JSON format is
+# what the server's search_web tool reads. Everything else is the image
+# default. The secret key comes from SEARXNG_SECRET in the compose file.
+use_default_settings: true
+
+server:
+  limiter: false
+  image_proxy: false
+
+search:
+  formats:
+    - html
+    - json

@@ -44,6 +44,7 @@ import {
   type CityEvent,
   type IngestRecord,
   type User,
+  DEFAULT_CITY,
 } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -96,7 +97,7 @@ export function AccountDialog({
       .catch(() => setHistoryError(true))
   }, [open])
 
-  const tz = settings?.tz ?? "America/Los_Angeles"
+  const tz = settings?.tz ?? DEFAULT_CITY.tz
 
   const stats = useMemo(() => {
     const upcoming = events.filter((e) => !hasEnded(e, now, tz))

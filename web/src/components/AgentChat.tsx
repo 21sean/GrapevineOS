@@ -33,6 +33,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { CapabilitiesPopover } from "@/components/chat/Capabilities"
+import { EventChip } from "@/components/chat/EventChip"
 import { ModelEffortPicker } from "@/components/chat/ModelEffortPicker"
 import { CalendarCard, InterestsCard } from "@/components/chat/ProposalCards"
 import { WatchCard } from "@/components/chat/WatchCard"
@@ -41,10 +42,9 @@ import { ThreadHistory } from "@/components/chat/ThreadHistory"
 import { useAgentChat, type ChatItem } from "@/hooks/useAgentChat"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useSpeechInput } from "@/hooks/useSpeechInput"
-import { modelLabel, useChatPrefs } from "@/lib/chatPrefs"
+import { modelLabel } from "@/lib/chatModels"
 import { useGrapevine } from "@/lib/store"
-import { timeRange } from "@/lib/time"
-import { CATEGORY_META, type ChatUsage } from "@/lib/types"
+import type { ChatUsage } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 const SUGGESTIONS = [
@@ -196,8 +196,8 @@ function Conversation({
   const chatProvider = useGrapevine((s) => s.settings?.chatProvider)
   // Draft lives in the persisted store, not local state, so clicking away from
   // the chat (which unmounts this component) doesn't discard a half-typed line.
-  const input = useChatPrefs((s) => s.draft)
-  const setInput = useChatPrefs((s) => s.setDraft)
+  const input = useGrapevine((s) => s.chatDraft)
+  const setInput = useGrapevine((s) => s.setChatDraft)
   const [showHistory, setShowHistory] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -631,48 +631,5 @@ function UsageLine({ usage }: { usage: ChatUsage }) {
         {parts.join(" · ")}
       </div>
     </Hint>
-  )
-}
-
-// One refresh attempt per unknown event id covers "event landed after page
-// load" for every chip — new agent turns and loadThread on old transcripts
-// alike; an id still unknown after its refresh is a hallucinated one and
-// renders as plain text.
-const refreshAttempted = new Set<string>()
-
-export function EventChip({ id, label }: { id: string; label: string }) {
-  const event = useGrapevine((s) => s.events.find((e) => e.id === id))
-  const select = useGrapevine((s) => s.select)
-  const tz = useGrapevine((s) => s.settings?.tz) ?? "UTC"
-  // A string, not the raw clock: chips in a long transcript re-render only
-  // when their printed time actually changes.
-  const range = useGrapevine((s) => (event ? timeRange(event, tz, s.now) : ""))
-
-  useEffect(() => {
-    if (!event && !refreshAttempted.has(id)) {
-      refreshAttempted.add(id)
-      useGrapevine
-        .getState()
-        .refreshEvents()
-        .catch(() => {})
-    }
-  }, [event, id])
-
-  if (!event) return <span className="font-medium">{label}</span>
-  return (
-    <button
-      type="button"
-      onClick={() => select(event.id)}
-      className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-secondary/60 px-2 py-0.5 align-middle text-xs font-medium transition-colors hover:bg-secondary"
-    >
-      <span
-        className="size-1.5 shrink-0 rounded-full"
-        style={{ background: CATEGORY_META[event.category].color }}
-      />
-      <span className="truncate">{event.title}</span>
-      <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-        {range}
-      </span>
-    </button>
   )
 }

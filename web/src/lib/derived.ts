@@ -20,7 +20,7 @@ import {
   type LightPreset,
 } from "./time"
 import type { GrapevineState } from "./store"
-import type { CityEvent } from "./types"
+import { DEFAULT_CITY, type CityEvent } from "./types"
 
 /**
  * Store-level derived data, memoized once for all subscribers.
@@ -221,7 +221,7 @@ export const selectBookedLines = memoSelector(
     const lines = new Map<string, string>()
     const synced = s.calendar?.synced
     if (!synced?.length) return lines
-    const tz = s.settings?.tz ?? "America/Los_Angeles"
+    const tz = s.settings?.tz ?? DEFAULT_CITY.tz
     const booked = new Set(synced)
     for (const e of s.events) {
       if (booked.has(e.id) && !hasEnded(e, s.now, tz)) {
@@ -348,7 +348,7 @@ export const selectLiveCount = memoSelector(
 
 /** Basemap lighting the clock would pick right now, ignoring any override. */
 export const selectAutoLightPreset = (s: State): LightPreset =>
-  lightPresetForTime(s.now, s.settings?.tz ?? "America/Los_Angeles")
+  lightPresetForTime(s.now, s.settings?.tz ?? DEFAULT_CITY.tz)
 
 /**
  * Basemap lighting the map should actually use: the wall clock in the city's

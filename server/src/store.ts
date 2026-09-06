@@ -12,7 +12,7 @@ import { db } from "./db.js";
 import { backfillPatch, collapseNearDuplicates, nearDuplicate } from "./dedupe.js";
 import { normalizeRRule } from "./recurrence.js";
 import type { Json, Tables, TablesInsert } from "./db-types.js";
-import { isGuardrailMode, isLlmProviderId } from "./types.js";
+import { DEFAULT_CITY, isGuardrailMode, isLlmProviderId } from "./types.js";
 import type {
   CalendarEntry,
   ChatMessage,
@@ -482,9 +482,7 @@ export const store = {
       .throwOnError();
     if (!data) {
       return {
-        city: "San Diego, CA",
-        center: [-117.1611, 32.7157],
-        tz: "America/Los_Angeles",
+        ...DEFAULT_CITY,
         model: "",
         ollamaUrl: "",
         chatProvider: "ollama",

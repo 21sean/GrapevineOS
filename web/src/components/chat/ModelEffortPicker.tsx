@@ -15,21 +15,21 @@ import {
   CLAUDE_CHAT_MODELS,
   effortLabel,
   modelLabel,
-  useChatPrefs,
-} from "@/lib/chatPrefs"
+} from "@/lib/chatModels"
+import { useGrapevine } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
 /**
  * Compact model + reasoning-effort picker for the Ask Grapevine composer.
  * Only shown when the chat provider is Claude Code — it's the one CLI whose
  * `--model` / `--effort` we drive per turn. "Default" leaves the choice to the
- * CLI (honouring the user's own `/model`). Selections persist via useChatPrefs.
+ * CLI (honouring the user's own `/model`). Selections persist in the store.
  */
 export function ModelEffortPicker() {
-  const model = useChatPrefs((s) => s.model)
-  const effort = useChatPrefs((s) => s.effort)
-  const setModel = useChatPrefs((s) => s.setModel)
-  const setEffort = useChatPrefs((s) => s.setEffort)
+  const model = useGrapevine((s) => s.chatModel)
+  const effort = useGrapevine((s) => s.chatEffort)
+  const setModel = useGrapevine((s) => s.setChatModel)
+  const setEffort = useGrapevine((s) => s.setChatEffort)
 
   // "Model · Effort", collapsing either half when it's on the CLI default.
   const trigger =
