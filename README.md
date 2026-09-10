@@ -1,6 +1,6 @@
 # Grapevine _Agentic Local-Events Platform_
 
-[![ci](https://github.com/21sean/grapevine/actions/workflows/ci.yml/badge.svg)](https://github.com/21sean/grapevine/actions/workflows/ci.yml)
+[![ci](https://github.com/21sean/GrapevineOS/actions/workflows/ci.yml/badge.svg)](https://github.com/21sean/GrapevineOS/actions/workflows/ci.yml)
 [![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-0b3b2e)](LICENSE)
 
 A live 3D map of the San Diego events locals actually go to, and a reference
@@ -35,7 +35,7 @@ adds.
    worker.
 
    ```bash
-   git clone https://github.com/21sean/grapevine && cd grapevine
+   git clone https://github.com/21sean/GrapevineOS && cd GrapevineOS
    npm install
    ```
 
@@ -276,7 +276,7 @@ walkthrough and the "add a tool" recipe.
   leaving the GPU generating; SIGTERM stops the loops, tells open chat tabs
   to retry, and exits within a time cap.
 - **Observability**: Langfuse (scoped v5 SDK over OTEL) with a self-hosted
-  v4 stack under `observability/langfuse` (`docker compose --profile
+  v4 stack under `docker/observability/langfuse` (`docker compose --profile
 observability up -d`; UI on localhost:3000). Chat turns become traces
   grouped by thread, the rail nodes show up as spans (a blocked turn is
   visibly a routing decision), and guardrail decisions plus conversation-eval
@@ -387,7 +387,7 @@ two ways, from the one contract table in `server/src/agent/contracts.ts`:
   Endpoints cover event search, event detail, ETAs, calendar read/write,
   interests, and web discovery (run now or scheduled). The
   [OpenClaw](https://openclaw.ai) skill documenting all of it is generated
-  from the contracts into `openclaw/skills/grapevine/SKILL.md`; install it by
+  from the contracts into `server/openclaw/skills/grapevine/SKILL.md`; install it by
   copying that folder into `~/.openclaw/skills/`.
 
 The human-in-the-loop policy is the same on every surface: `update_interests`
@@ -465,24 +465,25 @@ server/    Express 5 + tsx · supabase-js data layer (src/store.ts)
            (src/checkpointer.ts) · MCP server (src/mcp.ts)
            routes/ (one router per surface) · lifecycle, health, logging
            eval runner + suites (src/evals/, scripts/evals.ts) · test/
+           openclaw/ (generated skill for the external agent API)
 shared/    one implementation of the logic both tiers need: the types and
            the frame protocol, recurrence, opening hours, tag affinity,
            timezone-correct day math
 workers/   email-ingest Cloudflare Email Worker -> Supabase raw_emails
 supabase/  tracked SQL migrations
-openclaw/  the generated OpenClaw skill for the external agent API
-observability/  the vendored Langfuse stack and the SearXNG settings
+docker/    vendored Langfuse stack and SearXNG settings
 scripts/   doctor.mjs
 docs/      setup.md, agent-architecture.md, mapbox-places.md, images/
            (the diagrams above), archive/ (superseded working notes)
 .github/   ci.yml (every push), nightly.yml (model suites), dependabot,
-           issue forms and the pull request template
+           contributing, security, code of conduct, issue forms, PR template
 .agents/   the Mapbox and Supabase agent skills the code actually uses
 ```
 
-[CONTRIBUTING.md](CONTRIBUTING.md) covers the workspace scripts, the eval
-tiers and the migration rule; [SECURITY.md](SECURITY.md) says where the trust
-boundaries are and how to report a problem; the
-[code of conduct](CODE_OF_CONDUCT.md) is how we talk to each other;
-[CHANGELOG.md](CHANGELOG.md) is cut from the commit history. Licensed under
-Apache-2.0.
+[.github/CONTRIBUTING.md](.github/CONTRIBUTING.md) covers the workspace
+scripts, the eval tiers and the migration rule;
+[.github/SECURITY.md](.github/SECURITY.md) says where the trust boundaries
+are and how to report a problem; the
+[code of conduct](.github/CODE_OF_CONDUCT.md) is how we talk to each other;
+[docs/CHANGELOG.md](docs/CHANGELOG.md) is cut from the commit history.
+Licensed under Apache-2.0.

@@ -85,7 +85,7 @@ const DROP_KEYS = [
   "resourceAttributes.process.executable.path",
 ];
 
-const OBSERVABILITY_ENV = "../../../observability/langfuse/.env";
+const OBSERVABILITY_ENV = "../../../docker/observability/langfuse/.env";
 
 /** Read one value out of the docker stack's env file (dotenv does not load it). */
 function stackEnv(key: string): string | null {

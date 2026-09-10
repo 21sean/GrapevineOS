@@ -1,15 +1,15 @@
 # Contributing
 
 By participating you agree to the [code of conduct](CODE_OF_CONDUCT.md). Bugs
-and feature ideas go through the issue forms under `.github/ISSUE_TEMPLATE/`;
+and feature ideas go through the issue forms under `ISSUE_TEMPLATE/`;
 security reports go through [SECURITY.md](SECURITY.md), not a public issue.
 
 Grapevine is an npm workspace: `server/` holds the Express API and the agent,
 `web/` the Vite client, `shared/` the types and helpers both sides import,
 `workers/email-ingest/` the Cloudflare email worker, `supabase/` the schema,
-and `observability/` the optional Langfuse and SearXNG stack. One install at
-the root covers every package, and one TypeScript, one vitest, one eslint and
-one prettier live there too.
+and `docker/observability/` the optional Langfuse and SearXNG stack. One
+install at the root covers every package, and one TypeScript, one vitest, one
+eslint and one prettier live there too.
 
 ## Getting set up
 
@@ -19,8 +19,8 @@ npm run doctor       # what is missing, and how to fix it
 npm run dev          # api on :8787, web on :5174
 ```
 
-The ten-minute path in the [README](README.md) covers the env files;
-[docs/setup.md](docs/setup.md) covers everything optional.
+The ten-minute path in the [README](../README.md) covers the env files;
+[docs/setup.md](../docs/setup.md) covers everything optional.
 
 ## Scripts
 
@@ -44,7 +44,7 @@ OpenClaw skill file, `guardrails:eval` and `guardrails:calibrate` exercise the
 classifier, `evals:judge` grades stored conversations, `seed:supabase` loads
 the demo sources and settings, `seed:convos` loads demo conversations for the
 Monitoring tab, and the `lf:*` scripts seed a running Langfuse
-(`observability/langfuse/README.md`). In `workers/email-ingest/`: `dev`,
+(`docker/observability/langfuse/README.md`). In `workers/email-ingest/`: `dev`,
 `test`, `deploy`.
 
 ## Opening a pull request
@@ -69,7 +69,7 @@ npm run evals -- --json --suite personas --suite dedupe --suite recurrence --sui
 All of it works in a fresh clone with no Ollama and no Supabase; the offline
 evals run with placeholder credentials. The model suites, the red team and
 the classifier fixtures need a local model and run nightly on a self-hosted
-runner (`.github/workflows/nightly.yml`), or on demand with `npm run evals`.
+runner (`workflows/nightly.yml`), or on demand with `npm run evals`.
 
 ## Tests and evals
 
@@ -81,7 +81,7 @@ runner (`.github/workflows/nightly.yml`), or on demand with `npm run evals`.
   normalisation.
 - `workers/email-ingest/test/` covers the worker's parsing and dead-letter
   logic.
-- `server/src/evals/` is the eval ladder; [docs/agent-architecture.md](docs/agent-architecture.md)
+- `server/src/evals/` is the eval ladder; [docs/agent-architecture.md](../docs/agent-architecture.md)
   explains the tiers. Add an offline case when a change is deterministic and
   a persona case when it changes what a person should be told.
 
@@ -89,7 +89,7 @@ runner (`.github/workflows/nightly.yml`), or on demand with `npm run evals`.
 
 Declare it once in `server/src/agent/contracts.ts`, add the executor in
 `server/src/agent/tools.ts`, run `npm run contracts:gen`. The recipe with the
-details is in [docs/agent-architecture.md](docs/agent-architecture.md#adding-a-tool).
+details is in [docs/agent-architecture.md](../docs/agent-architecture.md#adding-a-tool).
 
 ## Database migrations
 

@@ -4,9 +4,9 @@ coverage/
 package-lock.json
 # generated
 server/src/db-types.ts
-openclaw/skills/grapevine/SKILL.md
+server/openclaw/skills/grapevine/SKILL.md
 # vendored
-observability/langfuse/docker-compose.yml
+docker/observability/langfuse/docker-compose.yml
 .agents/
 # python and data
 server/redteam/.venv/

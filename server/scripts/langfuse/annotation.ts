@@ -104,7 +104,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 const PROJECT_ID = "grapevine-local";
-const OBSERVABILITY_ENV = "../../../observability/langfuse/.env";
+const OBSERVABILITY_ENV = "../../../docker/observability/langfuse/.env";
 const BASE_URL = process.env.LANGFUSE_BASE_URL ?? "http://localhost:3000";
 const PG_CONTAINER = process.env.LANGFUSE_PG_CONTAINER ?? "langfuse-postgres-1";
 

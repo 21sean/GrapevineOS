@@ -54,7 +54,7 @@
  *
  * CODE EVALUATORS need LANGFUSE_CODE_EVAL_DISPATCHER set on langfuse-web and
  * langfuse-worker or the create returns 403 "Code evals are not enabled".
- * observability/langfuse/docker-compose.override.yml now sets it to
+ * docker/observability/langfuse/docker-compose.override.yml now sets it to
  * insecure-local (TypeScript only) with the reasoning written out there. If
  * the three CODE templates 403, the script reports them and carries on.
  *

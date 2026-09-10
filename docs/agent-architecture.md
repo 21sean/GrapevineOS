@@ -198,7 +198,7 @@ contract({
   browser, Claude Desktop or a curl script. Discovery is a dry run by default.
 - `label` and `detail` are what the chat shows while the call runs and when it
   finishes, so the UI never has to know a tool by name.
-- `openclaw/skills/grapevine/SKILL.md` is generated from the table by
+- `server/openclaw/skills/grapevine/SKILL.md` is generated from the table by
   `npm run contracts:gen`, and `npm run contracts:check` fails CI when it is
   stale.
 

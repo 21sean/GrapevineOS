@@ -17,7 +17,7 @@ description: >
 
 Grapevine is a local-first events map (`npm run dev` in its repo). Install this
 skill by copying the folder into your OpenClaw skills directory
-(`cp -r openclaw/skills/grapevine ~/.openclaw/skills/` from a clone of the
+(`cp -r server/openclaw/skills/grapevine ~/.openclaw/skills/` from a clone of the
 repo), then configure:
 
 - `GRAPEVINE_URL`: default `http://localhost:8787`

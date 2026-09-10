@@ -62,7 +62,7 @@ Instances of abusive, harassing, or otherwise unacceptable behavior may be
 reported to the community leaders responsible for enforcement by contacting
 the repository owner ([@21sean](https://github.com/21sean)) through GitHub.
 If the report is sensitive, use
-[private vulnerability reporting](https://github.com/21sean/grapevine/security/advisories/new)
+[private vulnerability reporting](https://github.com/21sean/GrapevineOS/security/advisories/new)
 and mark it as a community concern.
 
 All complaints will be reviewed and investigated promptly and fairly.

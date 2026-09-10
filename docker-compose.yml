@@ -7,7 +7,7 @@
 #   docker compose --profile observability --profile search up -d
 #   docker compose --profile observability --profile search down
 #
-# Langfuse's own compose file is vendored unchanged under observability/langfuse
+# Langfuse's own compose file is vendored unchanged under docker/observability/langfuse
 # together with the Grapevine override (alert bridge, code evaluators) and a
 # small profile file that puts every Langfuse service behind the observability
 # profile. Its .env, next to those files, holds the keys server/.env needs.
@@ -17,15 +17,15 @@ name: grapevine
 
 include:
   - path:
-      - observability/langfuse/docker-compose.yml
-      - observability/langfuse/docker-compose.override.yml
-      - observability/langfuse/docker-compose.profile.yml
-    project_directory: observability/langfuse
+      - docker/observability/langfuse/docker-compose.yml
+      - docker/observability/langfuse/docker-compose.override.yml
+      - docker/observability/langfuse/docker-compose.profile.yml
+    project_directory: docker/observability/langfuse
 
 services:
   # search_web prefers a SearXNG instance when SEARXNG_URL is set in server/.env
   # (http://localhost:8888 for this one) and scrapes DuckDuckGo otherwise. The
-  # settings file under observability/searxng turns on the JSON format the
+  # settings file under docker/observability/searxng turns on the JSON format the
   # server reads and turns off the rate limiter, since only localhost can reach
   # it.
   searxng:
@@ -35,7 +35,7 @@ services:
     ports:
       - "127.0.0.1:8888:8080"
     volumes:
-      - ./observability/searxng:/etc/searxng:rw
+      - ./docker/observability/searxng:/etc/searxng:rw
     environment:
       SEARXNG_BASE_URL: http://localhost:8888/
       # Signs sessions; any string, private instance.

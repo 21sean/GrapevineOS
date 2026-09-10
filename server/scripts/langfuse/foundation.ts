@@ -66,7 +66,7 @@ const sdk = new NodeSDK({
 sdk.start();
 const lf = new LangfuseClient();
 
-const OBSERVABILITY_ENV = "../../../observability/langfuse/.env";
+const OBSERVABILITY_ENV = "../../../docker/observability/langfuse/.env";
 /**
  * What this run registered: priced model names, score configs, and the prompt
  * versions that exist. The traffic simulator and the experiment builder read it

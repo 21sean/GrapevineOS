@@ -5,12 +5,12 @@ below carry their own terms. Nothing is modified except where noted.
 
 ## Vendored in this repository
 
-| What                                 | Where                                            | License | Source                                                                         |
-| ------------------------------------ | ------------------------------------------------ | ------- | ------------------------------------------------------------------------------ |
-| Mapbox agent skills (five of them)   | `.agents/skills/mapbox-*`                        | MIT     | github.com/mapbox/mapbox-agent-skills                                          |
-| Supabase agent skills (two)          | `.agents/skills/supabase*`                       | MIT     | github.com/supabase/agent-skills                                               |
-| Langfuse `docker-compose.yml`        | `observability/langfuse/docker-compose.yml`      | MIT     | github.com/langfuse/langfuse, unmodified; the override file next to it is ours |
-| Langfuse managed evaluator templates | `server/scripts/langfuse/managed-templates.json` | MIT     | captured from the managed library in the Langfuse UI                           |
+| What                                 | Where                                              | License | Source                                                                         |
+| ------------------------------------ | -------------------------------------------------- | ------- | ------------------------------------------------------------------------------ |
+| Mapbox agent skills (five of them)   | `.agents/skills/mapbox-*`                          | MIT     | github.com/mapbox/mapbox-agent-skills                                          |
+| Supabase agent skills (two)          | `.agents/skills/supabase*`                         | MIT     | github.com/supabase/agent-skills                                               |
+| Langfuse `docker-compose.yml`        | `docker/observability/langfuse/docker-compose.yml` | MIT     | github.com/langfuse/langfuse, unmodified; the override file next to it is ours |
+| Langfuse managed evaluator templates | `server/scripts/langfuse/managed-templates.json`   | MIT     | captured from the managed library in the Langfuse UI                           |
 
 ## Fetched at run time or install time
 

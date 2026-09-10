@@ -9,7 +9,7 @@
  * protectedProjectProcedure, both of which reject Langfuse API keys with
  * UNAUTHORIZED. So this script logs in the way the browser does, with a
  * next-auth credentials POST against LANGFUSE_INIT_USER_EMAIL /
- * LANGFUSE_INIT_USER_PASSWORD from observability/langfuse/.env, keeps the
+ * LANGFUSE_INIT_USER_PASSWORD from docker/observability/langfuse/.env, keeps the
  * session cookie, and speaks superjson-enveloped tRPC. There is a documented
  * direct-Postgres fallback (INSERT INTO monitors with a sha256 scheduler_batch_id
  * fingerprint), but it bypasses the app's own zod validation and is not needed
@@ -63,11 +63,13 @@ const BRIDGE_HEADERS = { "X-Ingest-Key": process.env.INGEST_SHARED_KEY ?? "" };
 // ---------------------------------------------------------------------------
 
 function stackEnv(key: string): string {
-  const path = fileURLToPath(new URL("../../../observability/langfuse/.env", import.meta.url));
+  const path = fileURLToPath(
+    new URL("../../../docker/observability/langfuse/.env", import.meta.url),
+  );
   const line = readFileSync(path, "utf8")
     .split(/\r?\n/)
     .find((l) => l.startsWith(`${key}=`));
-  if (!line) throw new Error(`${key} missing from observability/langfuse/.env`);
+  if (!line) throw new Error(`${key} missing from docker/observability/langfuse/.env`);
   return line.slice(key.length + 1).trim();
 }
 

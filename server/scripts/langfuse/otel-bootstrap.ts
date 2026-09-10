@@ -211,7 +211,9 @@ const CH_USER = process.env.CLICKHOUSE_USER ?? "clickhouse";
 /** The stack's compose env is the only place the ClickHouse password lives. */
 function clickhousePassword(): string {
   if (process.env.CLICKHOUSE_PASSWORD) return process.env.CLICKHOUSE_PASSWORD;
-  const envPath = fileURLToPath(new URL("../../../observability/langfuse/.env", import.meta.url));
+  const envPath = fileURLToPath(
+    new URL("../../../docker/observability/langfuse/.env", import.meta.url),
+  );
   const line = readFileSync(envPath, "utf8")
     .split(/\r?\n/)
     .find((l) => l.startsWith("CLICKHOUSE_PASSWORD="));

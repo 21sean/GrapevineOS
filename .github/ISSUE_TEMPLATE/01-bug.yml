@@ -7,7 +7,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for filing this. `npm run doctor` often names the missing piece before a bug report does. Security problems go to [private vulnerability reporting](https://github.com/21sean/grapevine/security/advisories/new), not here.
+        Thanks for filing this. `npm run doctor` often names the missing piece before a bug report does. Security problems go to [private vulnerability reporting](https://github.com/21sean/GrapevineOS/security/advisories/new), not here.
   - type: dropdown
     id: surface
     attributes:
@@ -76,7 +76,7 @@ body:
     id: conduct
     attributes:
       label: Code of Conduct
-      description: By filing this issue you agree to the [Code of Conduct](https://github.com/21sean/grapevine/blob/main/CODE_OF_CONDUCT.md).
+      description: By filing this issue you agree to the [Code of Conduct](https://github.com/21sean/GrapevineOS/blob/main/.github/CODE_OF_CONDUCT.md).
       options:
         - label: I agree to follow this project's Code of Conduct
           required: true

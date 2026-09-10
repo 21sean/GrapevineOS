@@ -3,7 +3,7 @@
  * third-party assistant reads is correct by construction rather than by
  * diligence.
  *
- *   npm run contracts:gen            rewrite openclaw/skills/grapevine/SKILL.md
+ *   npm run contracts:gen            rewrite server/openclaw/skills/grapevine/SKILL.md
  *   npm run contracts:gen -- --check exit 1 when the file on disk is stale (CI)
  *
  * Loads contracts.ts and nothing heavier: no database, no graph, no model.
@@ -14,7 +14,7 @@ import { z } from "zod";
 import { CONTRACTS, toolsFor, type AnyContract } from "../src/agent/contracts.js";
 import { INTEREST_TOPICS } from "../src/types.js";
 
-const OUT = fileURLToPath(new URL("../../openclaw/skills/grapevine/SKILL.md", import.meta.url));
+const OUT = fileURLToPath(new URL("../openclaw/skills/grapevine/SKILL.md", import.meta.url));
 
 // ---------------------------------------------------------------------------
 // Schema to prose
@@ -174,7 +174,7 @@ description: >
 
 Grapevine is a local-first events map (\`npm run dev\` in its repo). Install this
 skill by copying the folder into your OpenClaw skills directory
-(\`cp -r openclaw/skills/grapevine ~/.openclaw/skills/\` from a clone of the
+(\`cp -r server/openclaw/skills/grapevine ~/.openclaw/skills/\` from a clone of the
 repo), then configure:
 
 - \`GRAPEVINE_URL\`: default \`http://localhost:8787\`

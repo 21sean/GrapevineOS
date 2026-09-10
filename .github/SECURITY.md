@@ -8,7 +8,7 @@ are, which settings move them, and how to report a problem.
 ## Reporting a vulnerability
 
 Use GitHub's private vulnerability reporting for this repository
-([Security > Report a vulnerability](https://github.com/21sean/grapevine/security/advisories/new)).
+([Security > Report a vulnerability](https://github.com/21sean/GrapevineOS/security/advisories/new)).
 Describe what you found, how to reproduce it, and what it lets an attacker do.
 This is a small project maintained in spare time, so expect an acknowledgement
 within a week and a fix as soon as one is ready; please hold public details
@@ -85,7 +85,7 @@ it cannot use.
 
 ## The optional Langfuse stack
 
-`observability/langfuse/docker-compose.override.yml` sets
+`docker/observability/langfuse/docker-compose.override.yml` sets
 `LANGFUSE_CODE_EVAL_DISPATCHER=insecure-local`, which runs Langfuse's three
 TypeScript code evaluators inside the worker process with no sandbox. That is
 acceptable only because the stack binds to localhost for one user and the

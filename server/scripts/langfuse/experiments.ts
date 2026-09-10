@@ -1035,7 +1035,7 @@ async function emitRun(spec: RunSpec, dataset: { id: string; items: Item[] }): P
 function stackEnv(key: string): string | undefined {
   try {
     const txt = readFileSync(
-      new URL("../../../observability/langfuse/.env", import.meta.url),
+      new URL("../../../docker/observability/langfuse/.env", import.meta.url),
       "utf8",
     );
     return txt
@@ -1050,7 +1050,9 @@ function stackEnv(key: string): string | undefined {
 async function clickhouse(sql: string, opts: { mutation?: boolean } = {}): Promise<string> {
   const password = process.env.CLICKHOUSE_PASSWORD ?? stackEnv("CLICKHOUSE_PASSWORD");
   if (!password)
-    throw new Error("no CLICKHOUSE_PASSWORD in the environment or observability/langfuse/.env");
+    throw new Error(
+      "no CLICKHOUSE_PASSWORD in the environment or docker/observability/langfuse/.env",
+    );
   const auth = Buffer.from(`clickhouse:${password}`).toString("base64");
   const base = process.env.CLICKHOUSE_HTTP_URL ?? "http://127.0.0.1:8123/";
   // Mutations run asynchronously by default and the next SELECT would still

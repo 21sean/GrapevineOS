@@ -1386,7 +1386,7 @@ const MAX_COHORT_SPAN_DAYS = 7;
 /** Items start this long after their dataset, then keep their real spacing. */
 const ITEM_LEAD_SECONDS = 30;
 
-const OBSERVABILITY_ENV = "../../../observability/langfuse/.env";
+const OBSERVABILITY_ENV = "../../../docker/observability/langfuse/.env";
 
 /** Read one value out of the docker stack's env file (dotenv does not load it). */
 function stackEnv(key: string): string | null {

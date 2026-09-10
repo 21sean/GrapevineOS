@@ -7,7 +7,7 @@
  * Every route parses its input with the contract in contracts.ts, so a
  * query string, a JSON body and an MCP call validate the same way and fail
  * with the same message. The generated skill file
- * (openclaw/skills/grapevine/SKILL.md) documents exactly these routes.
+ * (server/openclaw/skills/grapevine/SKILL.md) documents exactly these routes.
  */
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { removeEventForUser, saveEventForUser } from "../calendar.js";

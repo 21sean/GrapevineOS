@@ -108,7 +108,7 @@ agent's durable memory), `guardrail_scans`, `conversation_evals`,
 planning and not read by the app yet.
 
 - **Schema** is tracked in `supabase/migrations/` and applied with
-  `supabase db push`; [CONTRIBUTING.md](../CONTRIBUTING.md) has the rule that
+  `supabase db push`; [CONTRIBUTING.md](../.github/CONTRIBUTING.md) has the rule that
   keeps the folder and the database in step.
 - **Access model**: RLS is enabled on every table with no policies and the
   Data API roles have no grants, so the posture is deny-all. Only the server
@@ -158,7 +158,7 @@ round trip per request.
 - **Admin**: on a laptop (`NODE_ENV` unset) the admin surface is open to
   anyone who can reach the port. Set `ADMIN_EMAILS` to restrict it to
   signed-in accounts, and `NODE_ENV=production` on a deployed server, which
-  closes it entirely when `ADMIN_EMAILS` is unset. [SECURITY.md](../SECURITY.md)
+  closes it entirely when `ADMIN_EMAILS` is unset. [SECURITY.md](../.github/SECURITY.md)
   has the full table.
 
 One-time dashboard setup (Authentication → Sign In / Providers):
@@ -225,14 +225,14 @@ docker compose --profile search up -d          # SearXNG on http://localhost:888
 docker compose --profile observability --profile search down
 ```
 
-- **Langfuse** is the vendored stack under `observability/langfuse`
+- **Langfuse** is the vendored stack under `docker/observability/langfuse`
   (`README.md` there covers first sign-in, the seeding scripts and the alert
   bridge). Copy the project keys from its `.env` into `server/.env` as
   `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY`, restart the API, and every
   chat turn becomes a trace. The compose override there enables Langfuse's
-  code evaluators with an unsandboxed dispatcher; [SECURITY.md](../SECURITY.md)
+  code evaluators with an unsandboxed dispatcher; [SECURITY.md](../.github/SECURITY.md)
   says why that is only acceptable on localhost.
-- **SearXNG** reads `observability/searxng/settings.yml`, which turns on the
+- **SearXNG** reads `docker/observability/searxng/settings.yml`, which turns on the
   JSON format the server needs and turns off the rate limiter for a private
   instance. Set `SEARXNG_URL=http://localhost:8888` in `server/.env`.
 

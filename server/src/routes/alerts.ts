@@ -1,6 +1,6 @@
 /**
  * Where the self-hosted Langfuse posts alert notifications (Alerts, webhook
- * channel; see observability/langfuse). Logged so an alert firing is visible
+ * channel; see docker/observability/langfuse). Logged so an alert firing is visible
  * in the server console next to the traffic that caused it.
  */
 import { Router } from "express";
