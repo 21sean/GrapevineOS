@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a vulnerability
+    url: https://github.com/21sean/grapevine/security/advisories/new
+    about: Use private vulnerability reporting. Do not open a public issue for a security problem.
+  - name: Setup and operations
+    url: https://github.com/21sean/grapevine/blob/main/docs/setup.md
+    about: Clone-to-running steps, auth, the email worker, and the optional stack.

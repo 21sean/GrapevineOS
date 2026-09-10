@@ -1,0 +1,82 @@
+name: Bug report
+description: Something does not work the way the docs or the UI say it should.
+title: "fix: "
+labels: ["bug"]
+type: bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing this. `npm run doctor` often names the missing piece before a bug report does. Security problems go to [private vulnerability reporting](https://github.com/21sean/grapevine/security/advisories/new), not here.
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      description: Where did it break?
+      options:
+        - Map / event panel
+        - Ask Grapevine (chat)
+        - Admin / Ingest
+        - Admin / Discover
+        - Account / watches / calendar
+        - MCP or external REST
+        - Email worker
+        - Setup / doctor / docs
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what you got instead.
+      placeholder: I pasted a newsletter into Admin → Ingest, approved two events, and only one appeared on the map.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Node version (`node -v`), OS, and how you are running the app (laptop `npm run dev`, or deployed).
+      placeholder: Node 22.19, macOS, npm run dev
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Model provider
+      options:
+        - Local Ollama
+        - Claude Code
+        - Codex
+        - Gemini CLI
+        - Copilot CLI
+        - None / not relevant
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or doctor output
+      description: Paste `npm run doctor` or the relevant server / browser log. Secrets stay out.
+      render: shell
+    validations:
+      required: false
+  - type: checkboxes
+    id: conduct
+    attributes:
+      label: Code of Conduct
+      description: By filing this issue you agree to the [Code of Conduct](https://github.com/21sean/grapevine/blob/main/CODE_OF_CONDUCT.md).
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true

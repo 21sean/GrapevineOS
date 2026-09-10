@@ -475,11 +475,14 @@ observability/  the vendored Langfuse stack and the SearXNG settings
 scripts/   doctor.mjs
 docs/      setup.md, agent-architecture.md, mapbox-places.md, images/
            (the diagrams above), archive/ (superseded working notes)
-.github/   ci.yml (every push), nightly.yml (model suites), dependabot
+.github/   ci.yml (every push), nightly.yml (model suites), dependabot,
+           issue forms and the pull request template
 .agents/   the Mapbox and Supabase agent skills the code actually uses
 ```
 
 [CONTRIBUTING.md](CONTRIBUTING.md) covers the workspace scripts, the eval
 tiers and the migration rule; [SECURITY.md](SECURITY.md) says where the trust
-boundaries are and how to report a problem; [CHANGELOG.md](CHANGELOG.md) is
-cut from the commit history. Licensed under Apache-2.0.
+boundaries are and how to report a problem; the
+[code of conduct](CODE_OF_CONDUCT.md) is how we talk to each other;
+[CHANGELOG.md](CHANGELOG.md) is cut from the commit history. Licensed under
+Apache-2.0.

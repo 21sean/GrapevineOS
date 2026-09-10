@@ -1,5 +1,9 @@
 # Contributing
 
+By participating you agree to the [code of conduct](CODE_OF_CONDUCT.md). Bugs
+and feature ideas go through the issue forms under `.github/ISSUE_TEMPLATE/`;
+security reports go through [SECURITY.md](SECURITY.md), not a public issue.
+
 Grapevine is an npm workspace: `server/` holds the Express API and the agent,
 `web/` the Vite client, `shared/` the types and helpers both sides import,
 `workers/email-ingest/` the Cloudflare email worker, `supabase/` the schema,
@@ -42,6 +46,12 @@ the demo sources and settings, `seed:convos` loads demo conversations for the
 Monitoring tab, and the `lf:*` scripts seed a running Langfuse
 (`observability/langfuse/README.md`). In `workers/email-ingest/`: `dev`,
 `test`, `deploy`.
+
+## Opening a pull request
+
+Use the pull request template. Say why the change exists, what moved, and how
+you checked it. Conventional prefixes (`feat`, `fix`, `refactor`, `docs`,
+`chore`, `build`) stay in the commit messages; the PR title can match.
 
 ## Checks before a pull request
 

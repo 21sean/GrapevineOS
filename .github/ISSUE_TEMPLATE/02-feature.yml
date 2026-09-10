@@ -1,0 +1,54 @@
+name: Feature request
+description: A change to the map, the agent, ingest, or the docs that is not a bug.
+title: "feat: "
+labels: ["enhancement"]
+type: feature
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Say what a person should be able to do that they cannot do today. Implementation ideas are welcome after that.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Map / event panel
+        - Ask Grapevine (chat)
+        - Ingest / discovery
+        - Agent tools / MCP / REST
+        - Guardrails / evals
+        - Docs / setup
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: The gap
+      description: What is hard or impossible today, and who hits it?
+      placeholder: Saved watches re-run on a cadence, but there is no way to see why the last run kept nothing.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What good looks like
+      description: The outcome, not the patch. Link related code or docs if you have them.
+    validations:
+      required: true
+  - type: textarea
+    id: extras
+    attributes:
+      label: Notes
+      description: Alternatives you considered, or why this belongs in Grapevine rather than a local fork.
+    validations:
+      required: false
+  - type: checkboxes
+    id: conduct
+    attributes:
+      label: Code of Conduct
+      description: By filing this issue you agree to the [Code of Conduct](https://github.com/21sean/grapevine/blob/main/CODE_OF_CONDUCT.md).
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true
