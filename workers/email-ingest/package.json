@@ -11,7 +11,7 @@
     "lint": "eslint src test"
   },
   "dependencies": {
-    "postal-mime": "^2.4.3"
+    "postal-mime": "^3.0.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260729.1",
