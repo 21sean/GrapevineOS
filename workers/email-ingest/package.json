@@ -14,7 +14,7 @@
     "postal-mime": "^2.4.3"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260729.1",
-    "wrangler": "^4.115.0"
+    "@cloudflare/workers-types": "^5.20260914.1",
+    "wrangler": "^4.131.1"
   }
 }
