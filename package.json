@@ -27,11 +27,11 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "concurrently": "^9.1.2",
-    "eslint": "^10.8.0",
+    "eslint": "^10.11.0",
     "globals": "^17.8.0",
-    "prettier": "^3.9.6",
+    "prettier": "^3.9.8",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.65.0",
+    "typescript-eslint": "^8.70.0",
     "vitest": "^4.1.10"
   },
   "overrides": {
