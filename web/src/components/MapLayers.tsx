@@ -36,8 +36,8 @@ const THEME_OPTIONS = [
 
 /**
  * Map layers control: a floating glass button on the map that opens a popover
- * (collapsed by default) for hiding Mapbox basemap layers — POI labels, place
- * names, streets, transit, 3D buildings, walking paths — plus the live-traffic
+ * (collapsed by default) for hiding Mapbox basemap layers (POI labels, place
+ * names, streets, transit, 3D buildings, walking paths) plus the live-traffic
  * overlay and the lighting override. Every toggle drives a Standard-style
  * config property through the store (see lib/mapLayers + EventMap); traffic is
  * the one custom overlay.
@@ -50,7 +50,7 @@ export function MapLayers() {
   const setTraffic = useGrapevine((s) => s.setTraffic)
   const mapTheme = useGrapevine((s) => s.mapTheme)
   const setMapTheme = useGrapevine((s) => s.setMapTheme)
-  // What the clock would pick — shown as the hint so "Auto" says what it means.
+  // What the clock would pick, shown as the hint so "Auto" says what it means.
   const autoPreset = useGrapevine(selectAutoLightPreset)
 
   const hiddenCount =

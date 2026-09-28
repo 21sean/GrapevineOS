@@ -1,5 +1,5 @@
 /**
- * Grapevine service worker — Web Push only (no offline caching; the app is a
+ * Grapevine service worker: Web Push only (no offline caching; the app is a
  * live map and stale tiles are worse than no tiles).
  *
  * Payloads come from server/src/push.ts as JSON:

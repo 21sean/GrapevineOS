@@ -13,13 +13,13 @@
  * is never a permanent record of what anyone typed.
  *
  * What goes: an ended, unreferenced event once it is past its retention
- * window — a short one for one-offs (EVENT_ONEOFF_RETENTION_DAYS, default 1: a
+ * window: a short one for one-offs (EVENT_ONEOFF_RETENTION_DAYS, default 1: a
  * concert is dead the morning after, and lingering ones just bloat every
  * client's events payload and get re-scraped and re-rejected by discovery) and
  * a longer one for recurring series (EVENT_RETENTION_DAYS, default 30, 0
  * disables the whole sweep). Unbounded weekly series (farmers markets) never
- * qualify — nextOccurrence keeps rolling them forward. What stays regardless
- * of age: anything a user saved to their calendar or reacted to — deletes
+ * qualify; nextOccurrence keeps rolling them forward. What stays regardless
+ * of age: anything a user saved to their calendar or reacted to. Deletes
  * cascade into those tables, and reactions feed the taste model, so pruning
  * them would erase user history.
  */
@@ -50,7 +50,7 @@ function oneOffRetentionDays(): number {
   return Number.isFinite(raw) && raw >= 0 ? raw : 1;
 }
 
-/** Ids of events some user has saved or reacted to — never pruned. */
+/** Ids of events some user has saved or reacted to; never pruned. */
 async function referencedIds(): Promise<Set<string>> {
   const [cal, reactions] = await Promise.all([
     db.from("calendar_entries").select("event_id").throwOnError(),

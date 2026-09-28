@@ -13,7 +13,7 @@ alter table public.events
   add column if not exists source_url text;
 
 -- ---------------------------------------------------------------------------
--- discovery_searches — saved web searches the scheduler re-runs. cadence is
+-- discovery_searches: saved web searches the scheduler re-runs. cadence is
 -- hours between runs; last_status is a short human summary ("5 candidates,
 -- 3 verified, 2 new" or "error: …") for the admin UI.
 -- ---------------------------------------------------------------------------

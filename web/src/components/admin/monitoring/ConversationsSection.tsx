@@ -39,7 +39,7 @@ const VERDICT_STYLE: Record<
 /**
  * One thread in the past-conversations table: what happened, what the rails
  * did about it, what the judge thought of it. The row is the trace unit every
- * observability guide converges on — aggregate charts say that something
+ * observability guide converges on. Aggregate charts say that something
  * moved, this table is where you find out what.
  */
 function ConversationRow({
@@ -183,7 +183,7 @@ function ConversationRow({
                 </ul>
               ) : (
                 <p className="text-xs text-muted-foreground italic">
-                  Not judged yet — the gavel runs the three conversation metrics
+                  Not judged yet. The gavel runs the three conversation metrics
                   on the local judge.
                 </p>
               )}
@@ -240,7 +240,7 @@ export function ConversationsSection({
         <Spinner className="mx-auto" />
       ) : threads.length === 0 ? (
         <p className="py-4 text-center text-xs text-muted-foreground italic">
-          No conversations yet — Ask Grapevine threads land here once someone
+          No conversations yet. Ask Grapevine threads land here once someone
           signed in chats.
         </p>
       ) : (

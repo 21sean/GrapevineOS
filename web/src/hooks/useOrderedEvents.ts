@@ -9,7 +9,7 @@ import { useGrapevine } from "@/lib/store"
  *
  * Both arrays come from the shared memoized selectors in lib/derived.ts, so
  * the two surfaces split one computation and keep the same reference across
- * clock ticks that don't change the outcome — no re-render, no re-sort.
+ * clock ticks that don't change the outcome: no re-render, no re-sort.
  */
 export function useOrderedEvents() {
   const visible = useGrapevine(selectSearched)

@@ -6,9 +6,9 @@
  * conversation with an actual person any good. Three metrics, because three is
  * what a person can track on a dashboard and each one is load-bearing:
  *
- *   helpfulness  — did the replies answer what was asked, concretely
- *   groundedness — did they stay consistent and stop short of invention
- *   persona      — did the concierge stay in character (the same promise the
+ *   helpfulness:  did the replies answer what was asked, concretely
+ *   groundedness: did they stay consistent and stop short of invention
+ *   persona:      did the concierge stay in character (the same promise the
  *                  guardrails-judge suite enforces on fixtures)
  *
  * Scored by the same local Ollama judge the graded suites use, so a judged
@@ -17,7 +17,7 @@
  * criteria on first use, and a rubric that regenerates per call would make
  * two conversations' scores incomparable.
  */
-// Must precede the deepeval import — see the module for why.
+// Must precede the deepeval import; see the module for why.
 import "./deepeval-env.js";
 import { GEval } from "deepeval/metrics";
 import { LLMTestCase, SingleTurnParams } from "deepeval/test-case";

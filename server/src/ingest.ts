@@ -111,7 +111,7 @@ export async function extractEvents(opts: {
   model?: string;
   /** Provenance stamped on the results; also tunes the prompt. Default: newsletter. */
   sourceKind?: CityEvent["sourceKind"];
-  /** Page the text came from — web discovery verifies candidates against it. */
+  /** Page the text came from; web discovery verifies candidates against it. */
   sourceUrl?: string;
 }): Promise<ExtractedEvent[]> {
   const settings = await store.settings();
@@ -130,7 +130,7 @@ export async function extractEvents(opts: {
   const { chunks, dropped } = chunkDocument(opts.text, budget);
   if (dropped > 0) {
     log.info(
-      `extract: ${opts.source} exceeded the ${MAX_CHUNKS}-chunk budget — ` +
+      `extract: ${opts.source} exceeded the ${MAX_CHUNKS}-chunk budget: ` +
         `${dropped} of ${opts.text.length} chars not read`,
     );
   }
@@ -146,7 +146,7 @@ export async function extractEvents(opts: {
     } catch (err) {
       if (chunks.length === 1) throw err;
       log.info(
-        `extract: ${opts.source} chunk ${i + 1}/${chunks.length} failed — ` +
+        `extract: ${opts.source} chunk ${i + 1}/${chunks.length} failed: ` +
           `${String(err).slice(0, 160)}`,
       );
     }
@@ -172,7 +172,7 @@ export async function extractEvents(opts: {
       const q = [it.venue, it.address, settings.city].filter(Boolean).join(", ");
       // A transient geocode failure (rate limit, outage) propagates and fails
       // the whole ingest, so the email row keeps processed_at null and the
-      // next kick retries it — a partial batch must not be stamped "done".
+      // next kick retries it. A partial batch must not be stamped "done".
       // Only a genuine no-match (null) skips the event.
       const hit = await geocode(q, settings.center);
       if (!hit) continue; // no location, no marker

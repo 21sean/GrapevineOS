@@ -77,7 +77,7 @@ async function runCase(c: EvalCase, timeoutMs: number): Promise<EvalCaseResult> 
       return { ...base, status: "fail", detail: safeDetail(err.message), ms };
     }
     // Anything else is a bug in the code under test or in the case itself.
-    // The message only — a stack trace is noise in a panel and a disclosure
+    // The message only. A stack trace is noise in a panel and a disclosure
     // risk in a screenshot.
     const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
     return { ...base, status: "fail", detail: safeDetail(`threw ${message}`), ms };
@@ -123,7 +123,7 @@ export interface RunOptions {
   /** Suite ids to run; omit for all of them. Unknown ids are ignored. */
   only?: string[];
   onFrame?: (frame: EvalFrame) => void;
-  /** Abort between cases — a closed HTTP connection should not keep working. */
+  /** Abort between cases; a closed HTTP connection should not keep working. */
   signal?: AbortSignal;
 }
 
@@ -144,7 +144,7 @@ export async function runEvals(opts: RunOptions = {}): Promise<EvalRun> {
       if (opts.signal?.aborted) break;
       const suiteStart = Date.now();
 
-      // Building the case list can itself throw — a broken fixture must
+      // Building the case list can itself throw: a broken fixture must
       // report as one skipped suite, not take the whole run down.
       let cases: EvalCase[];
       try {

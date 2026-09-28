@@ -15,7 +15,7 @@ import { dayLabel, hasEnded, isLive, relativeTime } from "@/lib/time"
 import type { CityEvent, IngestRecord } from "@/lib/types"
 
 /**
- * "From your inbox" — the ingest history panel of the account dialog: every
+ * "From your inbox": the ingest history panel of the account dialog: every
  * newsletter/search/paste that produced events, searchable once it's long
  * enough to hunt in. The parent owns the fetch (so history survives
  * open/close); the search box state lives here and resets with each mount.
@@ -39,7 +39,7 @@ export function InboxHistory({
 }) {
   const [query, setQuery] = useState("")
 
-  // Ended events are history, not plans — drop them, and drop a record
+  // Ended events are history, not plans: drop them, and drop a record
   // entirely once nothing in it is still upcoming. Records that never
   // produced events stay visible as pipeline feedback.
   const fresh = useMemo(() => {
@@ -110,7 +110,7 @@ export function InboxHistory({
           <div className="flex flex-col items-start gap-2 py-1">
             <p className="text-xs text-muted-foreground">
               {history && history.length > 0
-                ? "Nothing current from your inbox — everything already came and went. New newsletters land here on their own."
+                ? "Nothing current from your inbox; everything already came and went. New newsletters land here on their own."
                 : "No newsletters yet. Paste one into the ingest pipeline, or deploy the email worker and they'll land here on their own."}
             </p>
             <Button
@@ -150,7 +150,7 @@ export function InboxHistory({
             {/* Native scroll with the bound on the scroller itself. The account
                 dialog's body is a content-sized scroll region, not a
                 definite-height flex parent, so a flex-1 child (or a Radix
-                ScrollArea viewport) collapses to zero here — an explicit
+                ScrollArea viewport) collapses to zero here; an explicit
                 max-height always clips and scrolls. */}
             <div className="scroll-thin max-h-72 overflow-y-auto overscroll-contain">
               {shownRecords.length > 0 ? (

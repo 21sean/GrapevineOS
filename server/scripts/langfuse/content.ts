@@ -198,7 +198,7 @@ export async function loadCatalog(): Promise<CatalogEvent[]> {
 
 export type Rng = () => number;
 
-/** mulberry32 — small, fast, and identical on every machine. */
+/** mulberry32: small, fast, and identical on every machine. */
 export function makeRng(seed: number): Rng {
   let a = seed >>> 0;
   return () => {

@@ -2,7 +2,7 @@
  * Event artwork, the no-paid-APIs way: events are text-only out of the LLM,
  * but most ticket/source pages carry an og:image. After ingest we fetch each
  * event's ticketUrl, lift the social-preview image, and store its URL plus a
- * dominant color — the color paints cards before (or without) the image, so
+ * dominant color. The color paints cards before (or without) the image, so
  * nothing flashes white on a slow network.
  *
  * Decoding stays pure-JS (jpeg-js / pngjs) and sampled, so a poster costs a
@@ -11,7 +11,7 @@
  */
 import jpeg from "jpeg-js";
 import { PNG } from "pngjs";
-import { isBlockedUrl } from "./agent/websearch.js";
+import { fetchPublic, isBlockedUrl } from "./agent/websearch.js";
 import { store } from "./store.js";
 import type { CityEvent } from "./types.js";
 import { logger } from "./log.js";
@@ -20,7 +20,7 @@ const log = logger("images");
 
 const PAGE_TIMEOUT_MS = 12_000;
 const IMAGE_TIMEOUT_MS = 12_000;
-const MAX_HTML_BYTES = 500_000; // og tags live in <head> — no need for the body
+const MAX_HTML_BYTES = 500_000; // og tags live in <head>; no need for the body
 const MAX_IMAGE_BYTES = 8_000_000;
 const CONCURRENCY = 3;
 
@@ -29,10 +29,9 @@ const UA =
   "AppleWebKit/537.36 (KHTML, like Gecko)";
 
 async function fetchText(url: string, maxBytes: number, timeoutMs: number): Promise<string> {
-  const res = await fetch(url, {
+  const res = await fetchPublic(url, {
     signal: AbortSignal.timeout(timeoutMs),
     headers: { "User-Agent": UA, Accept: "text/html" },
-    redirect: "follow",
   });
   if (!res.ok || !res.body) throw new Error(`${res.status}`);
   const reader = res.body.getReader();
@@ -49,8 +48,8 @@ async function fetchText(url: string, maxBytes: number, timeoutMs: number): Prom
 }
 
 /**
- * og:image URLs that are plainly a site-level default — a logo, a share card,
- * a placeholder — rather than art for one event. Web-discovered events all
+ * og:image URLs that are plainly a site-level default (a logo, a share card,
+ * a placeholder) rather than art for one event. Web-discovered events all
  * carry the same aggregator page as their sourceUrl, whose og:image is exactly
  * this kind of generic banner; catching it by name is the cheap first line of
  * defense before the frequency guards below.
@@ -78,14 +77,14 @@ export function extractImageUrl(html: string, pageUrl: string): string | null {
       const url = new URL(raw, pageUrl);
       if (url.protocol === "http:" || url.protocol === "https:") return url.href;
     } catch {
-      /* malformed url in the tag — try the next pattern */
+      /* malformed url in the tag; try the next pattern */
     }
   }
   return null;
 }
 
 /**
- * Average color of a jpeg/png, sampled on a grid — close enough to "dominant"
+ * Average color of a jpeg/png, sampled on a grid: close enough to "dominant"
  * for a background wash, without a clustering pass. Null for formats the
  * pure-JS decoders don't speak (webp, avif, gif).
  */
@@ -129,10 +128,9 @@ export function dominantColor(bytes: Buffer, contentType: string): string | null
 }
 
 async function fetchImage(url: string): Promise<{ bytes: Buffer; contentType: string } | null> {
-  const res = await fetch(url, {
+  const res = await fetchPublic(url, {
     signal: AbortSignal.timeout(IMAGE_TIMEOUT_MS),
     headers: { "User-Agent": UA, Accept: "image/*" },
-    redirect: "follow",
   });
   if (!res.ok) return null;
   const contentType = res.headers.get("content-type") ?? "";
@@ -143,7 +141,7 @@ async function fetchImage(url: string): Promise<{ bytes: Buffer; contentType: st
   return { bytes: buf, contentType };
 }
 
-/** The page an event's artwork is scraped from — its own ticket page first. */
+/** The page an event's artwork is scraped from: its own ticket page first. */
 const pageOf = (e: CityEvent) => e.ticketUrl ?? e.sourceUrl ?? "";
 
 /** Scrape one event's page; returns the artwork patch (or null). No write. */
@@ -153,7 +151,7 @@ async function scrapeImage(
   // Ticket page first; web-discovered events fall back to the page they
   // were verified against. Both come from LLM extraction over untrusted
   // newsletter/web content, so gate them (and the og:image they yield) against
-  // the same SSRF guard the agent's page reader uses — an event field must not
+  // the same SSRF guard the agent's page reader uses; an event field must not
   // aim this fetch at localhost or a private-range host.
   const pageUrl = pageOf(e);
   if (!pageUrl || isBlockedUrl(pageUrl)) return null;
@@ -167,18 +165,18 @@ async function scrapeImage(
 }
 
 /**
- * Fire-and-forget artwork pass over freshly ingested events. Never throws —
+ * Fire-and-forget artwork pass over freshly ingested events. Never throws:
  * ingest already succeeded; this only decorates it.
  *
  * A real event page has one og:image that belongs to that event. An aggregator
  * ("things to do in San Diego this week") has one generic banner that every
- * event scraped from it would inherit — that's the stock skyline showing up on
+ * event scraped from it would inherit; that's the stock skyline showing up on
  * everything. Two frequency guards keep it off the map: skip any page that
  * backs more than one event, and skip an og:image another event already carries.
  */
 export async function enrichEventImages(events: CityEvent[]): Promise<number> {
   // The passed events are already persisted (commitIngest writes before
-  // enriching), so the catalog is the full picture — page and image counts
+  // enriching), so the catalog is the full picture: page and image counts
   // built from it already include this batch.
   const catalog = await store.events().catch(() => [] as CityEvent[]);
   const pageCount = new Map<string, number>();
@@ -189,7 +187,7 @@ export async function enrichEventImages(events: CityEvent[]): Promise<number> {
     if (e.imageUrl) usedImages.set(e.imageUrl, (usedImages.get(e.imageUrl) ?? 0) + 1);
   }
 
-  // Only events whose source page is theirs alone are worth scraping — a page
+  // Only events whose source page is theirs alone are worth scraping; a page
   // shared by 2+ events can only yield one image for all of them.
   const queue = events.filter(
     (e) => pageOf(e) && !e.imageUrl && (pageCount.get(pageOf(e)) ?? 0) <= 1,
@@ -201,13 +199,13 @@ export async function enrichEventImages(events: CityEvent[]): Promise<number> {
         const patch = await scrapeImage(e);
         if (!patch) continue;
         // Another event (or a sibling worker this run) already claimed this
-        // exact image — that proves it's a shared banner, not event art.
+        // exact image, which proves it's a shared banner, not event art.
         if ((usedImages.get(patch.imageUrl) ?? 0) >= 1) continue;
         usedImages.set(patch.imageUrl, 1);
         await store.updateEvent(e.id, patch);
         enriched++;
       } catch {
-        /* page down, image gone — the event stays text-only */
+        /* page down, image gone: the event stays text-only */
       }
     }
   });

@@ -15,19 +15,17 @@ export function ProviderLogo({
   id: string
   className?: string
 }) {
-  const [svg, setSvg] = useState(cache.get(id) ?? "")
+  const [, setLoaded] = useState(0)
+  const svg = cache.get(id) ?? ""
 
   useEffect(() => {
-    if (cache.has(id)) {
-      setSvg(cache.get(id)!)
-      return
-    }
+    if (cache.has(id)) return
     let alive = true
     api
       .providerLogo(id)
       .then((text) => {
         cache.set(id, text)
-        if (alive) setSvg(text)
+        if (alive) setLoaded((n) => n + 1)
       })
       .catch(() => {})
     return () => {

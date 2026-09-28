@@ -1,6 +1,6 @@
 /**
- * Geometry for the "Near me" filter. The zone is a Mapbox isochrone —
- * GeoJSON polygons of "reachable within N minutes of driving" — so
+ * Geometry for the "Near me" filter. The zone is a Mapbox isochrone
+ * (GeoJSON polygons of "reachable within N minutes of driving"), so
  * membership is a point-in-polygon test. When the isochrone API is
  * unreachable the hook falls back to a plain radius derived from city
  * driving speed, tested with haversine.

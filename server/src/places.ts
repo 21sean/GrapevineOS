@@ -12,8 +12,8 @@
  * the id is already known.
  *
  * The preview allows 1,000 records per account per month, so details are
- * fetched lazily — only when someone opens a detail panel, never during ingest
- * — and once fetched they are kept. `place_details` is permanent storage, not
+ * fetched lazily (only when someone opens a detail panel, never during ingest)
+ * and once fetched they are kept. `place_details` is permanent storage, not
  * a TTL cache: rows are never purged, a stored record is always served, and
  * age only decides when to refresh it (see `REFRESH_AFTER_MS`). Mapbox
  * describes this data as "for temporary display and use only" and asks for a
@@ -37,7 +37,7 @@ function token(): string {
 
 /**
  * Records are kept permanently: nothing expires them and no job deletes them.
- * A stored record is always served, however old it is — the venue card showing
+ * A stored record is always served, however old it is: the venue card showing
  * last month's hours beats the card not showing at all, and it means a venue
  * costs the preview quota once rather than once a fortnight.
  *
@@ -47,20 +47,20 @@ function token(): string {
  */
 const REFRESH_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
 
-/** Misses are the exception — an absent record may appear, so re-ask hourly. */
+/** Misses are the exception: an absent record may appear, so re-ask hourly. */
 const MISS_TTL_MS = 60 * 60 * 1000;
 
 const age = (at: string | null) => (at ? Date.now() - Date.parse(at) : Infinity);
 
 /**
- * Concurrent opens of the same venue while it is cold — a shared link doing
- * the rounds — collapse into one resolve-and-fetch instead of racing each
+ * Concurrent opens of the same venue while it is cold (a shared link doing
+ * the rounds) collapse into one resolve-and-fetch instead of racing each
  * other to buy the same record twice. Purely a dedupe: nothing is remembered
  * here past the request, the cache is Postgres.
  */
 const inflight = new Map<string, Promise<VenueDetails | null>>();
 
-/** Drop the venue cache — the admin "refresh venue data" escape hatch. */
+/** Drop the venue cache: the admin "refresh venue data" escape hatch. */
 export async function clearPlacesCache(): Promise<void> {
   await db.from("place_details").delete().neq("mapbox_id", "").throwOnError();
   await db.from("place_lookups").delete().eq("kind", "poi").throwOnError();
@@ -84,7 +84,7 @@ function metres(a: [number, number], b: [number, number]): number {
 
 /**
  * How far a matched POI may sit from the event's own coordinates before we call
- * it a different place — and the radius depends on how much the name tells us,
+ * it a different place. The radius depends on how much the name tells us,
  * because an event's coordinates are not evidence you can lean on.
  *
  * They come from geocoding whatever address the newsletter printed, and that
@@ -96,11 +96,11 @@ function metres(a: [number, number], b: [number, number]): number {
  * So the point is corroboration, not truth:
  *
  *  - a candidate whose NAME answers the query is accepted anywhere in the metro
- *    (`NAMED_RADIUS_M`) — "The Observatory North Park" matching a POI called
+ *    (`NAMED_RADIUS_M`): "The Observatory North Park" matching a POI called
  *    The Observatory North Park is the venue, whatever the event row claims
  *  - a candidate whose name says nothing ("Bayard St between Garnet and
  *    Hornblend") has only the coordinates going for it, so it stays on the
- *    tight radius — otherwise a vague location grabs a POI across town
+ *    tight radius; otherwise a vague location grabs a POI across town
  *
  * Both are still ranked name-first, distance-second, so a nearby exact match
  * always wins over a far one.
@@ -140,7 +140,7 @@ function nameRank(wanted: string, candidate: string): number {
  * beats distance on purpose, otherwise "Petco Park" resolves to the taco stand
  * two metres closer to the gate.
  *
- * The answer — including "no such POI" — is written to `place_lookups` under
+ * The answer, including "no such POI", is written to `place_lookups` under
  * the caller's key. `created_at` is stamped explicitly so re-resolving an
  * expired miss restarts its clock.
  */
@@ -303,7 +303,7 @@ function projectPhotos(raw: unknown): VenuePhoto[] {
   const photos: VenuePhoto[] = [];
   for (const p of raw) {
     const url = typeof p?.url === "string" ? p.url : null;
-    // Only https — these render as <img> in the panel.
+    // Only https: these render as <img> in the panel.
     if (!url || !url.startsWith("https://")) continue;
     photos.push({
       url,
@@ -330,7 +330,7 @@ async function fetchDetails(mapboxId: string): Promise<VenueDetails | null> {
   if (res.status === 404 || res.status === 422) return null; // unknown/bad id, no record billed
   if (res.status === 403) {
     throw new PlacesScopeError(
-      "Mapbox token lacks the places:read scope — add it to MAPBOX_SECRET_TOKEN",
+      "Mapbox token lacks the places:read scope. Add it to MAPBOX_SECRET_TOKEN",
     );
   }
   if (res.status === 429) {
@@ -404,7 +404,7 @@ async function resolveVenue(
   const stored = cached?.details ? (cached.details as unknown as VenueDetails) : null;
 
   if (cached) {
-    // A remembered "no such POI" — re-ask occasionally, in case Search Box
+    // A remembered "no such POI": re-ask occasionally, in case Search Box
     // learns the venue later.
     if (!cached.mapbox_id) {
       if (age(cached.resolved_at) < MISS_TTL_MS) return null;
@@ -432,7 +432,7 @@ async function resolveVenue(
       .throwOnError();
     return value;
   } catch (err) {
-    // Quota/scope problems are configuration, not "this venue has no data" —
+    // Quota/scope problems are configuration, not "this venue has no data";
     // serve the record due for refresh if we hold one, otherwise let the caller
     // report it and say so in the panel.
     if (stored) return stored;

@@ -2,7 +2,7 @@
  * Synthetic tester personas for demo and observability data.
  *
  * The real operator's account must never appear in seeded threads or in
- * Langfuse traces — demo conversations belong to these testers instead.
+ * Langfuse traces; demo conversations belong to these testers instead.
  * Faker runs with a fixed seed so the same people exist on every machine and
  * every re-run; emails live on example.com (RFC 2606 reserved, guaranteed to
  * never be a real inbox).
@@ -73,7 +73,7 @@ export function testerForThread(threadId: string): Tester {
 /**
  * Create the personas that own real rows as confirmed, passwordless Supabase
  * Auth users and mirror them into the app's users table. Idempotent: existing
- * rows are matched by email and reused. Only the legacy four are provisioned —
+ * rows are matched by email and reused. Only the legacy four are provisioned;
  * the other 26 exist solely as Langfuse user ids and need no account.
  */
 export async function ensureTesters(): Promise<Tester[]> {

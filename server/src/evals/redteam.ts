@@ -2,15 +2,15 @@
  * Multi-turn red team: the harness side of the PyRIT run.
  *
  * The single-message rails are structurally blind to an attack spread across
- * turns. Each message in a crescendo is innocuous on its own — that is the
- * entire technique — so a per-message classifier scores every one of them near
+ * turns. Each message in a crescendo is innocuous on its own (that is the
+ * entire technique), so a per-message classifier scores every one of them near
  * zero and the conversation still ends somewhere it should not. Nothing in the
  * other suites can see that, because nothing in them has more than one turn.
  *
  * The attacks come from PyRIT (server/redteam/run_attack.py): Microsoft's
  * Crescendo and red-teaming loops, their adversarial prompts, their escalation
  * and backtracking, their scoring. This module owns only the two ends PyRIT
- * cannot supply — a loopback bridge that puts the real agent behind an HTTP
+ * cannot supply: a loopback bridge that puts the real agent behind an HTTP
  * turn, and the objectives an attacker would actually pursue against a city
  * events concierge.
  *
@@ -131,9 +131,9 @@ export interface BridgeOptions {
  * Put the real agent behind one HTTP turn on loopback.
  *
  * PyRIT talks to targets over HTTP, and the agent it needs to talk to lives in
- * this process. Rather than pointing it at the deployed chat endpoint — which
+ * this process. Rather than pointing it at the deployed chat endpoint (which
  * would drag in auth, whichever provider the install happens to be configured
- * for, and the recorded telemetry — the harness opens a socket in front of the
+ * for, and the recorded telemetry), the harness opens a socket in front of the
  * same graph the earlier in-process simulation used. Same defender, one hop.
  *
  * PyRIT sends the whole conversation every turn and the bridge replays it into
@@ -296,7 +296,7 @@ export interface AttackResult {
   id: string;
   strategy: string;
   objective: string;
-  /** PyRIT's verdict. "success" means the ATTACK succeeded — we failed. */
+  /** PyRIT's verdict. "success" means the ATTACK succeeded: we failed. */
   outcome: "success" | "failure" | "error" | "undetermined";
   outcome_reason: string | null;
   executed_turns: number;
@@ -367,7 +367,7 @@ export async function runAttacks(opts: RunOptions): Promise<AttackResult[]> {
       try {
         // The script prints exactly one JSON object on stdout and everything
         // else on stderr, but a warning that escapes onto stdout would
-        // otherwise take the whole run down — so parse the last line.
+        // otherwise take the whole run down, so parse the last line.
         const line = out.trim().split("\n").filter(Boolean).at(-1) ?? "";
         resolve((JSON.parse(line) as { results: AttackResult[] }).results);
       } catch (e) {

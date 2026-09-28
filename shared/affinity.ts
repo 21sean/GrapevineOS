@@ -1,6 +1,6 @@
 /**
  * The learned half of the feedback loop: reactions → per-tag weights over the
- * events' own vocabulary. Two "went — great" jazz nights make every jazz
+ * events' own vocabulary. Two "went, great" jazz nights make every jazz
  * event score higher from then on. ONE implementation shared by the web
  * client's ranking (derived.ts) and the server's weekly digest (digest.ts),
  * so the push notification and the on-screen list can't learn differently.
@@ -14,7 +14,7 @@ export type ReactionKind = "going" | "went" | "not_for_me";
 /** How hard one reaction teaches each of the event's tags. */
 export const REACTION_TAG_WEIGHT: Record<ReactionKind, number> = {
   going: 1,
-  went: 1.5, // "went — great" is the strongest taste evidence there is
+  went: 1.5, // "went, great" is the strongest taste evidence there is
   not_for_me: -1.5,
 };
 

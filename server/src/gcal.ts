@@ -1,5 +1,5 @@
 /**
- * Google Calendar API v3 — insert/delete events on the signed-in user's
+ * Google Calendar API v3: insert/delete events on the signed-in user's
  * primary calendar. The refresh token comes from the incremental consent
  * flow (supabase-js signInWithOAuth with the calendar.events scope +
  * offline access) and lives encrypted in Supabase Vault; short-lived access
@@ -33,13 +33,13 @@ async function gcalError(res: Response, verb: string): Promise<Error> {
     const parsed = JSON.parse(body) as { error?: { message?: string } };
     if (parsed.error?.message) message = parsed.error.message;
   } catch {
-    /* not JSON — keep the truncated text */
+    /* not JSON; keep the truncated text */
   }
   return new Error(`Google Calendar ${verb} failed (${res.status}): ${message}`);
 }
 
 /**
- * Access tokens are short-lived (~1h) and deliberately never persisted —
+ * Access tokens are short-lived (~1h) and deliberately never persisted;
  * only the Vault-encrypted refresh token survives a restart. One refresh
  * round trip per user per process lifetime (then per expiry) is free-tier
  * noise, and it keeps bearer tokens out of the database entirely.
@@ -106,7 +106,7 @@ export async function insertGoogleEvent(user: User, event: CityEvent, tz: string
 }
 
 // ---------------------------------------------------------------------------
-// Full calendar client — the in-app preview (list/create/edit/invite) works
+// Full calendar client: the in-app preview (list/create/edit/invite) works
 // on the user's primary calendar through the same events scope as the sync.
 // ---------------------------------------------------------------------------
 
@@ -163,7 +163,7 @@ interface RawGcalEvent {
   }[];
 }
 
-/** The shape the web calendar renders — times stay ISO, colors are palette names. */
+/** The shape the web calendar renders: times stay ISO, colors are palette names. */
 /** Fields the web can set on create/update; times are ISO (or YYYY-MM-DD all-day). */
 function toWebEvent(r: RawGcalEvent, user: User): GcalEvent {
   const allDay = !!r.start?.date;

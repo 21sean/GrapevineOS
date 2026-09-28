@@ -19,8 +19,8 @@ const FARMERS_CYCLE: Record<FarmersFilter, FarmersFilter> = {
 }
 
 /**
- * The quick filter controls both surfaces wire up — the desktop FilterRail's
- * switch rows and the MobileDock's chips: four boolean toggles (live / rare /
+ * The quick filter controls both surfaces wire up (the desktop FilterRail's
+ * switch rows and the MobileDock's chips): four boolean toggles (live / rare /
  * free / hide-promoted) plus the farmers-market tri-state. State, labels, and
  * the farmers cycle order live here once; each surface keeps its own look.
  */

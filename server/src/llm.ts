@@ -2,7 +2,7 @@
  * One JSON-task entry point for the pipeline (extraction, buzz ratings).
  *
  * Routes to whichever engine Admin → Providers picked: the local Ollama model
- * (default, fully private) or a subscription-authed CLI — Claude Code
+ * (default, fully private) or a subscription-authed CLI: Claude Code
  * (`claude -p`), Codex, Gemini, or Copilot. The CLIs trade "nothing leaves
  * your machine" for running the pipeline without a local GPU, still with no
  * API keys.
@@ -14,7 +14,7 @@ import type { LlmProviderId } from "./types.js";
 
 /**
  * Which engine an extraction call will actually use. Callers need this to
- * size their input to the engine (see budget.ts) — an explicit Ollama model
+ * size their input to the engine (see budget.ts): an explicit Ollama model
  * tag pins the local path regardless of the saved setting, exactly as
  * generateJSON resolves it.
  */
@@ -25,7 +25,7 @@ export async function activeProvider(model?: string): Promise<LlmProviderId> {
 export async function generateJSON(opts: {
   system: string;
   user: string;
-  /** Explicit Ollama model tag — forces the local path regardless of settings. */
+  /** Explicit Ollama model tag; forces the local path regardless of settings. */
   model?: string;
 }): Promise<any> {
   const provider = await activeProvider(opts.model);
@@ -46,7 +46,7 @@ async function assertCliReady(id: CliProviderId): Promise<void> {
   }
   if (!status.authed) {
     throw new Error(
-      `${info.name} isn't signed in. Run: ${info.loginHint} — ${info.loginNote}. ` +
+      `${info.name} isn't signed in. Run: ${info.loginHint}. Sign in with your ${info.loginNote}. ` +
         `Or switch extraction back to Ollama in Admin → Providers.`,
     );
   }

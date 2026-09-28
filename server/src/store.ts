@@ -1,5 +1,5 @@
 /**
- * Data layer — Supabase Postgres via supabase-js (see db.ts).
+ * Data layer: Supabase Postgres via supabase-js (see db.ts).
  *
  * Every method mirrors the old JSON-file store one-to-one so route handlers
  * keep their shapes, but reads/writes now hit real tables. App types
@@ -187,7 +187,7 @@ function eventToRow(e: CityEvent, tz: string): TablesInsert<"events"> {
 }
 
 type UserRow = Tables<"users"> & {
-  // join carries only non-secret metadata — the refresh token stays in Vault
+  // join carries only non-secret metadata; the refresh token stays in Vault
   user_google_calendar: Pick<Tables<"user_google_calendar">, "scope"> | null;
 };
 
@@ -292,7 +292,7 @@ export const store = {
 
   /**
    * Adds events. A batch row whose dedupe_key already exists refreshes the
-   * stored copy in place (content fields only — the row keeps its id, rarity,
+   * stored copy in place (content fields only; the row keeps its id, rarity,
    * and enriched image so reactions, calendar saves, and admin edits survive
    * a re-ingest). Unknown source slugs are auto-registered so the events FK
    * always holds. Returns only the newly inserted events, so ingest logs and
@@ -300,7 +300,7 @@ export const store = {
    */
   async addEvents(incoming: CityEvent[]): Promise<CityEvent[]> {
     const { tz } = await this.settings();
-    // Drop unparseable dates up front — one bad row would fail the batch.
+    // Drop unparseable dates up front: one bad row would fail the batch.
     const valid = incoming.filter(
       (e) => Number.isFinite(Date.parse(e.start)) && Number.isFinite(Date.parse(e.end)),
     );
@@ -374,7 +374,7 @@ export const store = {
       .throwOnError();
     const insertedKeys = new Set(data.map((r) => r.dedupe_key));
 
-    // Conflicting keys were left untouched by the insert — refresh their
+    // Conflicting keys were left untouched by the insert; refresh their
     // content so a corrected time/venue/price from a re-send actually lands.
     for (const row of rows) {
       if (insertedKeys.has(row.dedupe_key)) continue;
@@ -636,8 +636,19 @@ export const store = {
     return data ? rowToDiscoverySearch(data) : undefined;
   },
 
-  /** Upsert keyed on the normalized query, so re-adding a search updates it. */
+  /**
+   * Upsert keyed on the normalized query, so re-adding a search updates it.
+   * A row somebody owns as a watch is returned as it is: its pause and pace
+   * are theirs, and it already runs for the whole map.
+   */
   async addDiscoverySearch(query: string, cadenceHours: number): Promise<DiscoverySearch> {
+    const { data: existing } = await db
+      .from("discovery_searches")
+      .select("*")
+      .eq("query_key", query.trim().toLowerCase())
+      .maybeSingle()
+      .throwOnError();
+    if (existing?.user_id) return rowToDiscoverySearch(existing);
     const { data } = await db
       .from("discovery_searches")
       .upsert(
@@ -720,12 +731,19 @@ export const store = {
     return data ? rowToUser(data as UserRow) : undefined;
   },
 
-  /** Lookup for the external agent API's AGENT_USER_EMAIL binding. */
+  /**
+   * Lookup for the external agent API's AGENT_USER_EMAIL binding. ilike is
+   * only there for case-insensitivity, so its wildcards are escaped: an `_`
+   * in the address must not match some other account. PostgREST also reads
+   * `*` as a wildcard and offers no escape for it, so such an address is
+   * refused rather than matched loosely.
+   */
   async userByEmail(email: string): Promise<User | undefined> {
+    if (email.includes("*")) return undefined;
     const { data } = await db
       .from("users")
       .select(USER_SELECT)
-      .ilike("email", email)
+      .ilike("email", email.trim().replace(/[\\%_]/g, "\\$&"))
       .limit(1)
       .maybeSingle()
       .throwOnError();
@@ -747,7 +765,7 @@ export const store = {
 
   /**
    * Last coarse position, the origin for leave-by departure ETAs. Snapped to
-   * a ~110 m grid before it ever reaches a row — the alerts don't need more
+   * a ~110 m grid before it ever reaches a row. The alerts don't need more
    * precision, so the DB never learns more than that.
    */
   async setUserPosition(id: string, lng: number, lat: number): Promise<void> {
@@ -805,7 +823,7 @@ export const store = {
       .select("feed_token")
       .maybeSingle()
       .throwOnError();
-    // Lost a race with a concurrent request — theirs won, use it.
+    // Lost a race with a concurrent request; theirs won, use it.
     return data?.feed_token ?? (await this.userById(id))?.feedToken;
   },
 
@@ -831,7 +849,7 @@ export const store = {
     return data.map(rowToCalendarEntry);
   },
 
-  /** Add-or-update, keyed by (userId, eventId) — saving twice is a no-op. */
+  /** Add-or-update, keyed by (userId, eventId); saving twice is a no-op. */
   async upsertCalendarEntry(
     userId: string,
     eventId: string,
@@ -866,7 +884,7 @@ export const store = {
       .throwOnError();
   },
 
-  /** After a Google disconnect the synced copies are unreachable — the
+  /** After a Google disconnect the synced copies are unreachable, so the
    * entries just forget their Google ids. */
   async clearGoogleEventIds(userId: string): Promise<void> {
     await db
@@ -906,7 +924,7 @@ export const store = {
     }));
   },
 
-  /** Full transcript of one thread — only if `userId` owns it. */
+  /** Full transcript of one thread, only if `userId` owns it. */
   async chatMessages(userId: string, threadId: string): Promise<ChatMessage[] | null> {
     if ((await this.chatThreadOwner(threadId)) !== userId) return null;
     const { data } = await db
@@ -1004,7 +1022,7 @@ export const store = {
     return data ? { publicKey: data.public_key, privateKey: data.private_key } : null;
   },
 
-  /** First writer wins — a concurrent boot race keeps one stable key pair. */
+  /** First writer wins: a concurrent boot race keeps one stable key pair. */
   async savePushKeys(keys: { publicKey: string; privateKey: string }): Promise<void> {
     await db
       .from("push_keys")
@@ -1065,7 +1083,7 @@ export const store = {
       .throwOnError();
   },
 
-  /** Endpoint died (410/404 from the push service) — drop it everywhere. */
+  /** Endpoint died (410/404 from the push service); drop it everywhere. */
   async deletePushEndpoint(endpoint: string): Promise<void> {
     await db.from("push_subscriptions").delete().eq("endpoint", endpoint).throwOnError();
   },
@@ -1086,7 +1104,7 @@ export const store = {
 
   /**
    * Idempotency gate for scheduled sends: true exactly once per key, even
-   * when two ticks (or two server instances) race — the primary key decides.
+   * when two ticks (or two server instances) race; the primary key decides.
    */
   async tryMarkSent(key: string): Promise<boolean> {
     const { data } = await db

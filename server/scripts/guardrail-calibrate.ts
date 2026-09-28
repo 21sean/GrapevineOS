@@ -31,7 +31,7 @@ const threshold = Number(process.env.GUARD_THRESHOLD ?? 0.8);
 async function main() {
   const scored: Scored[] = [];
   for (const entry of CORPUS) {
-    // record:false — corpus scans are synthetic and must never enter the
+    // record:false: corpus scans are synthetic and must never enter the
     // distribution the panel reports on.
     const v = await scanText(entry.text, { record: false });
     if (!v.available) {

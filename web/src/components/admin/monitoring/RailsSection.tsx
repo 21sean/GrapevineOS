@@ -81,8 +81,8 @@ const LABEL_META: Record<
 /**
  * The score histogram, with the threshold drawn on it. Log-scaled heights:
  * real traffic is overwhelmingly benign, so on a linear scale the first
- * bucket is the whole chart and the tail — the part an operator is actually
- * looking for — is one pixel tall.
+ * bucket is the whole chart and the tail (the part an operator is actually
+ * looking for) is one pixel tall.
  */
 function Histogram({
   window: w,
@@ -114,13 +114,13 @@ function Histogram({
           const baseN = baseline?.buckets[i]?.n ?? 0
           return (
             // h-full is load-bearing: the bars are percentage-height, and a
-            // percentage against an auto-height flex item resolves to 0 —
+            // percentage against an auto-height flex item resolves to 0,
             // which is an invisible histogram, not an error.
             <div
               key={b.lo}
               className="group relative flex h-full flex-1 items-end justify-center"
             >
-              {/* The previous window, behind — a ghost outline so a shift in
+              {/* The previous window, behind: a ghost outline so a shift in
                   shape is visible without a second chart to compare against. */}
               {baseline && baseN > 0 && (
                 <div
@@ -211,7 +211,7 @@ function RailCard({
           <Stat
             label="latency"
             value={`${w.meanMs.toFixed(0)} ms`}
-            hint="regex rail — no scores"
+            hint="regex rail, no scores"
           />
         )}
       </div>
@@ -378,7 +378,7 @@ export function RailsSection({
         <div className="flex flex-col gap-1">
           <h3 className="font-heading text-base font-semibold">Rails</h3>
           <p className="text-sm text-muted-foreground">
-            Score distributions on everything the rails looked at — including
+            Score distributions on everything the rails looked at, including
             what passed. The dashed ghost is the previous window; PSI says
             whether the shape moved.
           </p>
@@ -389,7 +389,7 @@ export function RailsSection({
               Nothing recorded yet in this window.
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Every rail decision is written from the next chat turn onward —
+              Every rail decision is written from the next chat turn onward;
               send a message and come back.
             </p>
           </div>
@@ -413,7 +413,7 @@ export function RailsSection({
           <div className="flex min-w-0 flex-col">
             <span className="text-sm font-medium">Review queue</span>
             <span className="truncate text-xs text-muted-foreground">
-              Judge individual rail decisions — labels become the calibration
+              Judge individual rail decisions; labels become the calibration
               set.
             </span>
           </div>

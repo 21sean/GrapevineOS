@@ -36,6 +36,7 @@ export function useAgentChat() {
   // side-effecting inside a state updater (StrictMode double-invokes those).
   const itemsRef = useRef<ChatItem[]>(items)
   const abortRef = useRef<AbortController | null>(null)
+  const loadSeq = useRef(0)
   // One server-side conversation per mount; the checkpointer replays history.
   const threadIdRef = useRef<string>(crypto.randomUUID())
 
@@ -146,17 +147,25 @@ export function useAgentChat() {
       const trimmed = text.trim()
       if (!trimmed) return
 
-      update((prev) => [
-        ...prev,
-        { kind: "user", text: trimmed },
-        emptyAssistant(),
-      ])
-
-      const s = useGrapevine.getState()
-      const { chatModel: model, chatEffort: effort } = s
+      loadSeq.current++
       abortRef.current?.abort()
       const ac = new AbortController()
       abortRef.current = ac
+      // The turn being replaced stops spinning here; its aborted request
+      // must not touch the new turn, which is now the last item.
+      update((prev) => [
+        ...prev.map((item) =>
+          item.kind === "assistant" && item.streaming
+            ? { ...item, streaming: false, status: undefined }
+            : item
+        ),
+        { kind: "user", text: trimmed },
+        emptyAssistant(),
+      ])
+      const current = () => abortRef.current === ac
+
+      const s = useGrapevine.getState()
+      const { chatModel: model, chatEffort: effort } = s
       api
         .agentChat(
           {
@@ -173,10 +182,13 @@ export function useAgentChat() {
             ...(model && { model }),
             ...(effort && { effort }),
           },
-          onFrame,
+          (frame) => {
+            if (current()) onFrame(frame)
+          },
           ac.signal
         )
         .catch((err) => {
+          if (!current()) return
           if (ac.signal.aborted) {
             patchLast(() => ({ streaming: false, status: undefined }))
           } else {
@@ -197,7 +209,9 @@ export function useAgentChat() {
 
   /** Start over: abort any stream, drop the transcript, mint a fresh thread. */
   const reset = useCallback(() => {
+    loadSeq.current++
     abortRef.current?.abort()
+    abortRef.current = null
     threadIdRef.current = crypto.randomUUID()
     itemsRef.current = []
     setItems([])
@@ -206,8 +220,12 @@ export function useAgentChat() {
 
   /** Resume a persisted conversation: replace the transcript and adopt its id. */
   const loadThread = useCallback(async (id: string) => {
-    const detail = await api.chatThread(id)
+    // Picking thread A then B: whichever answers last must not win.
+    const seq = ++loadSeq.current
     abortRef.current?.abort()
+    abortRef.current = null
+    const detail = await api.chatThread(id)
+    if (seq !== loadSeq.current) return
     threadIdRef.current = detail.id
     const loaded: ChatItem[] = detail.messages.map((m) =>
       m.role === "user"

@@ -1,7 +1,7 @@
 -- Retention hardening (free-tier resilience): the two tables that grow
 -- without bound get pg_cron purges, same pattern as raw_emails/push_sends.
 --
---  * ingests is a pipeline log with denormalized jsonb event snapshots —
+--  * ingests is a pipeline log with denormalized jsonb event snapshots;
 --    useful history, but 180 days is plenty.
 --  * geocode_cache hits are kept forever on purpose (venues don't move);
 --    cached MISSES (lng is null) are re-billed once if retried, so expiring

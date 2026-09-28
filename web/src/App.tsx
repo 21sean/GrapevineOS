@@ -21,7 +21,7 @@ import { selectTour } from "@/lib/derived"
 import { useGrapevine } from "@/lib/store"
 import { supabase } from "@/lib/supabase"
 
-// Operator-only chrome — load its chunk on first open instead of shipping it
+// Operator-only chrome: load its chunk on first open instead of shipping it
 // to every visitor.
 const AdminSheet = lazy(() =>
   import("@/components/admin/AdminSheet").then((m) => ({
@@ -36,7 +36,7 @@ const CalendarDialog = lazy(() =>
   }))
 )
 
-// "Your week" digest — most sessions never open it.
+// "Your week" digest; most sessions never open it.
 const WeekDigest = lazy(() =>
   import("@/components/WeekDigest").then((m) => ({ default: m.WeekDigest }))
 )
@@ -52,7 +52,7 @@ export function App() {
   const adminOpen = useGrapevine((s) => s.adminOpen)
   const calendarOpen = useGrapevine((s) => s.calendarOpen)
   const weekOpen = useGrapevine((s) => s.weekOpen)
-  // Length only — App must not re-render (and fan out to the whole tree) on
+  // Length only: App must not re-render (and fan out to the whole tree) on
   // every clock tick just because the tour's membership was recomputed.
   const tourLength = useGrapevine((s) => selectTour(s).length)
 
@@ -60,7 +60,7 @@ export function App() {
   const isMobile = useIsMobile()
   // Resolve the "Near me" filter to a drive-time isochrone as it changes.
   useNearZone()
-  // Latch so the sheet stays mounted after closing — otherwise the close
+  // Latch so the sheet stays mounted after closing; otherwise the close
   // animation would be cut off when adminOpen flips false. Render-phase
   // state adjustment, per the React docs (same pattern as AccountDialog).
   const [adminEverOpened, setAdminEverOpened] = useState(false)
@@ -78,7 +78,7 @@ export function App() {
     if (oauthError)
       toast.error("Sign-in didn't complete", { description: oauthError })
     // Returning from the Google Calendar consent (see connectGoogleCalendar):
-    // the fresh session carries provider tokens exactly once — capture the
+    // the fresh session carries provider tokens exactly once, so capture the
     // refresh token now and vault it server-side.
     if (params.get("calendar") === "oauth" && supabase) {
       void (async () => {
@@ -166,7 +166,7 @@ export function App() {
   }, [load, tick, setUserPos])
 
   // Coarse origin for leave-by departure alerts. Signed-in only, and the
-  // server snaps it to a ~110 m grid — it never stores the exact fix.
+  // server snaps it to a ~110 m grid; it never stores the exact fix.
   useEffect(() => {
     if (!user || !userPos) return
     api.pushPosition(userPos).catch(() => {})
@@ -245,7 +245,7 @@ export function App() {
             )}
           </div>
         )}
-        {/* bottom-right is dock territory on phones — toast at the top there */}
+        {/* bottom-right is dock territory on phones, so toast at the top there */}
         <Toaster
           theme="dark"
           position={isMobile ? "top-center" : "bottom-right"}

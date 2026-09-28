@@ -24,15 +24,15 @@ import type {
  * Admin → Monitoring. One panel for the whole quality loop, replacing the
  * separate Evals and Guardrails tabs.
  *
- * Ordered by the questions an operator asks, most-load-bearing first — the
+ * Ordered by the questions an operator asks, most-load-bearing first: the
  * standard shape of an LLM observability dashboard (headline numbers, a
  * trend, per-component breakdown, then the trace-level table everything
  * drills into):
  *
- *   1. is it green right now — pass rate, block rate, drift, in one strip
- *   2. what changed — regressions/fixes vs the last comparable run
- *   3. where — per-rail score distributions, per-suite results
- *   4. show me the actual conversations — every persisted thread with its
+ *   1. is it green right now: pass rate, block rate, drift, in one strip
+ *   2. what changed: regressions/fixes vs the last comparable run
+ *   3. where: per-rail score distributions, per-suite results
+ *   4. show me the actual conversations: every persisted thread with its
  *      guardrail decisions and its judge scores, one row each
  *
  * Nothing here computes a statistic of its own: eval numbers come from the

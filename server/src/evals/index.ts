@@ -1,5 +1,5 @@
 /**
- * HTTP surface for the eval harness — the eval half of Admin → Monitoring.
+ * HTTP surface for the eval harness: the eval half of Admin → Monitoring.
  *
  *   GET  /api/evals                the catalog: suites, personas, last run
  *   POST /api/evals/run            NDJSON, one frame per case as it finishes
@@ -14,7 +14,7 @@
  * Access: when ADMIN_EMAILS is set these routes require a signed-in user on
  * that list; unset, they are open exactly like the rest of the admin surface,
  * which is how this app is run locally. That default is deliberate and stated
- * out loud in the panel rather than assumed — a gate nobody knows the shape of
+ * out loud in the panel rather than assumed; a gate nobody knows the shape of
  * is not a gate.
  */
 import { Router } from "express";
@@ -37,7 +37,7 @@ evals.get("/api/evals", async (req, res) => {
   if (!(await adminAllowed(req))) return res.status(403).json({ error: "admin only" });
   try {
     // Counting cases builds them, which is also a cheap check that every
-    // fixture still loads — a suite whose cases cannot be built shows as 0
+    // fixture still loads: a suite whose cases cannot be built shows as 0
     // here rather than surprising the operator halfway through a run.
     const suites = await Promise.all(
       SUITES.map(async (s) => {

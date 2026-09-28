@@ -1,18 +1,18 @@
 /**
- * Web discovery — builds map events from AI web search, with a verification
+ * Web discovery: builds map events from AI web search, with a verification
  * gate between "the model said so" and "it's on the map".
  *
  * One run: web-search the query (scoped to the city) → read the top result
  * pages → LLM-extract event candidates per page (never across pages, so every
  * candidate is attributable to exactly one URL) → verify each candidate:
  *
- *   1. deterministic gates — parseable dates, not in the past, not absurdly
+ *   1. deterministic gates: parseable dates, not in the past, not absurdly
  *      far out, and the title actually appears in the source text (a cheap
  *      hallucination check the model can't talk its way past);
  *   2. an LLM cross-check that re-reads the source page and must either
  *      CONFIRM the event (with a supporting quote), CORRECT a detail the
  *      extractor got wrong, or call it UNSUPPORTED;
- *   3. corroboration — a candidate found on 2+ independent pages clears a
+ *   3. corroboration: a candidate found on 2+ independent pages clears a
  *      lower confidence bar.
  *
  * Only verified candidates reach store.addEvents (which dedupes against the
@@ -63,7 +63,7 @@ function minConfidence(): number {
 
 // ---------------------------------------------------------------------------
 // Request-shape helpers shared by every surface that fronts runDiscovery
-// (internal API, external agent API, MCP) — one definition of the flag names,
+// (internal API, external agent API, MCP): one definition of the flag names,
 // defaults, and limits, so the three routes can't drift apart.
 // ---------------------------------------------------------------------------
 
@@ -79,7 +79,7 @@ export function clampCadence(v: unknown): number {
 
 /**
  * Read the dry-run flag in either spelling (dry_run / dryRun). Omitted means
- * DRY RUN on every surface — committing machine-verified events to the map
+ * DRY RUN on every surface; committing machine-verified events to the map
  * is always an explicit `dry_run: false`.
  */
 export function wantsCommit(body: unknown): boolean {
@@ -120,7 +120,7 @@ function titleOnPage(title: string, pageText: string): boolean {
   const tokens = (title.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []).filter(
     (t) => !STOPWORDS.has(t),
   );
-  if (!tokens.length) return true; // nothing to test — leave it to the LLM
+  if (!tokens.length) return true; // nothing to test; leave it to the LLM
   const hay = pageText.toLowerCase();
   const found = tokens.filter((t) => hay.includes(t)).length;
   return found * 2 >= tokens.length;
@@ -130,7 +130,7 @@ function titleOnPage(title: string, pageText: string): boolean {
  * Is the verifier's supporting quote actually on the page? The prompt demands
  * a verbatim quote, so a real one is a substring; we allow heavy token overlap
  * to survive light reformatting (whitespace, an inserted word). A quote that
- * checks out is evidence we verified ourselves — much harder to fake than a
+ * checks out is evidence we verified ourselves, much harder to fake than a
  * self-reported confidence number, which is why it can bend the floor below.
  */
 function evidenceOnPage(quote: string | undefined, pageText: string): boolean {
@@ -148,7 +148,7 @@ function evidenceOnPage(quote: string | undefined, pageText: string): boolean {
  * Does the candidate's own date appear in the page text? A concrete date on the
  * page is strong corroboration the extractor didn't invent or mis-resolve it;
  * for a recurring event the weekday (or a "weekly/every" cue) plays that role.
- * A soft signal that bends the floor, never a hard reject — page date formats
+ * A soft signal that bends the floor, never a hard reject: page date formats
  * vary far too much to fail closed on a miss.
  */
 function dateOnPage(e: CityEvent, pageText: string, tz: string): boolean {
@@ -274,7 +274,7 @@ async function verifyAgainstPage(
     }),
   });
   const out = new Map<number, Verdict>();
-  // Tolerate a bare array — smaller models sometimes skip the wrapper.
+  // Tolerate a bare array; smaller models sometimes skip the wrapper.
   const list: any[] = Array.isArray(raw) ? raw : Array.isArray(raw?.verdicts) ? raw.verdicts : [];
   for (const v of list) {
     const index = Number(v?.index);
@@ -377,7 +377,7 @@ async function materializeJsonLd(
   try {
     labels = await enrichCandidates(candidates, settings.city);
   } catch (err) {
-    log.info(`discovery: enrichment failed, keeping raw markup — ${String(err).slice(0, 120)}`);
+    log.info(`discovery: enrichment failed, keeping raw markup: ${String(err).slice(0, 120)}`);
   }
 
   const out: CityEvent[] = [];
@@ -420,12 +420,15 @@ async function materializeJsonLd(
 
 export async function runDiscovery(opts: {
   query: string;
-  /** false = dry run: verify and report, write nothing. Default true. */
+  /** true writes the verified events; anything else is a dry run, like every tool's dry_run default. */
   commit?: boolean;
   maxPages?: number;
+  /** A chat hang-up: stops reading pages, and nothing is committed after it. */
+  signal?: AbortSignal;
 }): Promise<DiscoveryRunResult> {
   const query = opts.query.trim();
-  const commit = opts.commit !== false;
+  const commit = opts.commit === true;
+  const { signal } = opts;
   const result: DiscoveryRunResult = {
     query,
     searchedAt: new Date().toISOString(),
@@ -447,7 +450,7 @@ export async function runDiscovery(opts: {
     ? query
     : `${query} ${cityToken}`;
 
-  const search = await webSearch(scoped, { limit: MAX_RESULTS });
+  const search = await webSearch(scoped, { limit: MAX_RESULTS, signal });
   if ("error" in search) return { ...result, error: search.error };
 
   // Read pages until enough succeed. Sequential on purpose: page reads feed
@@ -455,8 +458,8 @@ export async function runDiscovery(opts: {
   const maxPages = Math.min(Math.max(1, opts.maxPages ?? MAX_PAGES), 6);
   const pages: { url: string; title: string; text: string; structured: JsonLdCandidate[] }[] = [];
   for (const hit of search.results) {
-    if (pages.length >= maxPages) break;
-    const page = await readPage(hit.url, { maxChars: PAGE_CHARS, withMarkup: true });
+    if (pages.length >= maxPages || signal?.aborted) break;
+    const page = await readPage(hit.url, { maxChars: PAGE_CHARS, withMarkup: true, signal });
     if ("error" in page) {
       result.pagesSkipped.push({ url: hit.url, error: page.error });
       continue;
@@ -464,7 +467,9 @@ export async function runDiscovery(opts: {
     // Harvest schema.org markup before judging the page on its prose: a
     // JS-rendered calendar often distills to nothing readable while carrying a
     // complete, exact event list in its JSON-LD.
-    const found = page.jsonLd?.length ? eventsFromJsonLdBlocks(page.jsonLd, page.url) : [];
+    const found = page.jsonLd?.length
+      ? eventsFromJsonLdBlocks(page.jsonLd, page.url, settings.tz)
+      : [];
     // Structured only wins when it is actually more exact. Listing pages on the
     // big ticketing sites publish a bare date with no hour and no price, and
     // the prose beside it says "7:30 PM" - so markup that is mostly imprecise
@@ -474,7 +479,7 @@ export async function runDiscovery(opts: {
     if (found.length && !structured.length) {
       log.info(
         `discovery: ${page.url} has schema.org markup but only ` +
-          `${precise}/${found.length} events carry a time — reading the prose instead`,
+          `${precise}/${found.length} events carry a time; reading the prose instead`,
       );
     }
     if (!structured.length && page.text.length < MIN_PAGE_CHARS) {
@@ -545,7 +550,7 @@ export async function runDiscovery(opts: {
       });
     }
   }
-  // Every page failing extraction is an outage, not an empty web — the local
+  // Every page failing extraction is an outage, not an empty web: the local
   // model is down, or the provider errored. Reported as a plain "extracted 0"
   // it reads as "there are no events out there", and the agent passes that
   // straight on to the user as a finding.
@@ -553,13 +558,13 @@ export async function runDiscovery(opts: {
     const why = result.pagesSkipped.at(-1)?.error ?? "extraction failed";
     return {
       ...result,
-      error: `read ${pages.length} page${pages.length === 1 ? "" : "s"} but none could be processed — ${why}`,
+      error: `read ${pages.length} page${pages.length === 1 ? "" : "s"} but none could be processed: ${why}`,
     };
   }
 
   const keyOf = (e: CityEvent) => eventKey(e, settings.tz);
 
-  // Deterministic gates first — no LLM tokens spent on obvious fabrications,
+  // Deterministic gates first: no LLM tokens spent on obvious fabrications,
   // and hard-rejected candidates must not corroborate anything.
   const gated: { page: (typeof pages)[number]; events: CityEvent[]; structured: boolean }[] = [];
   for (const { page, events, structured } of perPage) {
@@ -652,8 +657,8 @@ export async function runDiscovery(opts: {
       // date against the page.
       const event = v.verdict === "corrected" ? applyFixes(e, v) : e;
       // Deterministic supports we verified ourselves. Each one earns a lower
-      // confidence floor, so the run leans on checkable evidence — a real quote
-      // on the page, the date on the page, the same event on a second page —
+      // confidence floor, so the run leans on checkable evidence (a real quote
+      // on the page, the date on the page, the same event on a second page)
       // rather than a small local model's self-reported confidence alone. The
       // title is already known to be on the page (hardReject), so a confirmed
       // verdict with any of these is well-grounded even at modest confidence.
@@ -688,7 +693,7 @@ export async function runDiscovery(opts: {
     });
   }
 
-  // A run can meet the same event on two pages — keep the higher-confidence copy.
+  // A run can meet the same event on two pages; keep the higher-confidence copy.
   const byKey = new Map<string, DiscoveryCandidate>();
   for (const c of result.verified) {
     const k = keyOf(c.event);
@@ -697,7 +702,7 @@ export async function runDiscovery(opts: {
   }
   result.verified = [...byKey.values()];
 
-  if (commit && result.verified.length) {
+  if (commit && result.verified.length && !signal?.aborted) {
     const { added } = await commitIngest({
       events: result.verified.map((c) => c.event),
       source: "web-search",
@@ -737,7 +742,7 @@ function rejectionBucket(reason: string | undefined): string {
 
 /**
  * The top rejection reasons for a run, most common first, each with a count and
- * one example title — enough for the agent to explain a thin run to the user
+ * one example title: enough for the agent to explain a thin run to the user
  * and decide whether to retry with a tighter query or a different source.
  */
 export function summarizeRejections(
@@ -758,7 +763,7 @@ export function summarizeRejections(
 }
 
 // ---------------------------------------------------------------------------
-// Scheduler — re-runs saved searches on their cadence
+// Scheduler: re-runs saved searches on their cadence
 // ---------------------------------------------------------------------------
 
 const DEFAULT_TICK_SECONDS = 300;
@@ -790,7 +795,7 @@ async function tick(): Promise<void> {
         await runSavedSearch(s);
       } catch (err) {
         const message = `error: ${String(err).slice(0, 200)}`;
-        log.info(`discovery: “${s.query}” failed — ${message}`);
+        log.info(`discovery: “${s.query}” failed: ${message}`);
         await store.markDiscoveryRun(s.id, message).catch(() => {});
       }
     }

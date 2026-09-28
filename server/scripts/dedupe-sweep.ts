@@ -1,5 +1,5 @@
 /**
- * Dedupe sweep — reports near-duplicates ALREADY stored in the catalog.
+ * Dedupe sweep: reports near-duplicates ALREADY stored in the catalog.
  *
  *   npx tsx scripts/dedupe-sweep.ts            # report only
  *   npx tsx scripts/dedupe-sweep.ts --apply    # delete the weaker of each pair

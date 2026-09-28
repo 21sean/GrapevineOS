@@ -5,7 +5,7 @@
  * pings /api/ingest/inbound; that calls kickInbox() here, which picks up the
  * unprocessed rows, runs them through the same Ollama pipeline as manual
  * pastes, and stamps processed_at + the ingest log id onto the row. The row
- * itself is the ledger — no KV list-op budget, no Cloudflare API token.
+ * itself is the ledger: no KV list-op budget, no Cloudflare API token.
  *
  * Event-driven by default: nothing runs on a timer, so the local model isn't
  * woken (and swapped into VRAM) every minute just to find an empty queue.
@@ -18,7 +18,7 @@
  *   1. Supabase Realtime (default, no configuration). The server holds one
  *      OUTBOUND websocket to Supabase and is told about each raw_emails
  *      insert. Outbound means it works from a laptop behind NAT with nothing
- *      exposed to the internet — which is why the INGEST_URL ping alone was
+ *      exposed to the internet, which is why the INGEST_URL ping alone was
  *      never enough in practice and the pipeline kept falling back to the
  *      timer.
  *   2. The worker's /api/ingest/inbound ping, for deployments where this
@@ -29,7 +29,7 @@
  *
  * A row that fails (Ollama down, bad extraction) keeps processed_at null and
  * records the error, so the next kick (or the next inbound email) retries it
- * and the admin inbox can show what's stuck — same retry semantics as before.
+ * and the admin inbox can show what's stuck. Same retry semantics as before.
  */
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { MAX_ATTEMPTS } from "./budget.js";
@@ -47,7 +47,7 @@ const log = logger("inbox");
 const BATCH = 20;
 
 /** Interval polling is opt-in (event-driven by default): one flag,
- * INBOX_POLL_SECONDS — unset/0 means no timer, a positive value polls. */
+ * INBOX_POLL_SECONDS. Unset/0 means no timer, a positive value polls. */
 function pollIntervalMs(): number | null {
   const raw = process.env.INBOX_POLL_SECONDS;
   if (!raw) return null;
@@ -95,7 +95,7 @@ let rerun = false;
  * working one.
  *
  * subscribe() reports SUBSCRIBED whether or not raw_emails is actually a
- * member of the supabase_realtime publication — if the migration was never
+ * member of the supabase_realtime publication: if the migration was never
  * applied, the channel opens cleanly and then simply never fires. The only
  * honest evidence that it works is a delivery, so: if a poll ever finds
  * unprocessed mail while we believe we are subscribed and have never been
@@ -109,7 +109,7 @@ let warnedRealtimeSilent = false;
  * Whether raw_emails.attempts exists yet.
  *
  * The attempt budget needs a column that arrives with a migration, and a
- * deploy that lands before its migration must not take the inbox down —
+ * deploy that lands before its migration must not take the inbox down;
  * failing to extract mail is a worse outcome than retrying a poison row a few
  * extra times. So the filter is applied optimistically, and a missing column
  * (PostgREST 42703) downgrades to the old unbounded behaviour with one clear
@@ -144,7 +144,7 @@ async function selectPending(): Promise<RawEmail[]> {
 
 async function tick(): Promise<void> {
   // A kick that lands mid-pass sets rerun instead of overlapping a slow LLM
-  // pass — the in-flight pass loops once more so nothing is left stranded.
+  // pass. The in-flight pass loops once more so nothing is left stranded.
   if (running) {
     rerun = true;
     return;
@@ -157,7 +157,7 @@ async function tick(): Promise<void> {
       if (pending.length && subscribed && realtimeDeliveries === 0 && !warnedRealtimeSilent) {
         warnedRealtimeSilent = true;
         log.info(
-          "inbox: found unprocessed mail that realtime never announced — " +
+          "inbox: found unprocessed mail that realtime never announced; " +
             "the subscription is open but silent. Apply " +
             "supabase/migrations/20260731191301_raw_emails_realtime.sql " +
             "(raw_emails must be in the supabase_realtime publication).",
@@ -180,17 +180,23 @@ async function tick(): Promise<void> {
             `inbox: ${row.email_key} failed` +
               (hasAttempts
                 ? ` (attempt ${attempts}/${MAX_ATTEMPTS}` +
-                  `${exhausted ? ", giving up — reprocess by hand to retry" : ""})`
+                  `${exhausted ? ", giving up; reprocess by hand to retry" : ""})`
                 : "") +
-              ` — ${message}`,
+              `: ${message}`,
           );
-          await db
+          const { error: writeError } = await db
             .from("raw_emails")
             .update({ error: message, ...(hasAttempts && { attempts }) })
             .eq("id", row.id);
+          // Without the attempt count the row never exhausts its retries.
+          if (writeError) {
+            log.warn(
+              `inbox: could not record the failure for ${row.email_key}: ${writeError.message}`,
+            );
+          }
         }
       }
-      // A full batch may not be the whole backlog — drain the rest now, but
+      // A full batch may not be the whole backlog: drain the rest now, but
       // only if we made progress. A full batch that all failed keeps its rows
       // unprocessed, so looping would just re-select and re-fail them forever;
       // leave those for the next kick/startup pass to retry.
@@ -245,7 +251,7 @@ export async function listInbox(limit = 30): Promise<{
 
 /**
  * Re-run one email through extraction, whether or not it was processed
- * before — dedupe in addEvents keeps reruns harmless. This is also the way
+ * before; dedupe in addEvents keeps reruns harmless. This is also the way
  * back for a row that exhausted its attempt budget: an explicit human retry
  * clears the count, so the automatic pipeline will pick it up again if this
  * run fails for a new reason.
@@ -268,7 +274,7 @@ export async function reprocessInbox(key: string): Promise<{
 /**
  * Subscribe to raw_emails inserts and kick a pass on each one.
  *
- * The payload is deliberately ignored — tick() re-reads the pending rows
+ * The payload is deliberately ignored: tick() re-reads the pending rows
  * anyway, so a dropped or coalesced notification costs latency, never an
  * email. That is also why a failed subscription is only a warning: the boot
  * pass plus INBOX_POLL_SECONDS still drain the queue.
@@ -296,7 +302,7 @@ function startRealtime(): void {
       } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
         subscribed = false;
         log.info(
-          `inbox: realtime unavailable (${status}) — ` +
+          `inbox: realtime unavailable (${status}); ` +
             "falling back to the boot pass + INBOX_POLL_SECONDS.",
         );
       }

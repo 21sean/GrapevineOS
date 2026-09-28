@@ -83,7 +83,7 @@ export function MobileDock() {
   const [filtersOpen, setFiltersOpen] = useState(false)
 
   const dockRef = useRef<HTMLDivElement>(null)
-  // Invisible probe whose height is env(safe-area-inset-bottom) — the only
+  // Invisible probe whose height is env(safe-area-inset-bottom), the only
   // reliable way to get the inset as a number for the drag math.
   const safeProbeRef = useRef<HTMLDivElement>(null)
   const drag = useRef<{
@@ -148,7 +148,7 @@ export function MobileDock() {
       try {
         e.currentTarget.setPointerCapture(d.pointerId)
       } catch {
-        // pointer already gone — keep tracking without capture
+        // pointer already gone; keep tracking without capture
       }
       el.style.transitionDuration = "0ms"
     }
@@ -167,7 +167,7 @@ export function MobileDock() {
     const d = drag.current
     if (!d || e.pointerId !== d.pointerId) return
     drag.current = null
-    if (!d.moved) return // plain tap — leave it to click handlers
+    if (!d.moved) return // plain tap; leave it to click handlers
     const visiblePx = Math.min(
       d.height,
       Math.max(d.peekPx, d.startVisible - (e.clientY - d.startY))
@@ -251,7 +251,7 @@ export function MobileDock() {
                 {t.shortLabel}
               </Chip>
             ))}
-          {/* Today / Tomorrow / Weekend / range picker — the phone finally
+          {/* Today / Tomorrow / Weekend / range picker: the phone finally
               gets the date window the agent could always set */}
           <DateQuickChips
             chipClass={DOCK_CHIP}
@@ -265,7 +265,7 @@ export function MobileDock() {
             onClick={() => {
               setFiltersOpen((o) => !o)
               // opening the tuning panel from peek would leave it below the
-              // fold — bring the sheet up with it
+              // fold, so bring the sheet up with it
               if (!filtersOpen && dockState === "peek") snapTo("half")
             }}
           >

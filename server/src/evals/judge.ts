@@ -1,12 +1,12 @@
 /**
- * The LLM judge behind the graded suites — DeepEval metrics scored by the
+ * The LLM judge behind the graded suites: DeepEval metrics scored by the
  * local Ollama model, so a judged eval costs GPU time and nothing else.
  *
  * Why a judge at all, when the guardrails suite already asserts on regexes:
  * the deterministic rails can only catch the failures somebody already wrote
  * a pattern for. "I am Qwen" is in the list because it happened once in
- * production. The interesting question — did the assistant break character in
- * a way nobody has thought of yet — is not expressible as a regex, and that
+ * production. The interesting question (did the assistant break character in
+ * a way nobody has thought of yet?) is not expressible as a regex, and that
  * is the question a judge is for. The two are complementary and neither
  * replaces the other, which is why both suites exist.
  *
@@ -14,7 +14,7 @@
  * not installed is not a regression, and a suite that goes red because Ollama
  * was restarting teaches people to ignore red.
  */
-// Must precede the deepeval import — see the module for why.
+// Must precede the deepeval import; see the module for why.
 import "./deepeval-env.js";
 import { OllamaModel } from "deepeval/models";
 import { listInstalled, ollamaBase } from "../ollama.js";
@@ -81,7 +81,7 @@ export async function judgeUnavailable(): Promise<string | null> {
   const up = await fetch(`${base}/api/version`, { signal: AbortSignal.timeout(3_000) })
     .then((r) => r.ok)
     .catch(() => false);
-  if (!up) return `Ollama isn't answering at ${base} — the judge model runs there`;
+  if (!up) return `Ollama isn't answering at ${base}, where the judge model runs`;
 
   const { name } = await judge();
   const installed = await listInstalled().catch(() => []);

@@ -4,7 +4,7 @@
  * The "collapse" pairs are the real ones a 2026-08-02 discovery backfill put
  * in the database: four duplicate rows in about a hundred events, every one of
  * the same shape. The "keep apart" pairs are the reason the predicate demands
- * title containment rather than keying on venue and day — two films at one
+ * title containment rather than keying on venue and day: two films at one
  * multiplex, two stages at one festival, and a support act all share a venue
  * and an instant, and merging them silently deletes a real event.
  *

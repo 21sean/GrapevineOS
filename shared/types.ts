@@ -1,7 +1,7 @@
 /**
  * Domain types shared verbatim by the server and the web client. Both
  * runtimes re-export this module from their local `types` files, so the
- * client/server wire shapes can no longer drift apart silently — a field
+ * client/server wire shapes can no longer drift apart silently: a field
  * added here shows up (and typechecks) on both sides at once.
  *
  * Keep this file self-contained: it is included by two TypeScript projects
@@ -38,7 +38,7 @@ export interface CityEvent {
   address?: string;
   lng: number;
   lat: number;
-  start: string; // ISO 8601 with offset — anchor (first/next) occurrence
+  start: string; // ISO 8601 with offset; anchor (first/next) occurrence
   end: string;
   /**
    * RFC 5545 RRULE (no "RRULE:" prefix), e.g. "FREQ=WEEKLY;BYDAY=SA", when the
@@ -52,7 +52,7 @@ export interface CityEvent {
   ticketProvider?: string;
   source: string;
   sourceKind: "newsletter" | "manual" | "seed" | "search";
-  /** Page the event was verified against — set by web discovery only. */
+  /** Page the event was verified against. Set by web discovery only. */
   sourceUrl?: string;
   rating: number; // 1–5 local-buzz score
   ratingRationale?: string;
@@ -60,18 +60,18 @@ export interface CityEvent {
   rarity: Rarity;
   /** og:image scraped from the ticket/source page at ingest (see images.ts). */
   imageUrl?: string;
-  /** Dominant color of that image, "#rrggbb" — the paint-before-load fallback. */
+  /** Dominant color of that image, "#rrggbb": the paint-before-load fallback. */
   imageColor?: string;
 }
 
-/** Per-user feedback on one event — the signal that teaches the ranking. */
+/** Per-user feedback on one event: the signal that teaches the ranking. */
 export type Reaction = "going" | "went" | "not_for_me";
 
 export const REACTIONS: Reaction[] = ["going", "went", "not_for_me"];
 
 /**
  * An LLM engine: the local Ollama model or a subscription-authed CLI. This
- * tuple is the single provider registry — the CLI subset, settings coercion,
+ * tuple is the single provider registry: the CLI subset, settings coercion,
  * and the web client's provider pickers all derive from it.
  */
 const LLM_PROVIDER_IDS = ["ollama", "claude", "codex", "gemini", "copilot"] as const;
@@ -80,7 +80,7 @@ export type LlmProviderId = (typeof LLM_PROVIDER_IDS)[number];
 
 export const LLM_PROVIDERS: LlmProviderId[] = [...LLM_PROVIDER_IDS];
 
-/** The subscription-authed CLI engines — every provider except local Ollama. */
+/** The subscription-authed CLI engines: every provider except local Ollama. */
 export type CliProviderId = Exclude<LlmProviderId, "ollama">;
 
 export const CLI_PROVIDER_IDS: CliProviderId[] = LLM_PROVIDERS.filter(
@@ -166,7 +166,7 @@ export interface DiscoverySearch {
   /** Owner when a signed-in user scheduled it (a "watch"); null for the operator's. */
   userId?: string | null;
   createdAt: string; // ISO 8601
-  lastRunAt?: string; // ISO 8601 — unset until the first run
+  lastRunAt?: string; // ISO 8601; unset until the first run
   lastStatus?: string; // short human summary of the last run
 }
 
@@ -175,7 +175,7 @@ export interface ChatThreadMeta {
   id: string; // the LangGraph thread id the client minted
   title: string; // first user message, truncated
   provider: string; // who answered: ollama model path or a CLI provider
-  updatedAt: string; // ISO 8601 — last exchange
+  updatedAt: string; // ISO 8601, last exchange
 }
 
 /** One persisted chat message (only user/assistant text, never tool frames). */
@@ -219,7 +219,7 @@ export interface ChatUsage {
  * the detail panel actually renders cross the wire.
  *
  * `openingHours` stays as the raw OSM string rather than a baked "open now"
- * boolean — the server caches the record for hours, so the client evaluates it
+ * boolean. The server caches the record for hours, so the client evaluates it
  * against its own clock via shared/hours.ts (see the note there).
  */
 export interface VenueDetails {
@@ -259,7 +259,7 @@ export interface VenuePhoto {
 }
 
 // ---------------------------------------------------------------------------
-// Evals — the quality gate behind Admin → Monitoring (server/src/evals)
+// Evals: the quality gate behind Admin → Monitoring (server/src/evals)
 // ---------------------------------------------------------------------------
 
 /**
@@ -274,7 +274,7 @@ export interface VenuePhoto {
  */
 export type EvalKind = "offline" | "model" | "judge";
 
-/** `skipped` is deliberately not a failure — an unrunnable check is unknown. */
+/** `skipped` is deliberately not a failure; an unrunnable check is unknown. */
 export type EvalStatus = "pass" | "fail" | "skipped";
 
 export interface EvalCaseResult {
@@ -283,7 +283,7 @@ export interface EvalCaseResult {
   status: EvalStatus;
   /** Compact "what we actually got". Never a stack trace, never a secret. */
   detail: string;
-  /** Why the case exists — the regression it guards against. */
+  /** Why the case exists: the regression it guards against. */
   note?: string;
   ms: number;
 }
@@ -318,7 +318,7 @@ export interface EvalRun {
   suites: EvalSuiteResult[];
   /**
    * Fingerprint of the case set that ran. A run whose hash differs from the
-   * baseline's changed the questions, so its score is not comparable — that
+   * baseline's changed the questions, so its score is not comparable; that
    * is a rewrite, not a regression.
    */
   caseSetHash: string;
@@ -382,7 +382,7 @@ export type EvalFrame =
   | { type: "error"; message: string };
 
 // ---------------------------------------------------------------------------
-// Guardrail telemetry — the observability behind Admin → Monitoring
+// Guardrail telemetry: the observability behind Admin → Monitoring
 // (server/src/guardrails, server/src/agent/telemetry.ts)
 // ---------------------------------------------------------------------------
 
@@ -414,7 +414,7 @@ export const GUARDRAIL_RAILS: GuardrailRail[] = ["input", "content", "output"];
 
 /**
  * Where a scan happened. A union for the call sites that exist, plus string
- * so a new one records as itself instead of failing an insert — an unfamiliar
+ * so a new one records as itself instead of failing an insert; an unfamiliar
  * surface showing up in the panel is the correct way to learn about it.
  */
 export type GuardrailSurface =
@@ -466,7 +466,7 @@ export interface GuardrailWindow {
   blocked: number;
   /** Observe-mode scans that would have blocked. */
   wouldBlock: number;
-  /** Rows carrying a score — the output rail contributes none. */
+  /** Rows carrying a score. The output rail contributes none. */
   scored: number;
   meanMs: number;
   p50: number | null;
@@ -479,7 +479,7 @@ export interface GuardrailWindow {
 
 /**
  * One rail, with the window before last for comparison. `drift` is the
- * population stability index between them — the standard "has this
+ * population stability index between them: the standard "has this
  * distribution moved" number, not a bespoke one.
  */
 export interface GuardrailRailStats {
@@ -504,8 +504,8 @@ export interface GuardrailDay {
 /**
  * One candidate threshold, scored against the labelled set. This is the table
  * that answers "what should the threshold be" with something other than a
- * shrug: at each candidate, how much traffic it blocks, and — where an
- * operator has labelled the outcome — how many of those calls were wrong.
+ * shrug: at each candidate, how much traffic it blocks, and (where an
+ * operator has labelled the outcome) how many of those calls were wrong.
  */
 export interface GuardrailSweepPoint {
   threshold: number;
@@ -541,7 +541,7 @@ export interface GuardrailTelemetryHealth {
 }
 
 // ---------------------------------------------------------------------------
-// Conversation evals — past Ask Grapevine threads graded by the local judge
+// Conversation evals: past Ask Grapevine threads graded by the local judge
 // (server/src/evals/conversation-judge.ts, Admin → Monitoring)
 // ---------------------------------------------------------------------------
 
@@ -564,7 +564,7 @@ export interface ConversationEvalScore {
 export interface ConversationEval {
   threadId: string;
   at: string; // ISO 8601
-  /** The Ollama judge that scored it — a score needs its instrument named. */
+  /** The Ollama judge that scored it; a score needs its instrument named. */
   model: string;
   /** Mean of the metric scores. */
   overall: number;

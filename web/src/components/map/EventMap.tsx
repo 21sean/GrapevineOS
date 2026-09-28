@@ -230,7 +230,7 @@ function LiveMap() {
     // POI-style labels only past neighborhood zoom, so downtown doesn't clutter;
     // markers scale with zoom (via a CSS var that cascades to every .gv-marker).
     // The var write invalidates style for every marker, and "zoom" fires per
-    // animation frame during flyTo — quantize the scale and skip no-op writes
+    // animation frame during flyTo, so quantize the scale and skip no-op writes
     // so a 3s tour flight costs a handful of recalcs instead of ~200.
     let lastScale = ""
     let lastLabels: boolean | undefined
@@ -271,10 +271,11 @@ function LiveMap() {
     })
 
     mapRef.current = map
+    const stacks = stacksRef.current
     return () => {
       styleReadyRef.current = false
-      stacksRef.current.forEach(({ marker }) => marker.remove())
-      stacksRef.current.clear()
+      stacks.forEach(({ marker }) => marker.remove())
+      stacks.clear()
       userMarkerRef.current = null
       map.remove()
       mapRef.current = null
@@ -328,7 +329,7 @@ function LiveMap() {
     }
   }, [liveIds, activeId, agentIds, searchIds, bookedLines])
   // Snap a stack's face to the selected/toured/highlighted event only when
-  // that target changes — never on unrelated re-runs, so a face the user
+  // that target changes, never on unrelated re-runs, so a face the user
   // paged to by hand isn't yanked back by the next clock tick.
   const lastTargetRef = useRef<string | null>(null)
   const lastAgentSeqRef = useRef(0)
@@ -445,7 +446,7 @@ function LiveMap() {
             ctx.searchIds,
             ctx.bookedLines
           )
-          // Sheet open means the user is inspecting this venue — retarget it.
+          // Sheet open means the user is inspecting this venue; retarget it.
           // Sheet closed, paging is a silent preview: no camera move, no popup.
           const st = useGrapevine.getState()
           if (st.detailOpen) st.select(created.events[created.idx].id)
@@ -548,7 +549,7 @@ function LiveMap() {
     cameraTouchedRef.current = true
     // Phones: the top pills and the tour card + dock frame a clear strip of
     // map; pad the camera so the focused marker lands inside it, not under
-    // the overlays. (Media query, not a hook — read at fly time so rotating
+    // the overlays. (Media query, not a hook: read at fly time so rotating
     // the device mid-session picks the right frame.)
     const phone = window.matchMedia("(max-width: 767px)").matches
     map.flyTo({
@@ -621,7 +622,7 @@ function decorateStack(
   const e = stack.events[stack.idx]
   if (!e) return
   const { el } = stack
-  // a booked face wears calendar-salmon head to toe — dot, ring, venue name —
+  // a booked face wears calendar-salmon head to toe (dot, ring, venue name),
   // the way Apple Maps paints a venue holding one of your calendar events
   const bookedLine = bookedLines?.get(e.id)
   const color = bookedLine ? BOOKED_COLOR : CATEGORY_META[e.category].color
@@ -634,7 +635,7 @@ function decorateStack(
   setData(el, "agent", String(agentIds?.has(e.id) ?? false))
   setData(el, "booked", String(!!bookedLine))
   setData(el, "stack", String(stack.events.length > 1))
-  // dim only when a search is active and nothing at this spot matches it —
+  // dim only when a search is active and nothing at this spot matches it;
   // agent pins stay lit, a dimmed recommendation is half a broken answer
   const dimmed =
     !!searchIds &&

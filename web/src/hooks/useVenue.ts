@@ -6,7 +6,7 @@ import type { CityEvent, VenueDetails } from "@/lib/types"
  * Venue detail is stable (hours, photos, accessibility), so this cache is
  * keyed by venue rather than by event: two gigs at the same bar share one
  * lookup. That matters more than usual here because the Places API is in
- * public preview with a 1,000-record monthly quota — the server caches too,
+ * public preview with a 1,000-record monthly quota. The server caches too,
  * but not spending the round trip at all is better.
  */
 const cache = new Map<string, VenueDetails | null>()

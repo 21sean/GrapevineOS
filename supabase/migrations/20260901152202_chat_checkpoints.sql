@@ -3,7 +3,7 @@
 -- Replaces the in-memory MemorySaver: conversation state now survives server
 -- restarts, and the reseed-from-chat_messages dance becomes a fallback for
 -- threads that predate this table. Checkpoints are opaque serialized blobs
--- (JsonPlusSerializer output, base64) — chat_messages stays the human-readable
+-- (JsonPlusSerializer output, base64); chat_messages stays the human-readable
 -- record; these rows are runtime state, bounded by per-thread pruning in the
 -- saver plus a retention sweep.
 --

@@ -1,18 +1,18 @@
 /**
- * Supabase client — the server's single connection to Postgres.
+ * Supabase client: the server's single connection to Postgres.
  *
  * supabase-js talks PostgREST over HTTPS (no raw Postgres connection), so
  * there is no pool to manage and it works from any network, which is exactly
  * what the free tier wants. The secret key bypasses RLS; it lives only in
  * server/.env and must never be sent to the browser.
  *
- * Queries chain .throwOnError(), so callers get typed data or an exception —
+ * Queries chain .throwOnError(), so callers get typed data or an exception;
  * route handlers catch and translate to HTTP errors.
  *
  * The client is built on first use rather than at import. Importing this
  * module used to throw when the keys were absent, which meant anything that
- * merely sat in the same import graph — the offline eval suites, a typecheck
- * script, a one-off tool — needed production credentials to load code it was
+ * merely sat in the same import graph (the offline eval suites, a typecheck
+ * script, a one-off tool) needed production credentials to load code it was
  * never going to call. Missing keys still fail loudly, just at the first query
  * instead of at startup.
  */
@@ -23,7 +23,7 @@ function env(name: string): string {
   const v = process.env[name];
   if (!v) {
     throw new Error(
-      `${name} is not set — copy it from the Supabase dashboard ` +
+      `${name} is not set. Copy it from the Supabase dashboard ` +
         `(Settings → API) into server/.env`,
     );
   }
@@ -39,8 +39,8 @@ function connection(): SupabaseClient<Database> {
 }
 
 /**
- * Behaves exactly like the client it stands in for — `db.from(...)`,
- * `db.rpc(...)`, `db.storage` — but resolves it on first property access.
+ * Behaves exactly like the client it stands in for (`db.from(...)`,
+ * `db.rpc(...)`, `db.storage`) but resolves it on first property access.
  * Methods are bound to the real client so `this` is never the proxy.
  */
 export const db: SupabaseClient<Database> = new Proxy({} as SupabaseClient<Database>, {

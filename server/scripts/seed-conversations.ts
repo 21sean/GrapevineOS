@@ -8,8 +8,8 @@
  *
  * Six threads, chosen to exercise every row state the panel can render: clean
  * passes, a borderline generic answer, a persona break the judge should fail,
- * a blocked injection attempt, and an unjudged thread. Everything is tagged —
- * thread ids start with "demo-" — and re-running the script replaces the
+ * a blocked injection attempt, and an unjudged thread. Everything is tagged
+ * (thread ids start with "demo-"), and re-running the script replaces the
  * previous batch, so this never mingles with real conversations in a way that
  * cannot be undone. Rail scans land in guardrail_scans like real ones (that
  * is the point: the dashboard treats them identically) and age out with the
@@ -274,7 +274,7 @@ for (const t of THREADS) {
 
 // ---------------------------------------------------------------------------
 // Judge the seeded threads: for real on the local Ollama when it answers,
-// canned otherwise — the panel needs rows either way, and a canned score is
+// canned otherwise. The panel needs rows either way, and a canned score is
 // clearly labelled by its model column.
 // ---------------------------------------------------------------------------
 

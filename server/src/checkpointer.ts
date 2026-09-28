@@ -1,17 +1,17 @@
 /**
  * Durable LangGraph checkpointer backed by Supabase (PostgREST, not a raw
- * Postgres connection — the same transport everything else in this server
+ * Postgres connection: the same transport everything else in this server
  * uses, so no DB password is needed and no pool is managed).
  *
  * Why not @langchain/langgraph-checkpoint-postgres: it needs a pg connection
  * string, and this deployment deliberately holds only the Supabase API key.
- * The storage model mirrors MemorySaver exactly — the whole checkpoint and
+ * The storage model mirrors MemorySaver exactly: the whole checkpoint and
  * its metadata are serialized with the saver's JsonPlusSerializer (which
  * round-trips LangChain messages) and stored as base64 text, one row per
  * checkpoint plus one row per pending write.
  *
  * Failure posture: chat must survive the database not answering. Every method
- * catches, warns once, and degrades — getTuple to "no memory" (the HTTP layer
+ * catches, warns once, and degrades: getTuple to "no memory" (the HTTP layer
  * then reseeds from chat_messages), put/putWrites to a dropped checkpoint.
  * Durability degrades; the turn never fails.
  *
@@ -52,7 +52,7 @@ function warnOnce(op: string, err: unknown): void {
   if (warned) return;
   warned = true;
   log.warn(
-    `${op} failed — chat memory degrades to per-process until the database answers: ${String(err).slice(0, 200)}`,
+    `${op} failed; chat memory degrades to per-process until the database answers: ${String(err).slice(0, 200)}`,
   );
 }
 
@@ -152,7 +152,7 @@ export class SupabaseSaver extends BaseCheckpointSaver {
         .eq("checkpoint_ns", ns);
       if (checkpointId) query = query.eq("checkpoint_id", checkpointId);
       const { data } = await query
-        // uuid6 ids sort lexicographically in time order — newest first.
+        // uuid6 ids sort lexicographically in time order; newest first.
         .order("checkpoint_id", { ascending: false })
         .limit(1)
         .maybeSingle()

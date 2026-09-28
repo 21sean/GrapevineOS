@@ -280,7 +280,7 @@ export function EvalsSection({
         <div className="flex flex-col gap-1">
           <h3 className="font-heading text-base font-semibold">Suites</h3>
           <p className="text-sm text-muted-foreground">
-            The offline gate — same registry the CLI runs. Offline suites are
+            The offline gate, same registry the CLI runs. Offline suites are
             milliseconds; judged ones cost local GPU minutes.
           </p>
         </div>

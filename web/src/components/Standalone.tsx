@@ -2,7 +2,7 @@ import { lazy, Suspense } from "react"
 import { ROUTES } from "@/lib/routes"
 
 /**
- * Full-page routes that render outside the map app shell — the OAuth 2.1
+ * Full-page routes that render outside the map app shell: the OAuth 2.1
  * consent screen and the legal pages. main.tsx decides app-vs-standalone from
  * the pathname and mounts this; each page is lazy so the map bundle never
  * carries them.

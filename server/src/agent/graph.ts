@@ -17,7 +17,7 @@
  * The rails used to be `if` statements in the HTTP handler and inside two
  * tools. Moving them into the graph buys three things: they show up in
  * traces as nodes with inputs and outputs, a blocked turn is a routing
- * decision rather than an early `return`, and — most of the value —
+ * decision rather than an early `return`, and (most of the value)
  * every web-facing tool is covered by one rail instead of each tool
  * remembering to call the classifier itself. The next tool that fetches
  * something is protected by existing, not by someone noticing.
@@ -33,8 +33,8 @@
  * The two rails keep untrusted text out of state in deliberately different
  * ways, because they are defending different things:
  *
- *  - `input_rail` reads the turn from `deps.userText` — a closure, not a
- *    state channel — and only promotes it into `messages` once it is clean.
+ *  - `input_rail` reads the turn from `deps.userText` (a closure, not a
+ *    state channel) and only promotes it into `messages` once it is clean.
  *    A flagged message therefore never enters the checkpointer at all, so it
  *    cannot poison the history later turns replay. The closure matters more
  *    now that the checkpointer is durable: a `pending` channel would land the
@@ -47,11 +47,11 @@
  *    durable history the input rail is protecting.
  *
  * State is a LangGraph `StateSchema` (Standard Schema, so plain Zod 4):
- * - `messages` — the running transcript (`MessagesValue` reducer).
- * - `toolRounds` — a `ReducedValue` counter the tools node increments; each
+ * - `messages`: the running transcript (`MessagesValue` reducer).
+ * - `toolRounds`: a `ReducedValue` counter the tools node increments; each
  *   user turn resets it via `Overwrite` (see `turnInput`), so routing reads a
  *   typed channel instead of re-scanning message history every step.
- * - `summary` / `summarized` — the running summary of turns that have scrolled
+ * - `summary` / `summarized`: the running summary of turns that have scrolled
  *   out of the history window, and how many messages it covers.
  *
  * Nodes:
@@ -62,8 +62,8 @@
  *   failure skips the fold and the turn proceeds.
  * - `agent` calls the model with the toolbox bound; the system prompt is
  *   rebuilt every request so the event digest and clock stay fresh, and is
- *   never persisted into thread state. The model is ChatOllama, or — when a
- *   CLI provider is selected — CliChatModel, which shells out to Claude Code /
+ *   never persisted into thread state. The model is ChatOllama, or (when a
+ *   CLI provider is selected) CliChatModel, which shells out to Claude Code /
  *   Codex / Gemini / Copilot but streams through the same graph, so every
  *   provider gets the same rails, memory, and traces.
  * - `tools` executes the model's tool calls, streaming start/done frames to
@@ -74,21 +74,21 @@
  *   so a looping model can't spin forever.
  *
  * Node policies (model nodes only):
- * - `timeout.idleTimeout` — token callbacks refresh the idle timer, so long
+ * - `timeout.idleTimeout`: token callbacks refresh the idle timer, so long
  *   answers stream freely while a stalled Ollama generation fails in ~45s
  *   instead of eating the whole 120s HTTP deadline. CLI turns get a longer
  *   leash: their tool phases (MCP calls inside the CLI process) are silent.
- * - `retryPolicy.retryOn` — retries connection-establishment failures only.
+ * - `retryPolicy.retryOn`: retries connection-establishment failures only.
  *   Those happen before the first token, so a retry can't duplicate streamed
  *   text; mid-stream failures (ECONNRESET, idle timeout) are deliberately not
  *   retried for the same reason. CLI models have no retry at all (a re-run
  *   spends real subscription tokens), and neither do the tools node (a re-run
- *   would re-emit UI action frames) or the rails — a retried scan would
- *   record the same decision twice and double-count it in the distribution.
+ *   would re-emit UI action frames) or the rails (a retried scan would
+ *   record the same decision twice and double-count it in the distribution).
  *
  * Conversation memory is a LangGraph checkpointer keyed by thread_id: the
  * client sends only the new user message and the graph replays the rest.
- * The checkpointer is durable (SupabaseSaver — see checkpointer.ts), so a
+ * The checkpointer is durable (SupabaseSaver; see checkpointer.ts), so a
  * server restart keeps every thread's memory. There is no second copy to
  * reseed from: chat_messages is the transcript a person reads, the
  * checkpointer is the memory the graph uses.
@@ -153,7 +153,7 @@ const SUMMARY_TIMEOUT_MS = 25_000;
 /**
  * Connection-establishment failures only (Ollama restarting, socket refused).
  * These surface before any token streams, so retrying is invisible to the
- * browser. Mid-stream errors must not match — see the header comment. How
+ * browser. Mid-stream errors must not match; see the header comment. How
  * many attempts comes from the one LLM policy in budget.ts.
  */
 const modelRetry: RetryPolicy = {
@@ -167,7 +167,7 @@ const modelRetry: RetryPolicy = {
  * that split across chunk boundaries. Some models emit these even with the
  * thinking flag off.
  */
-export function thinkStripper(): (chunk: string) => string {
+export function thinkStripper(): ((chunk: string) => string) & { flush(): string } {
   let inThink = false;
   let pending = "";
   const partialSuffix = (s: string, tag: string): string => {
@@ -176,7 +176,13 @@ export function thinkStripper(): (chunk: string) => string {
     }
     return "";
   };
-  return (chunk) => {
+  /** End of stream: a held "<" or "<thi" was ordinary text after all. */
+  const flush = () => {
+    const held = inThink ? "" : pending;
+    pending = "";
+    return held;
+  };
+  const strip = (chunk: string) => {
     let text = pending + chunk;
     pending = "";
     let out = "";
@@ -206,6 +212,7 @@ export function thinkStripper(): (chunk: string) => string {
     }
     return out;
   };
+  return Object.assign(strip, { flush });
 }
 
 /** How much thread history the model sees; older turns stay checkpointed. */
@@ -260,7 +267,7 @@ type State = typeof AgentState.State;
  *
  * The user's text is deliberately NOT part of the input: it rides in on
  * `GraphDeps.userText` and only the input rail may write it into `messages`.
- * See the header — that is what keeps a flagged message out of the durable
+ * See the header: that is what keeps a flagged message out of the durable
  * checkpointer.
  */
 export function turnInput(seed: BaseMessage[] = []): typeof AgentState.Update {
@@ -301,10 +308,19 @@ export interface GraphDeps {
   telemetry?: Pick<ScanOptions, "surface" | "threadId" | "userId" | "provider" | "record">;
 }
 
-/** Trailing window that never starts on an orphaned tool result. */
-export function windowed(messages: BaseMessage[]): BaseMessage[] {
+/**
+ * Trailing window that never starts on an orphaned tool result. Messages
+ * that have scrolled out but are not yet in the summary (the recall node
+ * folds once per SUMMARY_STRIDE) stay in view, up to one stride, so nothing
+ * falls between the window and the summary.
+ */
+export function windowed(messages: BaseMessage[], summarized = messages.length): BaseMessage[] {
   if (messages.length <= HISTORY_WINDOW) return messages;
-  const recent = [...messages.slice(-HISTORY_WINDOW)];
+  const start = Math.max(
+    messages.length - HISTORY_WINDOW - SUMMARY_STRIDE,
+    Math.min(messages.length - HISTORY_WINDOW, summarized),
+  );
+  const recent = messages.slice(start);
   while (recent.length && recent[0].getType() === "tool") recent.shift();
   return recent;
 }
@@ -332,13 +348,13 @@ export function routeAfterRail(state: Pick<State, "toolRounds">): "agent" | "fin
 }
 
 // ---------------------------------------------------------------------------
-// Content rail — what counts as untrusted in each tool's result
+// Content rail: what counts as untrusted in each tool's result
 // ---------------------------------------------------------------------------
 
 /**
  * Only the fields a remote server actually wrote. The tool results are our own
  * JSON envelopes around someone else's text, and scanning the envelope would
- * both waste a classification and risk flagging our own wording — the note
+ * both waste a classification and risk flagging our own wording; the note
  * this very rail writes says "prompt injection" in it.
  *
  * A tool absent from here is not scanned, which is correct: `search_events`
@@ -358,8 +374,8 @@ export interface RailedResult {
 
 /**
  * Exported for the guardrails eval suite. The field selection below is the
- * part with actual judgement in it — which keys a remote server wrote versus
- * which ones we did — and it is worth asserting directly rather than only
+ * part with actual judgement in it (which keys a remote server wrote versus
+ * which ones we did), and it is worth asserting directly rather than only
  * through a live model run.
  */
 export async function railToolResult(
@@ -510,7 +526,8 @@ export function buildAgentGraph(deps: GraphDeps) {
       }
     }
     if (!guard.tripped) {
-      const rest = guard.flush();
+      const held = guard.push(strip.flush());
+      const rest = guard.tripped ? "" : held + guard.flush();
       if (rest && !guard.tripped) {
         text += rest;
         emit(config, { type: "delta", text: rest });
@@ -611,7 +628,7 @@ export function buildAgentGraph(deps: GraphDeps) {
    * Recall. When more than SUMMARY_STRIDE messages have scrolled out of the
    * history window since the last fold, compress them into the running
    * summary so windowed() stops meaning "forgotten". Skipped for CLI
-   * providers — a hidden generation there spends real subscription tokens —
+   * providers (a hidden generation there spends real subscription tokens)
    * and skipped on any failure: memory compression is a nicety, the turn is
    * not.
    */
@@ -659,20 +676,20 @@ export function buildAgentGraph(deps: GraphDeps) {
 
   async function agentNode(state: State, config: LangGraphRunnableConfig) {
     const { message, tripped } = await invokeModel(
-      [system, ...recallMessages(state), ...windowed(state.messages)],
+      [system, ...recallMessages(state), ...windowed(state.messages, state.summarized)],
       config,
       true,
     );
     return { messages: [message], ...(tripped && { outputTripped: true }) };
   }
 
-  /** No tools, budget-spent nudge appended — the model must answer now. */
+  /** No tools, budget-spent nudge appended: the model must answer now. */
   async function finalizeNode(state: State, config: LangGraphRunnableConfig) {
     const nudge = new SystemMessage(
       "Tool limit reached — answer the user now using only what you've already gathered.",
     );
     const { message, tripped } = await invokeModel(
-      [system, ...recallMessages(state), ...windowed(state.messages), nudge],
+      [system, ...recallMessages(state), ...windowed(state.messages, state.summarized), nudge],
       config,
       false,
     );
@@ -684,6 +701,9 @@ export function buildAgentGraph(deps: GraphDeps) {
     const calls: ToolCall[] = (isAIMessage(last) ? last.tool_calls : undefined) ?? [];
     const results: ToolMessage[] = [];
     for (const call of calls) {
+      // A hang-up or the deadline ends the batch here: a write later in the
+      // same batch must not run for a tab that has gone away.
+      config.signal?.throwIfAborted();
       const label = toolLabel(call.name, call.args);
       emit(config, { type: "tool", name: call.name, label, state: "start" });
       let message: ToolMessage;
@@ -698,7 +718,8 @@ export function buildAgentGraph(deps: GraphDeps) {
         try {
           message = (await t.invoke(call, config)) as ToolMessage;
         } catch (err) {
-          // Bad args or a downstream failure — hand the error to the model
+          if (config.signal?.aborted) throw err;
+          // Bad args or a downstream failure: hand the error to the model
           // as a tool result so it can route around it.
           message = new ToolMessage({
             tool_call_id: call.id ?? "",
@@ -722,7 +743,7 @@ export function buildAgentGraph(deps: GraphDeps) {
 
   /**
    * Content rail. Scans the untrusted parts of the results the tools node just
-   * produced and replaces any that need it — same message id, which the
+   * produced and replaces any that need it, same message id, which the
    * messages reducer treats as a replacement rather than an append.
    *
    * This is the indirect-injection path: text on a page the agent chose to
@@ -786,8 +807,8 @@ export function buildAgentGraph(deps: GraphDeps) {
         code: "guardrails",
         message:
           dropped === 1
-            ? "One fetched page or result was withheld — its text reads like a prompt-injection attempt."
-            : `${dropped} fetched results were withheld — their text reads like a prompt-injection attempt.`,
+            ? "One fetched page or result was withheld: its text reads like a prompt-injection attempt."
+            : `${dropped} fetched results were withheld: their text reads like a prompt-injection attempt.`,
       });
     }
 

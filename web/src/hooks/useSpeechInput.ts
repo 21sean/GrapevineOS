@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 
 /**
  * Dictation via the browser's Web Speech API (webkit-prefixed in
- * Chrome/Edge/Safari) — keyless and local to the browser, no audio ever
+ * Chrome/Edge/Safari): keyless and local to the browser, no audio ever
  * touches our server. Firefox has no implementation, so callers should hide
  * the mic button when `supported` is false.
  *
@@ -45,7 +45,9 @@ export function useSpeechInput(opts: {
   const recRef = useRef<SpeechRecognitionLike | null>(null)
   // Keep callbacks fresh without re-creating the recognition instance.
   const optsRef = useRef(opts)
-  optsRef.current = opts
+  useEffect(() => {
+    optsRef.current = opts
+  })
 
   const supported = typeof window !== "undefined" && !!getCtor()
 
@@ -81,9 +83,16 @@ export function useSpeechInput(opts: {
         optsRef.current.onError?.(e.error)
       }
     }
+    try {
+      rec.start()
+    } catch (err) {
+      // Throws synchronously when the mic is blocked or a session is stuck;
+      // leaving recRef set would make every later tap a no-op.
+      optsRef.current.onError?.(err instanceof Error ? err.name : String(err))
+      return
+    }
     recRef.current = rec
     setListening(true)
-    rec.start()
   }, [])
 
   const toggle = useCallback(() => {

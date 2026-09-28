@@ -2,7 +2,7 @@
  * Local hardware detection so the model catalog can say whether a model
  * fits this machine. Best effort: NVIDIA via nvidia-smi, Apple silicon via
  * unified memory, other Windows dGPUs via the driver registry. Cached for
- * the process lifetime — hardware doesn't change under a running server.
+ * the process lifetime, since hardware doesn't change under a running server.
  */
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -42,7 +42,7 @@ export async function systemInfo(): Promise<SystemInfo> {
         vramGB = Math.round(Number(mib) / 1024);
       }
     } catch {
-      /* no NVIDIA driver — try the registry below on Windows */
+      /* no NVIDIA driver; try the registry below on Windows */
     }
     if (vramGB === null && process.platform === "win32") {
       try {
@@ -64,7 +64,7 @@ export async function systemInfo(): Promise<SystemInfo> {
           vramGB = Math.round(Number(bytes) / 2 ** 30);
         }
       } catch {
-        /* leave unknown — the UI just skips the fit badges */
+        /* leave unknown; the UI just skips the fit badges */
       }
     }
   }

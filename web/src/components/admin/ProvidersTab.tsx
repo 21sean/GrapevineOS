@@ -13,9 +13,9 @@ import { cn } from "@/lib/utils"
 
 /**
  * Admin → Providers: pick who answers "Ask Grapevine" and who runs the
- * newsletter extraction pipeline — the local Ollama model or a
- * subscription-authed CLI (Claude Code / Codex / Gemini / Copilot, no API
- * keys) — and wire Claude up to this app's tools over MCP.
+ * newsletter extraction pipeline (the local Ollama model or a
+ * subscription-authed CLI: Claude Code / Codex / Gemini / Copilot, no API
+ * keys), and wire Claude up to this app's tools over MCP.
  */
 export function ProvidersTab() {
   const settings = useGrapevine((s) => s.settings)
@@ -118,7 +118,7 @@ export function ProvidersTab() {
           <p className="text-sm text-muted-foreground">
             Who answers Ask Grapevine, and who runs newsletter extraction and
             buzz ratings. The CLIs sign in with the subscription you already
-            have (Claude.ai, ChatGPT, Google, GitHub) — no API keys.
+            have (Claude.ai, ChatGPT, Google, GitHub), no API keys.
           </p>
         </div>
         <Button
@@ -132,7 +132,7 @@ export function ProvidersTab() {
         </Button>
       </div>
 
-      {/* Ollama — the full agent, and the fully local pipeline */}
+      {/* Ollama: the full agent, and the fully local pipeline */}
       <div
         className={cn(
           "flex flex-col gap-2 rounded-lg border px-3 py-2.5",
@@ -162,9 +162,9 @@ export function ProvidersTab() {
           {roleActions("ollama", "the local Ollama model")}
         </div>
         <p className="text-xs text-muted-foreground">
-          Chat gets the full toolbox — map pinning, ETAs, calendar proposals,
-          web search — and extraction stays entirely on this machine. Pick the
-          model in the Models tab.
+          Chat gets the full toolbox (map pinning, ETAs, calendar proposals, web
+          search), and extraction stays entirely on this machine. Pick the model
+          in the Models tab.
         </p>
       </div>
 
@@ -223,13 +223,13 @@ export function ProvidersTab() {
             {p.installed && !p.authed && (
               <>
                 <p className="text-xs text-muted-foreground">
-                  Sign in on the server machine — {p.loginNote}:
+                  Sign in on the server machine with your {p.loginNote}:
                 </p>
                 <Snippet text={p.loginHint} />
               </>
             )}
             <p className="text-xs text-muted-foreground">
-              {p.loginNote}. Chat answers from the event digest — no map or
+              {p.loginNote}. Chat answers from the event digest, with no map or
               calendar tools in this mode. Extraction runs the same newsletter
               pipeline through the CLI instead of the local model.
             </p>
@@ -239,14 +239,14 @@ export function ProvidersTab() {
 
       <Separator />
 
-      {/* MCP — Claude drives this app's tools */}
+      {/* MCP: Claude drives this app's tools */}
       <div className="flex flex-col gap-1">
         <h3 className="font-heading text-base font-semibold">
           Connect Claude to Grapevine (MCP)
         </h3>
         <p className="text-sm text-muted-foreground">
           The reverse direction: give Claude Code or Claude Desktop this app's
-          tools — event search, details, ETAs, calendar saves, interests — over
+          tools (event search, details, ETAs, calendar saves, interests) over
           the Model Context Protocol.
         </p>
       </div>
@@ -261,15 +261,15 @@ export function ProvidersTab() {
           </div>
           <div className="flex flex-col gap-1.5">
             <SnippetLabel>
-              Claude Desktop / claude.ai — custom connector
+              Claude Desktop / claude.ai: custom connector
             </SnippetLabel>
             <Snippet text={mcp.connectorUrl} />
             <p className="text-xs text-muted-foreground">
-              Settings → Connectors → Add custom connector → paste this URL —
+              Settings → Connectors → Add custom connector → paste this URL,
               nothing else.{" "}
               {mcp.auth === "oauth" &&
                 "Claude discovers the OAuth setup on its own, opens a browser window to sign in with your Grapevine account, and you approve once. "}
-              Connectors need the server reachable over HTTPS — run a tunnel
+              Connectors need the server reachable over HTTPS: run a tunnel
               (e.g.{" "}
               <code className="font-mono">
                 cloudflared tunnel --url http://localhost:8787
@@ -279,7 +279,7 @@ export function ProvidersTab() {
             </p>
           </div>
           <div className="flex flex-col gap-1.5">
-            <SnippetLabel>Claude Code — one command</SnippetLabel>
+            <SnippetLabel>Claude Code: one command</SnippetLabel>
             <Snippet
               text={`claude mcp add --transport http grapevine ${mcp.url}`}
             />
@@ -303,8 +303,8 @@ export function ProvidersTab() {
           </div>
           <p className="text-xs text-muted-foreground">
             {mcp.auth === "oauth"
-              ? "Each connected client acts as the Grapevine account it signed in with — calendar saves and interests are per-user. Headless scripts can still send AGENT_API_KEY (server/.env) as an X-Agent-Key header; those writes act on AGENT_USER_EMAIL."
-              : "MCP_OPEN=1 — the endpoint is open and writes act on the account named by AGENT_USER_EMAIL. Unset MCP_OPEN to require OAuth sign-in."}
+              ? "Each connected client acts as the Grapevine account it signed in with; calendar saves and interests are per-user. Headless scripts can still send AGENT_API_KEY (server/.env) as an X-Agent-Key header; those writes act on AGENT_USER_EMAIL."
+              : "MCP_OPEN=1: the endpoint is open and writes act on the account named by AGENT_USER_EMAIL. Unset MCP_OPEN to require OAuth sign-in."}
           </p>
         </div>
       )}

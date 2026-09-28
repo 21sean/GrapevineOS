@@ -363,7 +363,7 @@ enabled = false
 # Obtain from https://clerk.com/setup/supabase
 # domain = "example.clerk.accounts.dev"
 
-# OAuth server configuration — Supabase Auth as the OAuth 2.1 authorization
+# OAuth server configuration: Supabase Auth as the OAuth 2.1 authorization
 # server for Grapevine's MCP endpoint. Mirror these three settings in the
 # hosted dashboard (Authentication > OAuth Server) for the cloud project.
 [auth.oauth_server]
@@ -372,15 +372,15 @@ enabled = true
 # Path for OAuth consent flow UI (web/src/components/OAuthConsent.tsx,
 # served at site_url + this path)
 authorization_url_path = "/oauth/consent"
-# Allow dynamic client registration — MCP clients (Claude connectors)
+# Allow dynamic client registration. MCP clients (Claude connectors)
 # register themselves, so users only paste the /mcp URL.
 allow_dynamic_registration = true
 
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.
-# `per_worker` (default) — enables hot reload during local development.
-# `oneshot` — fallback mode if hot reload causes issues (e.g. in large repos or with symlinks).
+# `per_worker` (default): enables hot reload during local development.
+# `oneshot`: fallback mode if hot reload causes issues (e.g. in large repos or with symlinks).
 policy = "per_worker"
 # Port to attach the Chrome inspector for debugging edge functions.
 inspector_port = 8083

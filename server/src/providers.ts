@@ -1,5 +1,5 @@
 /**
- * Subscription-authed CLI providers — Claude Code, OpenAI Codex, Gemini CLI,
+ * Subscription-authed CLI providers: Claude Code, OpenAI Codex, Gemini CLI,
  * and GitHub Copilot CLI as alternatives to the local Ollama model, both for
  * "Ask Grapevine" chat and for the newsletter extraction pipeline (llm.ts).
  *
@@ -45,7 +45,7 @@ export const CLI_PROVIDERS: CliProviderInfo[] = [
     bin: "claude",
     installHint: "npm install -g @anthropic-ai/claude-code",
     loginHint: "claude   (then /login)",
-    loginNote: "Claude.ai account (Pro/Max subscription) — no API key",
+    loginNote: "Claude.ai account (Pro/Max subscription), no API key",
   },
   {
     id: "codex",
@@ -55,7 +55,7 @@ export const CLI_PROVIDERS: CliProviderInfo[] = [
     bin: "codex",
     installHint: "npm install -g @openai/codex",
     loginHint: "codex login",
-    loginNote: "ChatGPT account (Plus/Pro) — no API key",
+    loginNote: "ChatGPT account (Plus/Pro), no API key",
   },
   {
     id: "gemini",
@@ -65,7 +65,7 @@ export const CLI_PROVIDERS: CliProviderInfo[] = [
     bin: "gemini",
     installHint: "npm install -g @google/gemini-cli",
     loginHint: "gemini   (then pick “Login with Google”)",
-    loginNote: "Google account OAuth (free tier) — no API key",
+    loginNote: "Google account OAuth (free tier), no API key",
   },
   {
     id: "copilot",
@@ -75,14 +75,14 @@ export const CLI_PROVIDERS: CliProviderInfo[] = [
     bin: "copilot",
     installHint: "npm install -g @github/copilot",
     loginHint: "copilot login",
-    loginNote: "GitHub account (Copilot subscription) — no API key",
+    loginNote: "GitHub account (Copilot subscription), no API key",
   },
 ];
 
 // ---------------------------------------------------------------------------
 // Shelling out (Windows npm shims are .cmd files, so shell:true there; POSIX
-// spawns the binary directly so multiline args — Copilot takes its prompt as
-// an argument, not stdin — pass through without any quote mangling)
+// spawns the binary directly so multiline args (Copilot takes its prompt as
+// an argument, not stdin) pass through without any quote mangling)
 // ---------------------------------------------------------------------------
 
 interface RunResult {
@@ -91,7 +91,7 @@ interface RunResult {
   stderr: string;
 }
 
-/** shell:true skips arg escaping — quote anything with whitespace ourselves.
+/** shell:true skips arg escaping; quote anything with whitespace ourselves.
  *  An empty argument must be quoted too, or the shell drops it entirely (that
  *  would silently turn `--tools ""` into a dangling flag). */
 function shellArg(s: string): string {
@@ -168,7 +168,7 @@ function run(
 }
 
 // ---------------------------------------------------------------------------
-// Detection — where each CLI caches credentials after its OAuth login
+// Detection: where each CLI caches credentials after its OAuth login
 // ---------------------------------------------------------------------------
 
 function home(...segments: string[]): string {
@@ -269,7 +269,7 @@ export function providerInfo(id: CliProviderId): CliProviderInfo {
 }
 
 // ---------------------------------------------------------------------------
-// Chat — one prompt in, one answer out, per provider
+// Chat: one prompt in, one answer out, per provider
 // ---------------------------------------------------------------------------
 
 /** From the one LLM policy (budget.ts); under the chat route's 120s deadline. */
@@ -295,7 +295,7 @@ export interface CliChatResult {
 export interface CliStreamEvents {
   /** Visible answer text, as it arrives. */
   onText?: (chunk: string) => void;
-  /** First reasoning token — the UI can say "thinking" before any text lands. */
+  /** First reasoning token, so the UI can say "thinking" before any text lands. */
   onThinking?: () => void;
   /** One "start" per tool call, one "done" when its result comes back. */
   onTool?: (run: { label: string; state: "start" | "done"; detail?: string }) => void;
@@ -316,7 +316,7 @@ function canonicalModelId(model: string | undefined): string | undefined {
 }
 
 /**
- * Pull per-call token + cost telemetry out of a `claude -p` envelope — the
+ * Pull per-call token + cost telemetry out of a `claude -p` envelope. The
  * `--output-format json` result object and the final `result` line of a
  * stream-json run share this shape.
  *
@@ -327,7 +327,7 @@ function canonicalModelId(model: string | undefined): string | undefined {
  *    write: what the turn actually processed.
  *  - The CLI bills small side calls (topic titles, routing) to a cheaper
  *    model, and those can carry more *input* tokens than the real turn does
- *    once caching is in play — ranking `modelUsage` by total tokens therefore
+ *    once caching is in play, so ranking `modelUsage` by total tokens therefore
  *    picks the side call and mislabels the reply. Prefer the model the stream
  *    reported on its assistant messages, then the entry that wrote the most
  *    output.
@@ -448,7 +448,7 @@ async function claudeStream(
       case "assistant": {
         const message = msg.message ?? {};
         if (typeof message.model === "string") answeringModel = message.model;
-        // Assistant frames repeat as the message grows — dedupe on block id.
+        // Assistant frames repeat as the message grows; dedupe on block id.
         for (const block of message.content ?? []) {
           if (block?.type !== "tool_use" || openTools.has(block.id)) continue;
           const name = mcpToolName(block.name);
@@ -528,7 +528,7 @@ export async function cliChat(
               grapevine: {
                 type: "http",
                 url: mcpEndpoint(),
-                // Per-boot internal key — the loopback never does OAuth.
+                // Per-boot internal key; the loopback never does OAuth.
                 headers: { "X-Agent-Key": INTERNAL_MCP_KEY },
               },
             },
@@ -550,7 +550,7 @@ export async function cliChat(
       if (opts?.effort && isChatEffort(opts.effort)) args.push("--effort", opts.effort);
       // Built-in tools stay off. The concierge's whole toolbox is Grapevine's
       // own MCP server, and leaving Bash/Read/Write enabled would hand a chat
-      // turn the run of the server machine — while also tempting the model to
+      // turn the run of the server machine, while also tempting the model to
       // answer event questions with a generic web search instead of
       // discover_events, which is what actually adds them to the catalog.
       args.push("--tools", "");
@@ -605,7 +605,7 @@ export async function cliChat(
       return { text: r.stdout.replace(/^Loaded cached credentials\.?\s*/i, "").trim() };
     }
     case "copilot": {
-      // Copilot has no stdin prompt mode — the prompt rides -p as an argv
+      // Copilot has no stdin prompt mode: the prompt rides -p as an argv
       // (fine on POSIX where run() spawns without a shell; on Windows,
       // multiline prompts don't survive cmd.exe quoting). -s strips the
       // stats footer; --disable-builtin-mcps keeps the bundled GitHub MCP
@@ -637,12 +637,12 @@ function cliError(bin: string, r: RunResult): Error {
 }
 
 // ---------------------------------------------------------------------------
-// JSON tasks — the extraction/rating pipeline through a CLI instead of Ollama
+// JSON tasks: the extraction/rating pipeline through a CLI instead of Ollama
 // ---------------------------------------------------------------------------
 
 /**
  * One system+user exchange through a CLI provider, parsed as JSON. Tools stay
- * off — extraction is a pure text-in/JSON-out task, so there's no reason to
+ * off: extraction is a pure text-in/JSON-out task, so there's no reason to
  * pay the MCP handshake or let the model wander.
  */
 export async function cliJSON(
@@ -670,7 +670,7 @@ export interface Exchange {
 /**
  * History clamp for the flat prompt. Conversation memory itself lives in the
  * LangGraph checkpointer now (cli-model.ts routes CLI turns through the same
- * graph as Ollama ones) — this only bounds how much of it one CLI invocation
+ * graph as Ollama ones); this only bounds how much of it one CLI invocation
  * re-reads.
  */
 const MAX_EXCHANGES = 8;

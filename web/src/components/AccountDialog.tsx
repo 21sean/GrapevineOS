@@ -62,7 +62,7 @@ export function AccountDialog({
   const filters = useGrapevine((s) => s.filters)
   const interests = useGrapevine((s) => s.interests)
   const settings = useGrapevine((s) => s.settings)
-  // Frozen while the dialog is closed — no tick re-renders in the background.
+  // Frozen while the dialog is closed: no tick re-renders in the background.
   const now = useClock(open)
   const select = useGrapevine((s) => s.select)
   const setFilters = useGrapevine((s) => s.setFilters)
@@ -80,7 +80,7 @@ export function AccountDialog({
 
   const [history, setHistory] = useState<IngestRecord[] | null>(null)
   const [historyError, setHistoryError] = useState(false)
-  // Notifications is a dense stack of toggles — keep it folded until asked for.
+  // Notifications is a dense stack of toggles; keep it folded until asked for.
   const [notifOpen, setNotifOpen] = useState(false)
 
   // Web Push state for THIS browser (subscriptions are per-device).
@@ -124,7 +124,7 @@ export function AccountDialog({
   const filtersDefault =
     JSON.stringify(filters) === JSON.stringify(DEFAULT_FILTERS)
 
-  // How many push channels are live on this browser — the collapsed summary.
+  // How many push channels are live on this browser: the collapsed summary.
   const notifOn = pushState
     ? [
         pushState.reminders,
@@ -148,8 +148,8 @@ export function AccountDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="glass flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden bg-background/70 p-0 sm:max-w-lg">
-        {/* accent wash: the account is lit by lantern-gold — the signature of a
-            live night — the way admin is lit by wine and an event by its category */}
+        {/* accent wash: the account is lit by lantern-gold (the signature of a
+            live night), the way admin is lit by wine and an event by its category */}
         <div
           aria-hidden
           className="pointer-events-none absolute inset-x-0 top-0 h-24"
@@ -278,7 +278,7 @@ export function AccountDialog({
           {/* watches: the scheduled web searches this account keeps */}
           <Watches onOpenChat={() => handOff(() => setAskOpen(true))} />
 
-          {/* notifications (per-browser Web Push) — folded by default */}
+          {/* notifications (per-browser Web Push), folded by default */}
           <section>
             <button
               type="button"

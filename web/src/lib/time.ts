@@ -74,7 +74,7 @@ export function fmtTime(iso: string, tz: string): string {
   return fmt(iso, tz, { hour: "numeric", minute: "2-digit" })
 }
 
-/** "2026-07-11" in the city's timezone — string-comparable. */
+/** "2026-07-11" in the city's timezone, string-comparable. */
 export function localDay(iso: string, tz?: string): string {
   if (tz) return dayInTz(iso, tz)
   return new Intl.DateTimeFormat("en-CA", {
@@ -147,7 +147,7 @@ export function relativeTime(
 }
 
 export function dayLabel(iso: string, tz: string, now: Date): string {
-  // Compare local day STRINGS and step "tomorrow" with day arithmetic — a
+  // Compare local day STRINGS and step "tomorrow" with day arithmetic: a
   // literal +24h misses (or double-counts) the 23/25-hour days around DST.
   const eventDay = dayInTz(iso, tz)
   const today = dayInTz(now, tz)

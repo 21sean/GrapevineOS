@@ -1,5 +1,5 @@
 /**
- * HTTP surface for guardrail observability — the rails half of
+ * HTTP surface for guardrail observability: the rails half of
  * Admin → Monitoring.
  *
  *   GET   /api/guardrails                 the dashboard, in one round trip
@@ -9,7 +9,7 @@
  *
  * The point of the whole surface is the thing the rails could not answer
  * before: what the score distribution looks like on traffic that was NOT
- * blocked. Everything here follows from that — the histogram shows it, the
+ * blocked. Everything here follows from that: the histogram shows it, the
  * sweep prices a change to it, the review queue is how it gets labelled, and
  * the config route is what closes the loop by letting the number actually move.
  */
@@ -145,8 +145,8 @@ guardrails.post("/api/guardrails/scans/:id/label", async (req, res) => {
  * threshold you have to redeploy to change is a threshold that never changes,
  * however good the chart above it is.
  *
- * GUARDRAILS=off still wins on the process — a kill switch that a web request
- * can undo is not a kill switch — and the panel says so when it applies.
+ * GUARDRAILS=off still wins on the process (a kill switch that a web request
+ * can undo is not a kill switch), and the panel says so when it applies.
  */
 guardrails.patch("/api/guardrails/config", async (req, res) => {
   if (!(await adminAllowed(req))) return res.status(403).json({ error: "admin only" });

@@ -43,7 +43,7 @@ export async function enablePush(prefs: {
   const permission = await Notification.requestPermission()
   if (permission !== "granted") {
     throw new Error(
-      "notifications are blocked — allow them in your browser's site settings"
+      "notifications are blocked; allow them in your browser's site settings"
     )
   }
   const reg =

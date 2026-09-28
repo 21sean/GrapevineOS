@@ -1,13 +1,13 @@
 /**
  * Server-side Mapbox calls using the SECRET token.
- * Per mapbox-token-security: sk. tokens never reach the browser —
+ * Per mapbox-token-security: sk. tokens never reach the browser;
  * the web app talks to these endpoints instead.
  *
  * Both calls are cached to stay far inside the free tier:
- *  - geocode: permanent (`place_lookups`, kind `geocode` — the same table the
- *    venue cache resolves POIs in) — venues don't move; misses are cached too
+ *  - geocode: permanent (`place_lookups`, kind `geocode`, the same table the
+ *    venue cache resolves POIs in), since venues don't move; misses are cached too
  *    (null lng/lat) so a bad venue string is billed once
- *  - eta: 10-minute in-memory TTL — traffic-aware, so it shouldn't live forever
+ *  - eta: 10-minute in-memory TTL; traffic-aware, so it shouldn't live forever
  */
 import { db } from "./db.js";
 
@@ -83,7 +83,7 @@ export interface IsochroneResult {
 /**
  * Traffic-aware drive-time contour around a point: everything inside the
  * returned polygons is reachable within `minutes`. Same 10-minute TTL as the
- * ETA cache — the contour breathes with traffic. Null when Mapbox has no
+ * ETA cache: the contour breathes with traffic. Null when Mapbox has no
  * contour for the spot (mid-ocean origins and the like).
  */
 export async function isochrone(
@@ -135,13 +135,13 @@ const GEO_BBOX_LAT = 0.65;
  * name can't land halfway across the world.
  *
  * Returns null only for a genuine "no such place" (cached, so a bad venue
- * string is billed once). Transport failures — rate limits, 5xx, timeouts —
+ * string is billed once). Transport failures (rate limits, 5xx, timeouts)
  * THROW instead, so callers can tell "this venue doesn't geocode" apart from
  * "Mapbox is down" and retry rather than silently dropping an event.
  */
 export async function geocode(q: string, proximity: [number, number]): Promise<GeocodeHit | null> {
   const [cx, cy] = proximity;
-  // The answer depends on the search box, so the box is part of the key —
+  // The answer depends on the search box, so the box is part of the key;
   // an admin re-centering the app can't be served another city's hits.
   const key = `${q.trim().toLowerCase()}@${round3(cx)},${round3(cy)}`;
   if (geoMemo.has(key)) return geoMemo.get(key)!;
@@ -183,7 +183,7 @@ export async function geocode(q: string, proximity: [number, number]): Promise<G
       }
     : null;
   memoSet(key, value);
-  // Cache persistence is best-effort — a failed write just re-geocodes later.
+  // Cache persistence is best-effort: a failed write just re-geocodes later.
   await db.from("place_lookups").upsert(
     {
       kind: "geocode",

@@ -2,7 +2,7 @@
  * Request-scoped domain context for the agent: a consistent snapshot of the
  * event catalog (recurrence expanded to each event's next occurrence), the
  * digest that grounds the system prompt, and the plain executors behind the
- * graph's tools. Everything here is framework-free — LangGraph wiring lives
+ * graph's tools. Everything here is framework-free; LangGraph wiring lives
  * in graph.ts/tools.ts, HTTP in index.ts.
  */
 import { dayInTz } from "../../../shared/time.js";
@@ -47,7 +47,7 @@ export interface ChatContext {
   interests?: { loves?: string[]; avoids?: string[] };
   savedEventIds?: string[];
   signedIn?: boolean;
-  /** Set server-side from the session cookie (never trusted from the wire) —
+  /** Set server-side from the session cookie (never trusted from the wire);
    * lets tools like save_calendar write on the user's behalf. */
   sessionUser?: User;
 }
@@ -98,7 +98,7 @@ export function haversineKm(a: [number, number], b: [number, number]): number {
 }
 
 // ---------------------------------------------------------------------------
-// Event digest — the in-context grounding for every answer
+// Event digest: the in-context grounding for every answer
 // ---------------------------------------------------------------------------
 
 export function buildDigest(ctx: AgentCtx): string {
@@ -128,7 +128,7 @@ export function buildDigest(ctx: AgentCtx): string {
 }
 
 // ---------------------------------------------------------------------------
-// Executors — plain functions shared by the graph tools and /api/ext/v1
+// Executors: plain functions shared by the graph tools and /api/ext/v1
 // ---------------------------------------------------------------------------
 
 export interface SearchParams {
@@ -317,7 +317,7 @@ export function vetEventIds(v: unknown, ctx: AgentCtx): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// Interests + bound account — shared by every write surface (in-app tool
+// Interests + bound account, shared by every write surface (in-app tool
 // proposals, external REST API, MCP), so the semantics can't drift apart.
 // ---------------------------------------------------------------------------
 
@@ -349,7 +349,7 @@ export function interestPatchEmpty(p: InterestPatch): boolean {
   );
 }
 
-/** A topic can't be loved and avoided at once — the newer signal wins. */
+/** A topic can't be loved and avoided at once; the newer signal wins. */
 export function mergeInterests(
   current: { loves?: string[]; avoids?: string[] },
   p: InterestPatch,
@@ -373,7 +373,7 @@ export function mergeInterests(
   return { loves, avoids };
 }
 
-/** The account external (key-authed) writes act on — bound by env, never by
+/** The account external (key-authed) writes act on: bound by env, never by
  * the caller. OAuth-authenticated MCP callers carry their own user instead. */
 export async function boundAgentUser(): Promise<User | { error: string }> {
   const email = process.env.AGENT_USER_EMAIL;

@@ -18,7 +18,7 @@ import {
 } from "@/lib/time"
 import { cn } from "@/lib/utils"
 
-// react-day-picker only loads when someone opens the picker — same chunk
+// react-day-picker only loads when someone opens the picker: same chunk
 // discipline as the lazy CalendarDialog in App.tsx.
 const Calendar = lazy(() =>
   import("@/components/ui/calendar").then((m) => ({ default: m.Calendar }))
@@ -50,7 +50,7 @@ function quickRanges(today: string): QuickRange[] {
 }
 
 /**
- * One-tap date windows over filters.dateFrom/dateTo — the same window Ask
+ * One-tap date windows over filters.dateFrom/dateTo, the same window Ask
  * Grapevine sets via set_filters, now reachable by hand: Today / Tomorrow /
  * Weekend chips plus a full range picker. An active chip taps off again; a
  * window that matches no chip (agent- or picker-set) shows on the picker chip

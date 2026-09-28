@@ -151,7 +151,7 @@ afterEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// sourceSlug — must always satisfy sources.id's ^[a-z0-9][a-z0-9_-]*$ check
+// sourceSlug: must always satisfy sources.id's ^[a-z0-9][a-z0-9_-]*$ check
 // ---------------------------------------------------------------------------
 
 describe("sourceSlug", () => {
@@ -345,7 +345,7 @@ describe("email() ingestion", () => {
 });
 
 // ---------------------------------------------------------------------------
-// email() degraded paths — malformed input must never bounce mail
+// email() degraded paths: malformed input must never bounce mail
 // ---------------------------------------------------------------------------
 
 describe("email() degraded input", () => {
@@ -402,7 +402,7 @@ describe("email() degraded input", () => {
 });
 
 // ---------------------------------------------------------------------------
-// email() failure paths — retry, dead letter, double failure
+// email() failure paths: retry, dead letter, double failure
 // ---------------------------------------------------------------------------
 
 describe("email() failure handling", () => {

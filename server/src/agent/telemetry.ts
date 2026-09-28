@@ -2,7 +2,7 @@
  * Guardrail telemetry: the write side.
  *
  * The rails already knew every score. What was missing was somewhere for the
- * ones that didn't block to go, and this is it — one row per decision, so the
+ * ones that didn't block to go, and this is it: one row per decision, so the
  * distribution on ordinary traffic becomes something you can look at instead
  * of something you assume.
  *
@@ -11,8 +11,8 @@
  *  - It is never in the request path. Recording is fire-and-forget into a
  *    bounded queue that a timer drains; a chat turn is never slowed down, and
  *    never fails, because telemetry is slow or the database is unreachable.
- *  - It cannot take chat down. Every failure mode — no credentials, a rejected
- *    insert, a queue that fills faster than it drains — degrades to dropped
+ *  - It cannot take chat down. Every failure mode (no credentials, a rejected
+ *    insert, a queue that fills faster than it drains) degrades to dropped
  *    rows and a counter the panel shows, never to an exception reaching the
  *    caller. A rail that fails open on the classifier must not fail closed on
  *    its own bookkeeping.
@@ -71,7 +71,7 @@ function storeText(): boolean {
 
 /**
  * sha256 over whitespace-normalized text, salted when GUARDRAIL_HASH_SALT is
- * set. Its job is grouping — the same probe retried, the same scraped page —
+ * set. Its job is grouping (the same probe retried, the same scraped page),
  * not secrecy, which is why an unset salt is a fine default.
  */
 export function textHash(text: string): string {
@@ -116,7 +116,7 @@ function toRow(r: ScanRecord): Row {
 
 /**
  * Queue one decision. Returns immediately; the caller never awaits, never
- * catches, and never learns whether the write succeeded — by design.
+ * catches, and never learns whether the write succeeded, by design.
  */
 export function recordScan(r: ScanRecord): void {
   if (!r.text.trim()) return;
@@ -138,7 +138,7 @@ export function recordScan(r: ScanRecord): void {
 
 /**
  * Drain the queue. Safe to call concurrently (a second call returns while the
- * first is in flight) and safe to call with no credentials configured — the
+ * first is in flight) and safe to call with no credentials configured: the
  * rows are counted as dropped and the reason is surfaced once.
  */
 export async function flush(): Promise<void> {

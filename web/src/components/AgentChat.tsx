@@ -75,7 +75,7 @@ function Hint({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /**
- * "Ask Grapevine" — the agent surface. One always-mounted component (the
+ * "Ask Grapevine": the agent surface. One always-mounted component (the
  * transcript lives here for the session): desktop gets a floating glass
  * palette under the TopBar, phones get a bottom sheet. Event mentions render
  * as chips that select on the map; agent actions arrive as proposal cards the
@@ -143,7 +143,7 @@ function DesktopPalette({
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
 
-  // Palette convention: clicking the map dismisses it — but not clicks inside
+  // Palette convention: clicking the map dismisses it, but not clicks inside
   // portaled layers the chat itself spawned (event detail sheet, admin sheet,
   // dialogs, toast Undo buttons).
   useEffect(() => {
@@ -168,7 +168,7 @@ function DesktopPalette({
       ref={panelRef}
       className="glass pointer-events-auto absolute top-16 left-1/2 z-30 flex w-[min(640px,92vw)] -translate-x-1/2 flex-col overflow-hidden rounded-2xl"
     >
-      <Hint label="Close — Esc">
+      <Hint label="Close (Esc)">
         <Button
           variant="ghost"
           size="icon-sm"
@@ -202,7 +202,7 @@ function Conversation({
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // What was typed before dictation started — spoken text appends to it.
+  // What was typed before dictation started; spoken text appends to it.
   const dictationBase = useRef("")
   const speech = useSpeechInput({
     onText: (text) => {
@@ -212,7 +212,7 @@ function Conversation({
     onError: (err) =>
       toast.error(
         err === "not-allowed" || err === "service-not-allowed"
-          ? "Microphone access is blocked — allow it in your browser's site settings."
+          ? "Microphone access is blocked. Allow it in your browser's site settings."
           : `Dictation failed (${err})`
       ),
   })
@@ -230,7 +230,7 @@ function Conversation({
     []
   )
 
-  // Follow the stream, but only while the reader is at the tail — a reply that
+  // Follow the stream, but only while the reader is at the tail. A reply that
   // yanks the view back down every time a token lands makes scrolling up to
   // re-read the previous answer impossible.
   const pinned = useRef(true)
@@ -407,7 +407,7 @@ function Conversation({
             </Button>
           </Hint>
         ) : (
-          <Hint label="Send — Enter">
+          <Hint label="Send (Enter)">
             <Button
               type="submit"
               size="icon-sm"
@@ -434,7 +434,7 @@ function EmptyState({ onPick }: { onPick: (q: string) => void }) {
           Ask Grapevine
         </p>
         <p className="text-sm text-muted-foreground">
-          Anything about what's on in {city ?? "town"} — it searches, pins the
+          Anything about what's on in {city ?? "town"}: it searches, pins the
           map, and can plan your day.
         </p>
       </div>
@@ -603,7 +603,7 @@ function fmtTokens(n: number): string {
 }
 
 /** Per-turn token/cost footer under a Claude Code reply. The input figure
- *  counts everything the turn read, cache included — the raw uncached count
+ *  counts everything the turn read, cache included; the raw uncached count
  *  reads as single digits next to a real cost. */
 function UsageLine({ usage }: { usage: ChatUsage }) {
   const parts: string[] = []
@@ -622,7 +622,7 @@ function UsageLine({ usage }: { usage: ChatUsage }) {
           : "This turn's token usage"
       }
     >
-      {/* tabIndex so the explanation is reachable without a pointer — this is
+      {/* tabIndex so the explanation is reachable without a pointer; this is
           the only place the cache split is written down. */}
       <div
         tabIndex={0}

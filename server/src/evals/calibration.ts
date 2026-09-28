@@ -105,7 +105,7 @@ export function bestThresholds(scored: Scored[]): {
    * correct and operationally insane.
    */
   bestF1: ConfusionAt | null;
-  /** Lowest threshold that blocks no benign entry — the safe floor. */
+  /** Lowest threshold that blocks no benign entry: the safe floor. */
   cleanest: ConfusionAt | null;
 } {
   let bestF1: ConfusionAt | null = null;
@@ -125,7 +125,7 @@ export interface FamilyResult {
   /** Entries this rail is meant to catch. */
   inScope: number;
   inScopeDetected: number;
-  /** Entries expected to reach the model — reported, never scored against. */
+  /** Entries expected to reach the model; reported, never scored against. */
   outOfScope: number;
   outOfScopeDetected: number;
   /** Recall over the in-scope entries only. */
@@ -166,7 +166,7 @@ export function byFamily(scored: Scored[], threshold: number): FamilyResult[] {
 
 /**
  * The subset calibration is scored on: everything this rail is responsible
- * for. Out-of-scope attacks are excluded rather than counted as misses — see
+ * for. Out-of-scope attacks are excluded rather than counted as misses; see
  * SCOPE_RULE in corpus.ts for why that is a measurement decision and not a
  * generous one.
  */
@@ -176,8 +176,8 @@ export function inScope(scored: Scored[]): Scored[] {
 
 /**
  * The widest run of scores containing no entry at all, above the highest
- * benign score. A wide gap means the exact threshold barely matters — every
- * value inside it produces identical behaviour — which is the single most
+ * benign score. A wide gap means the exact threshold barely matters (every
+ * value inside it produces identical behaviour), which is the single most
  * useful thing to know before spending time tuning one.
  */
 export function deadBand(scored: Scored[]): { lo: number; hi: number; width: number } | null {

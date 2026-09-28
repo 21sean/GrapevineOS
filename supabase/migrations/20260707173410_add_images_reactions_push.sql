@@ -1,12 +1,12 @@
 -- Event images, per-user reactions, and Web Push.
 --
---  * events.image_url / image_color — og:image scraped from the ticket/source
+--  * events.image_url / image_color: og:image scraped from the ticket/source
 --    page at ingest, plus a dominant-color fallback so cards have something
 --    to paint before (or without) the image.
---  * event_reactions — the real user feedback loop: "going" / "went — great" /
+--  * event_reactions: the real user feedback loop, "going" / "went, great" /
 --    "not for me". Feeds the personal score and teaches tag affinities beyond
 --    the fixed interest vocabulary. One reaction per (user, event).
---  * push_subscriptions / push_sends / push_keys — Web Push reminders for
+--  * push_subscriptions / push_sends / push_keys: Web Push reminders for
 --    saved events and the Sunday "your week" digest. push_sends is the
 --    idempotency ledger; push_keys holds the server-minted VAPID pair so no
 --    manual env setup is needed.
@@ -23,7 +23,7 @@ alter table public.events
   add column image_color text check (image_color ~ '^#[0-9a-f]{6}$');
 
 -- ---------------------------------------------------------------------------
--- event_reactions — per-user feedback
+-- event_reactions: per-user feedback
 -- ---------------------------------------------------------------------------
 
 create type public.event_reaction as enum ('going', 'went', 'not_for_me');
@@ -68,7 +68,7 @@ create table public.push_sends (
   sent_at timestamptz not null default now()
 );
 
--- Server-minted VAPID pair (generated on first use, then stable — browsers
+-- Server-minted VAPID pair (generated on first use, then stable; browsers
 -- bind subscriptions to the public key).
 create table public.push_keys (
   id smallint primary key default 1 check (id = 1),
