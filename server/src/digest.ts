@@ -1,8 +1,8 @@
 /**
- * "Your week in San Diego" — the top upcoming events for one user, scored the
+ * "Your week in San Diego": the top upcoming events for one user, scored the
  * same way the client ranks its list (buzz backbone, rarity and free bumps,
  * interests tilt) plus the reaction feedback loop: tags from events the user
- * marked "going"/"went — great" pull similar events up, "not for me" pushes
+ * marked "going"/"went, great" pull similar events up, "not for me" pushes
  * them down and drops the event itself.
  *
  * The web app computes its own digest client-side from the same signals; this
@@ -22,12 +22,12 @@ interface Taste {
 
 const terms = affinityTerms;
 
-/** Mirror of web scoreEvent's AVOID_PENALTY — avoided topics sink an event
+/** Mirror of web scoreEvent's AVOID_PENALTY: avoided topics sink an event
  * hard but don't erase it, so the weekly picks stay in sync with the client
  * list and a single avoided tag can't wall off an otherwise-strong event. */
 const AVOID_PENALTY = 12;
 
-/** Prefs arrive as untyped JSON — keep only the strings. */
+/** Prefs arrive as untyped JSON; keep only the strings. */
 export function stringList(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
 }
@@ -53,10 +53,10 @@ export function isMutedFor(
 
 function scoreFor(e: CityEvent, taste: Taste): number {
   const ts = terms(e);
-  // "not for me" is an explicit per-event veto — keep it a hard drop. Avoids
+  // "not for me" is an explicit per-event veto; keep it a hard drop. Avoids
   // are passive taste: sink them, don't erase (matches the client's scoreEvent).
   if (taste.reactions.get(e.id) === "not_for_me") return -Infinity;
-  // No promoted penalty here — weekPicks filters promoted events out entirely.
+  // No promoted penalty here: weekPicks filters promoted events out entirely.
   let s = e.rating * 2;
   if (ts.some((t) => taste.avoids.includes(t))) s -= AVOID_PENALTY;
   if (e.rarity === "rare") s += 1.5;
@@ -67,7 +67,9 @@ function scoreFor(e: CityEvent, taste: Taste): number {
   // learned taste: reacted-event tags pull neighbors up/down, capped like loves
   const learned = ts.reduce((sum, t) => sum + (taste.tagAffinity.get(t) ?? 0), 0);
   s += Math.max(-3, Math.min(3, learned));
-  if (taste.reactions.get(e.id) === "going") s += 3;
+  const reaction = taste.reactions.get(e.id);
+  if (reaction === "going") s += 3;
+  if (reaction === "went") s += 0.5;
   return s;
 }
 

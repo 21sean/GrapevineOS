@@ -113,6 +113,7 @@ export function FilterRail() {
     const onUp = () => {
       window.removeEventListener("pointermove", onMove)
       window.removeEventListener("pointerup", onUp)
+      window.removeEventListener("pointercancel", onUp)
       document.body.style.userSelect = ""
       document.body.style.cursor = ""
     }
@@ -120,6 +121,7 @@ export function FilterRail() {
     document.body.style.cursor = "ew-resize"
     window.addEventListener("pointermove", onMove)
     window.addEventListener("pointerup", onUp)
+    window.addEventListener("pointercancel", onUp)
   }
 
   return (
@@ -246,7 +248,7 @@ const SORT_SHORT: Record<SortKey, string> = {
 /**
  * Search box + sort picker for the event list, shared between the desktop
  * rail and the phone dock. Search narrows the list (and its count); sort
- * reorders it — "relevance" is the personal buzz score the list opens with.
+ * reorders it; "relevance" is the personal buzz score the list opens with.
  */
 export function ListSearchSort() {
   const searchQuery = useGrapevine((s) => s.searchQuery)
@@ -339,7 +341,7 @@ export function BuzzAndCategoryFilters() {
       </div>
 
       {/* every boolean filter reads as the same segmented control as the
-          farmers-market row below — on/off instead of a switch */}
+          farmers-market row below: on/off instead of a switch */}
       {toggles.map((t) => (
         <SegmentedRow
           key={t.key}
@@ -386,7 +388,7 @@ export function BuzzAndCategoryFilters() {
 
 /**
  * Farmers markets are a third of the catalog some weeks, so a plain "only"
- * switch isn't enough — this row shows them, tours only them, or mutes them.
+ * switch isn't enough. This row shows them, tours only them, or mutes them.
  */
 function FarmersRow({
   value,

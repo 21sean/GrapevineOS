@@ -24,7 +24,7 @@ export class EvalAssertion extends Error {
 }
 
 /**
- * Thrown by a case that cannot be judged right now — a missing model, a
+ * Thrown by a case that cannot be judged right now: a missing model, a
  * dependency that is down. Skipped is not passed: it is counted separately and
  * never contributes to a green suite.
  */
@@ -62,7 +62,7 @@ export function expectEq(got: unknown, want: unknown, label: string): void {
   if (g !== w) throw new EvalAssertion(`${label}: got ${g}, wanted ${w}`);
 }
 
-/** Set-equality on ids, with both directions named — the common list check. */
+/** Set-equality on ids, with both directions named: the common list check. */
 export function expectIds(got: string[], want: string[], label: string): void {
   const missing = want.filter((id) => !got.includes(id));
   const extra = got.filter((id) => !want.includes(id));
@@ -80,7 +80,7 @@ export function expectIds(got: string[], want: string[], label: string): void {
 // ---------------------------------------------------------------------------
 
 export interface EvalCase {
-  /** Stable across runs — history compares cases by id, not by position. */
+  /** Stable across runs; history compares cases by id, not by position. */
   id: string;
   name: string;
   /** The regression this case exists to catch. Shown under the case name. */

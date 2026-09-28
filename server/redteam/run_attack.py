@@ -20,7 +20,7 @@ compatible API; the target is a loopback bridge the TypeScript harness opens
 in front of the real agent graph. No hosted service is involved at any point.
 
 stdin:  one JSON config object (see Config below)
-stdout: one JSON object, {"results": [...]}, and nothing else — the harness
+stdout: one JSON object, {"results": [...]}, and nothing else. The harness
         parses it, so progress and logs go to stderr.
 """
 
@@ -69,7 +69,7 @@ class GrapevineTarget(PromptTarget):
     remember. That is what makes PyRIT the owner of the transcript, and it is
     what Crescendo needs: backtracking works by deleting the last exchange and
     trying a different approach, which a target holding its own server-side
-    history would silently ignore — the attack would think it had backed up
+    history would silently ignore: the attack would think it had backed up
     while the agent still remembered the turn it was backing away from.
     """
 
@@ -192,7 +192,7 @@ def _scoring(cfg: dict[str, Any]) -> AttackScoringConfig:
             chat_target=judge,
             question=question,
             # A custom question has to be paired with the template rendered
-            # around it — the scorer only falls back to its own prompt when
+            # around it. The scorer only falls back to its own prompt when
             # neither is given, and would otherwise ask the default question.
             system_prompt=render_true_false_system_prompt(question=question),
         ),
@@ -252,7 +252,7 @@ async def _run(cfg: dict[str, Any]) -> dict[str, Any]:
 
     try:
         # Grouped by strategy so each attack object is built once, but every
-        # objective is still reported separately — a harness case per attack.
+        # objective is still reported separately, a harness case per attack.
         for strategy in sorted({a["strategy"] for a in cfg["attacks"]}):
             batch = [a for a in cfg["attacks"] if a["strategy"] == strategy]
             attack = _build_attack(strategy, target=target, cfg=cfg)

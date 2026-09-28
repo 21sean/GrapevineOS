@@ -18,7 +18,7 @@ import { ROUTES } from "@/lib/routes"
 import { useGrapevine } from "@/lib/store"
 
 /**
- * Provider picker — Supabase Auth runs the PKCE flow, so each button is a
+ * Provider picker. Supabase Auth runs the PKCE flow, so each button is a
  * full-page redirect out to the provider and back. Apple can slot in here
  * later with one more button once its Services ID is configured.
  */
@@ -80,7 +80,7 @@ export function SignInDialog() {
           </Button>
           {!supabase && (
             <p className="text-xs text-muted-foreground">
-              Sign-in isn't configured — set VITE_SUPABASE_URL and
+              Sign-in isn't configured. Set VITE_SUPABASE_URL and
               VITE_SUPABASE_PUBLISHABLE_KEY in web/.env.local.
             </p>
           )}

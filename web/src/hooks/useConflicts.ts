@@ -11,7 +11,7 @@ export interface Conflicts {
   google: GcalEvent[]
 }
 
-// One Google fetch per (event, occurrence) for a few minutes — reopening the
+// One Google fetch per (event, occurrence) for a few minutes; reopening the
 // same detail sheet shouldn't re-bill the calendar API.
 const GCAL_TTL_MS = 3 * 60_000
 const gcalCache = new Map<string, { at: number; value: GcalEvent[] }>()
@@ -21,8 +21,8 @@ const overlaps = (aStart: string, aEnd: string, bStart: string, bEnd: string) =>
 
 /**
  * Schedule conflicts for the event being viewed: other events the user saved
- * to their calendar whose next occurrence overlaps this one, plus — when
- * Google Calendar is connected — anything already on their real calendar in
+ * to their calendar whose next occurrence overlaps this one, plus (when
+ * Google Calendar is connected) anything already on their real calendar in
  * the same window (all-day entries excluded; they aren't busy blocks).
  * Grapevine saves synced to Google are reported once, as the saved event.
  */
@@ -34,41 +34,45 @@ export function useConflicts(
 ): Conflicts | null {
   const events = useGrapevine((s) => s.events)
   const calendar = useGrapevine((s) => s.calendar)
-  const [google, setGoogle] = useState<GcalEvent[] | null>(null)
+  const [fetched, setFetched] = useState<{
+    key: string
+    events: GcalEvent[]
+  } | null>(null)
 
   const occ = event ? nextOccurrence(event, now, tz) : null
-  // Key on the occurrence window, not `now` — the 30s clock tick must not
+  // Key on the occurrence window, not `now`: the 30s clock tick must not
   // refetch Google while the same occurrence is on screen.
   const gcalKey = event && occ ? `${event.id}|${occ.start}` : null
+  const readGoogle = enabled && !!gcalKey && !!calendar?.google
 
   useEffect(() => {
-    if (!enabled || !gcalKey || !occ || !calendar?.google) {
-      setGoogle(null)
-      return
-    }
+    if (!readGoogle || !gcalKey || !occ) return
     const hit = gcalCache.get(gcalKey)
-    if (hit && Date.now() - hit.at < GCAL_TTL_MS) {
-      setGoogle(hit.value)
-      return
-    }
+    if (hit && Date.now() - hit.at < GCAL_TTL_MS) return
     let alive = true
-    setGoogle(null)
     api
       .gcalEvents(occ.start, occ.end)
       .then((r) => {
         gcalCache.set(gcalKey, { at: Date.now(), value: r.events })
-        if (alive) setGoogle(r.events)
+        if (alive) setFetched({ key: gcalKey, events: r.events })
       })
       .catch(() => {
-        if (alive) setGoogle([]) // can't read the calendar — warn on saves only
+        // Can't read the calendar, so warn on saves only.
+        if (alive) setFetched({ key: gcalKey, events: [] })
       })
     return () => {
       alive = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, gcalKey, calendar?.google])
+  }, [readGoogle, gcalKey])
 
   if (!event || !occ || !enabled) return null
+
+  const google =
+    readGoogle && gcalKey
+      ? (gcalCache.get(gcalKey)?.value ??
+        (fetched?.key === gcalKey ? fetched.events : null))
+      : null
 
   const savedIds = new Set(calendar?.synced ?? [])
   const saved = events
@@ -80,7 +84,7 @@ export function useConflicts(
     .filter((c) => overlaps(c.start, c.end, occ.start, occ.end))
     .sort((a, b) => Date.parse(a.start) - Date.parse(b.start))
 
-  // Google copies of Grapevine saves carry grapevineEventId — those are
+  // Google copies of Grapevine saves carry grapevineEventId; those are
   // either this event itself or already counted in `saved` above.
   const googleBusy = (google ?? []).filter(
     (g) =>

@@ -49,6 +49,18 @@ describe("the history window", () => {
     expect(out.length).toBe(HISTORY_WINDOW - 2);
     expect(out[0].getType()).toBe("human");
   });
+
+  it("keeps messages in view until the summary has them", () => {
+    const msgs = [];
+    for (let i = 0; i < HISTORY_WINDOW + SUMMARY_STRIDE + 3; i++) {
+      msgs.push(new HumanMessage(`m${i}`));
+    }
+    // Folded through m8: m8 onwards is either summarized or visible, never neither.
+    const out = windowed(msgs, SUMMARY_STRIDE);
+    expect(out[0].content).toBe(`m${SUMMARY_STRIDE}`);
+    // Nothing summarized yet (a CLI provider): at most one stride beyond the window.
+    expect(windowed(msgs, 0).length).toBe(HISTORY_WINDOW + SUMMARY_STRIDE);
+  });
 });
 
 describe("the recall trigger", () => {
@@ -73,6 +85,13 @@ describe("the think stripper", () => {
   it("leaves ordinary text alone, including a lone angle bracket", () => {
     const strip = thinkStripper();
     expect(strip("a < b and ") + strip("b > a")).toBe("a < b and b > a");
+  });
+
+  it("releases a held partial tag when the stream ends", () => {
+    const strip = thinkStripper();
+    expect(strip("see you there <") + strip.flush()).toBe("see you there <");
+    const open = thinkStripper();
+    expect(open("<think>never closed") + open.flush()).toBe("");
   });
 });
 

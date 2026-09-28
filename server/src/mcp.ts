@@ -42,6 +42,7 @@
  */
 import type http from "node:http";
 import { FastMCP, UserError } from "fastmcp";
+import { isAdminUser } from "./admin-gate.js";
 import { INTERNAL_MCP_KEY, ISSUER, userFromClaims, verifySupabaseToken } from "./auth.js";
 import { logger } from "./log.js";
 import {
@@ -103,6 +104,15 @@ async function boundUser(oauthUser: User | null): Promise<User> {
   const bound = await boundAgentUser();
   if ("error" in bound) fail(bound.error);
   return bound;
+}
+
+/**
+ * Whose scheduled searches a caller may see and change. A person signed in
+ * through OAuth manages their own watches; the operator (agent key, open
+ * mode, or an admin account) manages every search on the map.
+ */
+export function searchOwner(oauthUser: User | null): string | undefined {
+  return oauthUser && !isAdminUser(oauthUser) ? oauthUser.id : undefined;
 }
 
 /** The executor behind each MCP tool. Arguments arrive already validated by the contract schema. */
@@ -180,7 +190,8 @@ async function callTool<N extends McpTool>(name: N, args: ToolArgs<N>, oauthUser
       });
     }
     case "list_scheduled_searches": {
-      const searches = await store.discoverySearches();
+      const owner = searchOwner(oauthUser);
+      const searches = await store.discoverySearches(owner ? { userId: owner } : {});
       return ok({ count: searches.length, searches });
     }
     case "schedule_search": {
@@ -205,27 +216,34 @@ async function callTool<N extends McpTool>(name: N, args: ToolArgs<N>, oauthUser
       if (a.active === undefined && a.cadence_hours === undefined) {
         return fail("nothing to update: give active and/or cadence_hours");
       }
-      const updated = await store.updateDiscoverySearch(a.id, {
-        ...(a.active !== undefined && { active: a.active }),
-        ...(a.cadence_hours !== undefined && { cadenceHours: clampCadence(a.cadence_hours) }),
-      });
+      const updated = await store.updateDiscoverySearch(
+        a.id,
+        {
+          ...(a.active !== undefined && { active: a.active }),
+          ...(a.cadence_hours !== undefined && { cadenceHours: clampCadence(a.cadence_hours) }),
+        },
+        searchOwner(oauthUser),
+      );
       return updated ? ok(updated) : fail("unknown scheduled search");
     }
     case "run_scheduled_search": {
       const a = args as ToolArgs<"run_scheduled_search">;
+      const owner = searchOwner(oauthUser);
       const search = await store.discoverySearchById(a.id);
-      if (!search) return fail("unknown scheduled search");
+      if (!search || (owner && search.userId !== owner)) return fail("unknown scheduled search");
       return ok(await runSavedSearch(search));
     }
     case "unschedule_search": {
       const a = args as ToolArgs<"unschedule_search">;
+      const owner = searchOwner(oauthUser);
       let id = a.id ?? "";
       if (!id && a.query) {
         const q = a.query.trim().toLowerCase();
-        id = (await store.discoverySearches()).find((s) => s.query.toLowerCase() === q)?.id ?? "";
+        const searches = await store.discoverySearches(owner ? { userId: owner } : {});
+        id = searches.find((s) => s.query.toLowerCase() === q)?.id ?? "";
       }
       if (!id) return fail("give id or the exact query of a scheduled search");
-      const deleted = await store.deleteDiscoverySearch(id);
+      const deleted = await store.deleteDiscoverySearch(id, owner);
       return deleted ? ok({ deleted: true, id }) : fail("unknown scheduled search");
     }
     case "update_interests": {

@@ -1,6 +1,6 @@
 /**
  * One-time data migration: loads the legacy JSON stores (now scripts/seed-data/) into
- * Supabase. Idempotent — every insert is an upsert keyed on the natural
+ * Supabase. Idempotent: every insert is an upsert keyed on the natural
  * unique column, so re-running it never duplicates rows.
  *
  *   npm --prefix server run seed:supabase

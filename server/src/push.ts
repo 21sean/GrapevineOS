@@ -1,5 +1,5 @@
 /**
- * Web Push — reminders for saved events, traffic-aware "leave by" departure
+ * Web Push: reminders for saved events, traffic-aware "leave by" departure
  * alerts, and the Sunday-evening "your week" digest. Free and
  * serverless-friendly: the browser's push service does the delivery, we just
  * sign with VAPID keys minted on first boot and kept in Postgres (no env
@@ -20,6 +20,7 @@
 import { Router } from "express";
 import webpush from "web-push";
 import { affinityTerms } from "../../shared/affinity.js";
+import { buildCtx, type AgentCtx } from "./agent/context.js";
 import { sessionUser } from "./auth.js";
 import { isMutedFor, mutedSets, stringList, weekPicks } from "./digest.js";
 import { startLoop } from "./lifecycle.js";
@@ -163,7 +164,7 @@ push.put("/api/push/prefs", async (req, res) => {
   }
 });
 
-/** Coarse origin for leave-by ETAs — the browser reports it after the user
+/** Coarse origin for leave-by ETAs. The browser reports it after the user
  * grants geolocation; the store snaps it to ~110 m before it's written. */
 push.post("/api/push/position", async (req, res) => {
   const user = await sessionUser(req);
@@ -256,7 +257,7 @@ function fmtDayTime(iso: string, tz: string): string {
 }
 
 /**
- * "Rare find" alerts — fired by the ingest pipeline the moment new events
+ * "Rare find" alerts, fired by the ingest pipeline the moment new events
  * commit, not by the minute tick. Strictly opt-in per browser, and only for
  * events that match the user's loves ("More like this" interests); avoided
  * terms, muted venues/sources, and promoted placements never notify. The
@@ -320,7 +321,7 @@ export async function notifyRareFinds(added: CityEvent[]): Promise<void> {
 }
 
 /**
- * Traffic-aware departure alerts for events the user is going to — a "going"
+ * Traffic-aware departure alerts for events the user is going to: a "going"
  * reaction or a calendar save, whichever they use. Fires once per occurrence
  * when now reaches leave-at − LEAVEBY_LEAD_MIN, and also claims the plain
  * reminder key so long drives don't double-notify (short drives keep the
@@ -363,7 +364,7 @@ async function leaveByTick(
             : center;
       }
       const drive = await eta(origin, [e.lng, e.lat]).catch(() => null);
-      if (!drive) continue; // no route, no alert — the plain reminder still runs
+      if (!drive) continue; // no route, no alert; the plain reminder still runs
 
       const leaveInMin = minsToStart - drive.minutes - LEAVEBY_BUFFER_MIN;
       if (leaveInMin > LEAVEBY_LEAD_MIN) continue;
@@ -375,8 +376,8 @@ async function leaveByTick(
       const payload: PushPayload = {
         title:
           leaveInMin <= 0
-            ? `Time to go — ${e.title}`
-            : `Leave by ${fmtTime(leaveAt.toISOString(), tz)} — ${e.title}`,
+            ? `Time to go: ${e.title}`
+            : `Leave by ${fmtTime(leaveAt.toISOString(), tz)}: ${e.title}`,
         body: `${drive.minutes} min drive with traffic · starts ${fmtTime(occ.start, tz)} · ${e.venue}`,
         url: `${clickBase()}/?event=${encodeURIComponent(e.id)}`,
         tag: `leaveby-${e.id}`,
@@ -393,15 +394,19 @@ async function digestTick(
 ): Promise<void> {
   const { dow, hour, day } = localParts(new Date(), tz);
   if (dow !== DIGEST_DOW || hour < DIGEST_HOUR) return;
+  let ctx: AgentCtx | undefined;
   for (const [userId, subs] of subsByUser) {
     const armed = subs.filter((s) => s.weeklyDigest);
     if (!armed.length) continue;
-    const key = `digest|${userId}|${day}`;
-    if (!(await store.tryMarkSent(key))) continue;
     const user = await store.userById(userId);
     if (!user) continue;
-    const { picks } = await weekPicks(user, 3);
+    // Picks before the claim: a failed or empty pass leaves the day's key
+    // free, so a later tick (new events, a recovered database) still sends.
+    ctx ??= await buildCtx();
+    const { picks } = await weekPicks(user, 3, ctx);
     if (!picks.length) continue;
+    const key = `digest|${userId}|${day}`;
+    if (!(await store.tryMarkSent(key))) continue;
     const payload: PushPayload = {
       title: `Your week in ${city.split(",")[0]}`,
       body: picks.map((p) => `${p.title} (${p.when})`).join(" · "),

@@ -117,7 +117,7 @@
     /* drop the 350ms double-tap-zoom delay on interactive elements */
     touch-action: manipulation;
   }
-  /* iOS zooms the whole page into any focused input under 16px — override
+  /* iOS zooms the whole page into any focused input under 16px; override
      the 14px shadcn default on phones instead of banning user zoom. */
   @media (max-width: 767px) {
     input,
@@ -138,7 +138,7 @@
     box-shadow: 0 8px 32px oklch(0 0 0 / 35%);
   }
 
-  /* Thin, themed scrollbar for native overflow containers — matches the
+  /* Thin, themed scrollbar for native overflow containers. Matches the
      Radix ScrollArea thumb without its height-containment quirks, so it's
      safe inside shrink-to-fit (max-height) dialogs where ScrollArea collapses. */
   .scroll-thin {
@@ -261,8 +261,8 @@
 /* ---------- booked events (saved to my calendar) ---------- */
 
 /* Apple Maps' calendar annotation, faithfully: venue name in calendar-salmon
-   with the event + time in white beneath, haloed text straight on the map —
-   no chip — and always visible, whatever the zoom: these are the user's own
+   with the event + time in white beneath, haloed text straight on the map
+   (no chip), and always visible, whatever the zoom: these are the user's own
    plans, the one thing the map should never make them hunt for. */
 .gv-marker[data-booked="true"] .gv-marker-label {
   opacity: 1;
@@ -372,7 +372,7 @@
   color: oklch(0.96 0.005 260 / 85%);
 }
 
-/* live events breathe lantern-gold — the signature */
+/* live events breathe lantern-gold: the signature */
 .gv-marker[data-live="true"] {
   background: var(--marker-color);
   box-shadow:
@@ -389,7 +389,7 @@
   animation: gv-pulse 2.4s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
 }
 
-/* the agent's picks pulse wine — distinct from the live-now gold */
+/* the agent's picks pulse wine, distinct from the live-now gold */
 .gv-marker[data-agent="true"] {
   box-shadow:
     0 0 0 1.5px color-mix(in oklab, var(--wine) 85%, transparent),
@@ -448,7 +448,7 @@
 }
 
 @media (pointer: coarse) {
-  /* a 24px dot is a miserable fingertip target — pad the hit area
+  /* a 24px dot is a miserable fingertip target; pad the hit area
      invisibly out to ~44px without touching the visual size */
   .gv-marker::before {
     content: "";

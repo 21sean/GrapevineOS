@@ -1,5 +1,5 @@
 /**
- * schema.org/Event extraction — the structured-first path in discovery.
+ * schema.org/Event extraction: the structured-first path in discovery.
  *
  * When a page carries this markup we take the publisher's own dates and prices
  * instead of asking a model to read prose, which is both free and exact. That

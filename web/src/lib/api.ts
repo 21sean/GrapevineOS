@@ -99,7 +99,7 @@ export const api = {
     )
   },
 
-  /** Drive-time contour around a point — the "Near me" filter's zone. */
+  /** Drive-time contour around a point: the "Near me" filter's zone. */
   isochrone: (minutes: number, center?: [number, number]) => {
     const params = new URLSearchParams({ minutes: String(minutes) })
     if (center) params.set("center", center.join(","))
@@ -253,7 +253,7 @@ export const api = {
       >(r)
     ),
 
-  /** Local hardware the server detected — drives the can-it-run badges. */
+  /** Local hardware the server detected; drives the can-it-run badges. */
   system: () =>
     fetch("/api/system").then((r) =>
       json<{
@@ -292,7 +292,7 @@ export const api = {
 
   /**
    * Streams the agent's NDJSON frames; abort via `signal` to stop generation.
-   * Conversation history lives server-side in the LangGraph checkpointer —
+   * Conversation history lives server-side in the LangGraph checkpointer;
    * send the same `threadId` to continue a conversation.
    */
   async agentChat(
@@ -372,7 +372,7 @@ export const api = {
       method: "DELETE",
     }).then((r) => json<CalendarStatus>(r)),
 
-  /** Ask Grapevine history — signed-in users only, ownership checked server-side. */
+  /** Ask Grapevine history: signed-in users only, ownership checked server-side. */
   chatThreads: () =>
     fetch("/api/chat/threads").then((r) =>
       json<{ threads: ChatThreadMeta[] }>(r)
@@ -497,7 +497,7 @@ export const api = {
       json<{ threads: ConversationMonitorRow[] }>(r)
     ),
 
-  /** Judge one thread on the local Ollama judge. Tens of seconds — spin. */
+  /** Judge one thread on the local Ollama judge. Tens of seconds; spin. */
   evaluateConversation: (threadId: string) =>
     fetch(`/api/evals/conversations/${encodeURIComponent(threadId)}/evaluate`, {
       method: "POST",

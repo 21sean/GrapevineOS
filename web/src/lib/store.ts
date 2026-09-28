@@ -15,7 +15,7 @@ import type {
 } from "./types"
 import { CHAT_EFFORT_LEVELS, DEFAULT_FILTERS, normalizeFilters } from "./types"
 import { DEFAULT_MAP_LAYERS, type MapLayerKey } from "./mapLayers"
-import type { MapTheme } from "./time"
+import { localDay, type MapTheme } from "./time"
 import type { PolygonRings } from "./geo"
 
 /**
@@ -90,10 +90,10 @@ export interface GrapevineState {
   pinnedIds: string[]
   // events the user hid from the list and map (restorable)
   hiddenIds: string[]
-  // venues/sources the user muted — every event from them drops off the map
+  // venues/sources the user muted; every event from them drops off the map
   mutedVenues: string[]
   mutedSources: string[]
-  // per-event feedback ("going" / "went — great" / "not for me"); server-backed
+  // per-event feedback ("going" / "went, great" / "not for me"); server-backed
   // when signed in, this browser otherwise
   reactions: Record<string, Reaction>
   // "Ask Grapevine" composer: per-turn model and effort overrides for the
@@ -162,6 +162,7 @@ import { supabase } from "./supabase"
 // burst of filter toggles becomes one PUT. Fire-and-forget: local state is
 // the source of truth while the tab is open.
 let prefsTimer: ReturnType<typeof setTimeout> | undefined
+let loadGen = 0
 function schedulePrefsSync(get: () => GrapevineState) {
   if (!get().user) return
   clearTimeout(prefsTimer)
@@ -239,6 +240,9 @@ export const useGrapevine = create<GrapevineState>()(
       reactions: {},
 
       async load() {
+        // The mount load and a SIGNED_IN reload can overlap; only the newest
+        // may write, or a slow signed-out answer wipes the account's prefs.
+        const gen = ++loadGen
         const [events, settings, sources, me, calendar] = await Promise.all([
           api.events(),
           api.settings(),
@@ -260,6 +264,7 @@ export const useGrapevine = create<GrapevineState>()(
               )
               .catch(() => null)
           : null
+        if (gen !== loadGen) return
         set({
           events,
           settings,
@@ -278,9 +283,20 @@ export const useGrapevine = create<GrapevineState>()(
         })
         // First sign-in from this browser: seed the account with local prefs.
         if (me.user && !prefs) schedulePrefsSync(get)
+        get().tick()
       },
 
-      tick: () => set({ now: new Date() }),
+      tick() {
+        const now = new Date()
+        const { filters, settings } = get()
+        set({ now })
+        // Date windows persist, so "Today" tapped last week would otherwise
+        // come back as a window that has already closed and match nothing.
+        const today = localDay(now.toISOString(), settings?.tz)
+        if (filters.dateTo && filters.dateTo < today) {
+          get().setFilters({ dateFrom: null, dateTo: null })
+        }
+      },
 
       select(id, opts) {
         set({
@@ -399,7 +415,7 @@ export const useGrapevine = create<GrapevineState>()(
         if (hiddenIds.includes(id)) return
         set({
           hiddenIds: [id, ...hiddenIds],
-          // hiding and pinning contradict each other — the newer intent wins
+          // hiding and pinning contradict each other; the newer intent wins
           ...(pinnedIds.includes(id) && {
             pinnedIds: pinnedIds.filter((x) => x !== id),
           }),
@@ -462,7 +478,7 @@ export const useGrapevine = create<GrapevineState>()(
         // Supabase Auth owns the session; local scope keeps other devices
         // signed in.
         await supabase?.auth.signOut({ scope: "local" }).catch(() => {})
-        set({ user: null, calendar: null })
+        set({ user: null, calendar: null, isAdmin: false })
         // Whether Admin stays visible depends on who is signed in now, so ask
         // the server again rather than guess.
         api
@@ -507,14 +523,16 @@ export const useGrapevine = create<GrapevineState>()(
         carouselWidth: s.carouselWidth,
         carouselMin: s.carouselMin,
         sortBy: s.sortBy,
+        trafficOn: s.trafficOn,
         mapLayers: s.mapLayers,
         mapTheme: s.mapTheme,
         chatModel: s.chatModel,
         chatEffort: s.chatEffort,
         chatDraft: s.chatDraft,
       }),
-      // v0 persisted a `trafficOn` toggle; traffic is now always on, so drop
-      // the stored value and let the `true` default win.
+      // v0 persisted a `trafficOn` toggle; that stale value is dropped so the
+      // `true` default wins. It is persisted again now that the map layers
+      // panel toggles it, and an absent key keeps the default.
       // v2 replaced filters.farmersOnly with the tri-state filters.farmers.
       // v3 added filters.nearMinutes (normalize fills the missing key).
       // v4 added filters.hideCategories (normalize fills the missing key).

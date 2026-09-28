@@ -153,6 +153,7 @@ export function CalendarDialog() {
       const onUp = () => {
         window.removeEventListener("pointermove", onMove)
         window.removeEventListener("pointerup", onUp)
+        window.removeEventListener("pointercancel", onUp)
         document.body.style.userSelect = ""
         try {
           localStorage.setItem(SIZE_KEY, JSON.stringify(next))
@@ -163,6 +164,7 @@ export function CalendarDialog() {
       document.body.style.userSelect = "none"
       window.addEventListener("pointermove", onMove)
       window.addEventListener("pointerup", onUp)
+      window.addEventListener("pointercancel", onUp)
     },
     [dims]
   )

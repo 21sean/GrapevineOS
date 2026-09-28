@@ -4,7 +4,7 @@ import { nearZoneKey } from "@/lib/derived"
 import { useGrapevine } from "@/lib/store"
 
 // Straight-line fallback when the isochrone API is unreachable: minutes at a
-// city-driving effective speed. Deliberately conservative — better to show a
+// city-driving effective speed. Deliberately conservative: better to show a
 // touch too much than to hide something 12 minutes away.
 const FALLBACK_KMH = 30
 

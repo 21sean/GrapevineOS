@@ -10,7 +10,7 @@
  * tunes, so they live here, together, and every one is overridable by env.
  *
  * The rule they all follow: exceeding a budget must be LOUD. A truncated
- * document, a skipped row, an abandoned pass — each logs what it gave up.
+ * document, a skipped row, an abandoned pass: each logs what it gave up.
  * Silent truncation reads as "we processed everything" when we did not.
  */
 

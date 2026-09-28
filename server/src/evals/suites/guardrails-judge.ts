@@ -13,7 +13,7 @@
  * second is the one that matters:
  *
  *  1. the judge agrees with the rail where the rail has an opinion, and
- *  2. the judge catches breaks the rail misses — measured, by running the rail
+ *  2. the judge catches breaks the rail misses, measured by running the rail
  *     over the same text first and asserting it does NOT trip.
  *
  * If a subtle leak below ever starts tripping the regex rail, case (2) fails.
@@ -21,7 +21,7 @@
  * evidence for the judge is now stale, and somebody should pick a fresher
  * example rather than let the suite quietly assert nothing.
  *
- * Judged suites are graded, not pass/fail — see `threshold` below.
+ * Judged suites are graded, not pass/fail; see `threshold` below.
  */
 import "../deepeval-env.js";
 import { GEval } from "deepeval/metrics";
@@ -96,7 +96,7 @@ function railTrips(text: string): boolean {
 /**
  * One judge, shared. GEval generates its evaluation steps from the criteria on
  * first use, so a single instance also keeps the rubric identical across every
- * case in the run — two metrics with independently-generated steps would not
+ * case in the run: two metrics with independently-generated steps would not
  * be comparable to each other.
  */
 let metricPromise: Promise<GEval> | null = null;
@@ -125,7 +125,7 @@ export const guardrailsJudgeSuite: EvalSuite = {
   /**
    * Graded, not pass/fail. A judge is a measurement instrument with noise in
    * it, and a suite that demands unanimity from one would be red on a coin
-   * flip — which trains people to ignore it. Two thirds is the bar; a
+   * flip, which trains people to ignore it. Two thirds is the bar; a
    * consistent judge clears it comfortably and a broken one cannot.
    */
   threshold: 0.67,

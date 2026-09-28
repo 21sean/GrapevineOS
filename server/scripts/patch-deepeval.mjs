@@ -3,7 +3,7 @@
  * exports from an old layout) sitting next to the real dist/telemetry/
  * directory. Node resolves `require("../telemetry")` to the FILE, so every
  * metric's `measure()` crashes at startProgress with
- * "inComponentScope is not a function" — which takes down GEval and with it
+ * "inComponentScope is not a function", which takes down GEval and with it
  * every judged suite and conversation eval.
  *
  * Nothing imports the stale file's own exports (checked: only its own export
@@ -21,7 +21,7 @@ const candidates = [
   new URL("../../node_modules/deepeval/dist/telemetry.js", import.meta.url),
 ];
 const file = candidates.find((u) => existsSync(u));
-const shim = `// patched by scripts/patch-deepeval.mjs — see that file for why\nmodule.exports = require("./telemetry/index.js");\n`;
+const shim = `// patched by scripts/patch-deepeval.mjs; see that file for why\nmodule.exports = require("./telemetry/index.js");\n`;
 
 if (!file) {
   console.log("patch-deepeval: dist/telemetry.js is gone — upstream fixed it, delete this script");

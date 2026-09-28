@@ -1,7 +1,7 @@
 /**
  * The subscription CLI providers (Claude Code / Codex / Gemini / Copilot) as
  * a LangChain chat model, so a CLI turn runs through the same LangGraph as
- * the Ollama one — same input rail, same checkpointer, same persona guard,
+ * the Ollama one: same input rail, same checkpointer, same persona guard,
  * same trace shape. Before this, the CLI path was a parallel copy of all of
  * that in the HTTP handler, which is exactly how a rail quietly stops
  * covering half the traffic.
@@ -79,7 +79,7 @@ export class CliChatModel extends BaseChatModel<BaseChatModelCallOptions> {
 
   /**
    * Where tool/status/usage frames go. The agent node re-points this at the
-   * current run's custom-stream writer before each invoke — the model object
+   * current run's custom-stream writer before each invoke; the model object
    * lives for one HTTP request, same as the graph it's bound into.
    */
   frames: ((frame: AgentFrame) => void) | null = null;

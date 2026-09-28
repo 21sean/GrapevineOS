@@ -50,8 +50,8 @@ function fitSentence(fit: Fit | null, hw: Hardware | null): string {
   if (fit === "gpu") return `Fits your ${gpu}.`
   if (fit === "cpu")
     return hw.vramGB
-      ? `Exceeds your ${gpu} — will offload to RAM and run slowly.`
-      : `No GPU detected — runs from ${hw.ramGB} GB RAM, slowly.`
+      ? `Exceeds your ${gpu}; will offload to RAM and run slowly.`
+      : `No GPU detected; runs from ${hw.ramGB} GB RAM, slowly.`
   return `Too big for this PC (${hw.ramGB} GB RAM).`
 }
 

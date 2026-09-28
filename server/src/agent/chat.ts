@@ -150,7 +150,7 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
         send({
           type: "notice",
           code: "cli-auth",
-          message: `${info.name} isn't signed in. Run: ${info.loginHint} — ${info.loginNote}.`,
+          message: `${info.name} isn't signed in. Run: ${info.loginHint}. Sign in with your ${info.loginNote}.`,
         });
         return done();
       }

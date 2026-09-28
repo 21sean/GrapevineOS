@@ -2,9 +2,9 @@
  * Multi-turn red team: the attack class every other suite is blind to.
  *
  * Everything else here judges one message at a time, which is precisely the
- * assumption a crescendo attack is built to exploit. PyRIT runs the attacks —
- * Microsoft's Crescendo and red-teaming loops, their adversarial prompts,
- * their backtracking, their scorers — against the real graph through a
+ * assumption a crescendo attack is built to exploit. PyRIT runs the attacks
+ * (Microsoft's Crescendo and red-teaming loops, their adversarial prompts,
+ * their backtracking, their scorers) against the real graph through a
  * loopback bridge (../redteam.ts), on the local Ollama daemon.
  *
  * The verdict is PyRIT's, not ours. Its objective scorer answers one question
@@ -19,7 +19,7 @@
  *
  * A failure is not necessarily a bug in the rails. It is usually a bug in the
  * system prompt, which is the layer that actually has to hold when the
- * classifier has nothing to fire on — see the calibration suite for why the
+ * classifier has nothing to fire on; see the calibration suite for why the
  * classifier is not going to help with any of this.
  */
 import { ollamaBase } from "../../ollama.js";
@@ -47,7 +47,7 @@ async function chatModel(): Promise<string | null> {
  * One PyRIT process runs every objective, so the results are fetched once and
  * the cases read from that.
  *
- * Not for speed — the attacks are sequential either way. It is that Crescendo
+ * Not for speed: the attacks are sequential either way. It is that Crescendo
  * and the red-teaming loop each build an adversarial chat and two scorers, and
  * standing those up per case would mean four sets of them against one Ollama
  * daemon. The run is also the unit that can fail: if PyRIT dies, every case
@@ -125,7 +125,7 @@ export const redteamSuite: EvalSuite = {
           `the attack succeeded in ${result.executed_turns} turn(s) — ${(result.score?.rationale || result.outcome_reason || "").slice(0, 220)}`,
         );
 
-        // UNDETERMINED means the scorer never reached a verdict — usually the
+        // UNDETERMINED means the scorer never reached a verdict, usually because the
         // attack ran out of turns. That is not a pass, but it is not evidence
         // of a break either, so it is reported rather than asserted on.
         const verdict =

@@ -27,7 +27,7 @@ import { DEFAULT_CITY, type CityEvent } from "./types"
  *
  * Each selector recomputes only when the state slices it reads change, and
  * when a recompute produces an equivalent result it returns the *previous
- * reference* — so the 30s clock tick, which almost never changes what's
+ * reference*, so the 30s clock tick, which almost never changes what's
  * actually visible, costs one cheap pass here and zero re-renders downstream.
  * Components subscribe with these directly: useGrapevine(selectVisible).
  */
@@ -97,7 +97,7 @@ const selectNearTest = memoSelector(
   }
 )
 
-/** Cache identity for one (radius, origin) pair — shared with useNearZone. */
+/** Cache identity for one (radius, origin) pair, shared with useNearZone. */
 export function nearZoneKey(minutes: number, origin: [number, number]): string {
   const r = (n: number) => Math.round(n * 1000) / 1000
   return `${minutes}|${r(origin[0])},${r(origin[1])}`
@@ -113,9 +113,9 @@ const sameAffinity = (
 }
 
 /**
- * The learned half of the feedback loop (shared/affinity.ts — the server's
+ * The learned half of the feedback loop (shared/affinity.ts; the server's
  * weekly digest learns from the exact same math): reactions → per-tag weights
- * over the events' own vocabulary (not the fixed 26-topic list). Two "went —
+ * over the events' own vocabulary (not the fixed 26-topic list). Two "went,
  * great" jazz nights make every jazz event score higher from then on.
  */
 export const selectTagAffinity = memoSelector(
@@ -210,8 +210,8 @@ const sameLineMap = (
 /**
  * Booked events (saved to "my calendar") → their Apple Maps-style calendar
  * annotation ("Movie: The Odyssey at 8:35PM"). Recomputed on the clock tick,
- * but the reference only moves when a line actually changes — a booking
- * toggled, the day rolled over, a recurring occurrence advanced — so the
+ * but the reference only moves when a line actually changes (a booking
+ * toggled, the day rolled over, a recurring occurrence advanced), so the
  * map's marker effect skips the ticks that change nothing. Ended events drop
  * out: a plan that already happened has no business annotating the map.
  */
@@ -235,7 +235,7 @@ export const selectBookedLines = memoSelector(
 
 /**
  * What the map draws: visible plus the agent's picks and the user's booked
- * events, which render even when the user's filters would hide them — a
+ * events, which render even when the user's filters would hide them: a
  * recommendation (or a plan the user committed to) with no pin is a broken
  * answer.
  */
@@ -268,7 +268,7 @@ export interface WeekDay {
 }
 
 /**
- * "Your week": the next 7 days, top picks per day by the personal score —
+ * "Your week": the next 7 days, top picks per day by the personal score:
  * interests, reactions, and learned tag affinity included; the user's current
  * map filters deliberately NOT (the digest answers "what's worth it", not
  * "what's on screen"). Promoted junk and "not for me" events never make it.
@@ -298,7 +298,7 @@ export const selectWeekPicks = memoSelector(
       if (Date.parse(occ.end) < s.now.getTime()) continue
       if (Date.parse(occ.start) > horizon) continue
       // Avoids sink an event via a big score penalty (not -Infinity), so an
-      // avoided topic can still surface on a sparse day rather than vanishing —
+      // avoided topic can still surface on a sparse day rather than vanishing:
       // same "down-rank, don't hide" rule as the map and the server digest.
       const score = scoreEvent(e, s.interests, s.now, tz, taste)
       const day = localDay(occ.start, tz)
@@ -331,7 +331,7 @@ export const selectLiveIds = memoSelector(
 
 /**
  * The top bar's "N live now": live *and* through the current filters, so the
- * headline count describes the same city the map is drawing — mute the farmers
+ * headline count describes the same city the map is drawing. Mute the farmers
  * markets and the number drops with the pins. Search deliberately doesn't
  * narrow it: a query dims markers rather than removing them, so the count would
  * disagree with what's still pulsing on screen.

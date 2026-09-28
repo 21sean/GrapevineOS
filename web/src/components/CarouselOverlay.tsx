@@ -88,7 +88,7 @@ export function CarouselOverlay() {
     if (!s.active) {
       if (Math.abs(dx) < 10) return
       if (Math.abs(dx) < Math.abs(dy) * 1.2) {
-        swipe.current = null // reads as a vertical gesture — not ours
+        swipe.current = null // reads as a vertical gesture, not ours
         return
       }
       s.active = true
@@ -97,7 +97,7 @@ export function CarouselOverlay() {
       try {
         e.currentTarget.setPointerCapture(s.pointerId)
       } catch {
-        // pointer already gone — keep tracking without capture
+        // pointer already gone; keep tracking without capture
       }
       el.style.transitionDuration = "0ms"
     }
@@ -124,7 +124,7 @@ export function CarouselOverlay() {
   }
 
   // Drag the right edge to resize. The card is centered, so its width is twice
-  // the pointer's distance from the viewport midline — the handle tracks the
+  // the pointer's distance from the viewport midline; the handle tracks the
   // cursor while both edges grow symmetrically.
   const startResize = (e: React.PointerEvent) => {
     e.preventDefault()
@@ -136,6 +136,7 @@ export function CarouselOverlay() {
     const onUp = () => {
       window.removeEventListener("pointermove", onMove)
       window.removeEventListener("pointerup", onUp)
+      window.removeEventListener("pointercancel", onUp)
       document.body.style.userSelect = ""
       document.body.style.cursor = ""
     }
@@ -143,10 +144,11 @@ export function CarouselOverlay() {
     document.body.style.cursor = "ew-resize"
     window.addEventListener("pointermove", onMove)
     window.addEventListener("pointerup", onUp)
+    window.addEventListener("pointercancel", onUp)
   }
 
   if (!event) return null
-  // With the dock raised, the list is the focus — the tour card would just
+  // With the dock raised, the list is the focus; the tour card would just
   // sit behind the sheet fighting it for the map.
   if (isMobile && dockState !== "peek") return null
 
@@ -306,7 +308,7 @@ export function CarouselOverlay() {
         />
       )}
 
-      {/* drag the right edge to resize the card (grows from the center) —
+      {/* drag the right edge to resize the card (grows from the center);
           pointless under a thumb, so desktop only */}
       {!isMobile && (
         <div

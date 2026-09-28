@@ -69,13 +69,6 @@ first. Deleting traffic orphans the annotation queues that point at it, so
 re-run `lf:annotation` after any `lf:traffic --reset`; its `--reset` finds items
 whose trace no longer exists and replaces them.
 
-Two earlier scripts are retired to `server/scripts/archive/`. The first-pass
-`seed-langfuse.ts` is where the prompt library, the score configs and the two
-fixture datasets started; `lf:foundation` and `lf:datasets` own those now, and
-its trace backfill only ever described one machine's chat history.
-`normalise-otel-resource.ts` was a one-off repair for traces ingested before
-resource auto-detection was turned off. New runs need neither.
-
 ### Code evaluators
 
 `docker-compose.override.yml` sets `LANGFUSE_CODE_EVAL_DISPATCHER=insecure-local`,

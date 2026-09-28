@@ -1,10 +1,13 @@
 import type { Request, Response } from "express";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { adminPosture, isAdminUser } from "../src/admin-gate.js";
-import { blockedHost, isBlockedUrl, jsonLdBlocks } from "../src/agent/websearch.js";
+import { blockedHost, fetchPublic, isBlockedUrl, jsonLdBlocks } from "../src/agent/websearch.js";
 import { llmPolicy } from "../src/budget.js";
+import { safeSvg } from "../src/catalog.js";
+import { eventsFromJsonLdBlocks, inZone } from "../src/jsonld.js";
 import { startLoop } from "../src/lifecycle.js";
 import { parseLooseJSON } from "../src/llm-json.js";
+import { nextOccurrence, normalizeRRule } from "../src/recurrence.js";
 import { rateLimit, singleFlight } from "../src/rate-limit.js";
 import { errorHandler } from "../src/request-id.js";
 import { safeEqual, validateSecrets } from "../src/secrets.js";
@@ -130,10 +133,32 @@ describe("the SSRF guard", () => {
       "169.254.169.254",
       "::1",
       "::ffff:7f00:1",
+      "[fd00::1]",
+      "100.64.0.1",
+      "dev.localhost",
     ]) {
       expect(blockedHost(h), h).toBe(true);
     }
-    for (const h of ["example.com", "8.8.8.8", "172.32.0.1"]) expect(blockedHost(h), h).toBe(false);
+    for (const h of ["example.com", "8.8.8.8", "172.32.0.1", "fcc.gov", "fdic.gov", "fe80.io"]) {
+      expect(blockedHost(h), h).toBe(false);
+    }
+  });
+
+  it("re-checks every redirect hop", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(null, {
+          status: 302,
+          headers: { location: "http://127.0.0.1:11434/api/tags" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      await expect(fetchPublic("http://93.184.215.14/go")).rejects.toThrow("url not allowed");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("rejects non-http schemes and bad urls", () => {
@@ -210,6 +235,53 @@ describe("the error handler", () => {
   });
 });
 
+describe("JSON-LD dates without an offset", () => {
+  const tz = "America/Los_Angeles";
+
+  it("are wall-clock time in the city, on either side of a DST change", () => {
+    expect(inZone("2026-08-08", tz)).toBe("2026-08-08T00:00:00-07:00");
+    expect(inZone("2026-03-08", tz)).toBe("2026-03-08T00:00:00-08:00");
+    expect(inZone("2026-03-08T12:00", tz)).toBe("2026-03-08T12:00:00-07:00");
+    expect(inZone("2026-08-08T19:30:00-04:00", tz)).toBe("2026-08-08T19:30:00-04:00");
+  });
+
+  it("treat a single-day midnight start as a missing hour", () => {
+    const block = (startDate: string) =>
+      JSON.stringify({ "@type": "Event", name: "Show", startDate, location: "Venue" });
+    const [midnight] = eventsFromJsonLdBlocks(
+      [block("2026-08-15T00:00:00-07:00")],
+      "https://x.test",
+      tz,
+    );
+    const [evening] = eventsFromJsonLdBlocks([block("2026-08-15T19:30:00")], "https://x.test", tz);
+    expect(midnight.precise).toBe(false);
+    expect(evening.precise).toBe(true);
+    expect(evening.start).toBe("2026-08-15T19:30:00-07:00");
+  });
+});
+
+describe("proxied logos", () => {
+  it("passes plain vector art through", () => {
+    const svg = `<svg viewBox="0 0 24 24"><use href="#a"/><path fill="currentColor" d="M0 0h24v24H0z"/></svg>`;
+    expect(safeSvg(`  ${svg}\n`)).toBe(svg);
+    expect(safeSvg(`<?xml version="1.0"?>\n${svg}`)).not.toBeNull();
+  });
+
+  it("refuses anything that can run or load something once inlined", () => {
+    for (const bad of [
+      `<svg><script>alert(1)</script></svg>`,
+      `<svg onload="alert(1)"></svg>`,
+      `<svg><animate onbegin=alert(1) attributeName="x"/></svg>`,
+      `<svg><foreignObject><img src=x></foreignObject></svg>`,
+      `<svg><a href="javascript:alert(1)"><text>x</text></a></svg>`,
+      `<svg><image xlink:href="https://tracker.example/p.png"/></svg>`,
+      `<html><body>not an svg</body></html>`,
+    ]) {
+      expect(safeSvg(bad)).toBeNull();
+    }
+  });
+});
+
 describe("loops", () => {
   it("never overlaps a slow pass with the next tick, and starts nothing when disabled", async () => {
     vi.useFakeTimers();
@@ -241,5 +313,50 @@ describe("loops", () => {
     expect(maxRunning).toBe(1);
     expect(passes).toBeGreaterThanOrEqual(2);
     expect(disabledPasses).toBe(0);
+  });
+});
+
+describe("recurrence", () => {
+  const tz = "America/Los_Angeles";
+  const wall = (iso: string) =>
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short",
+    }).format(new Date(iso));
+
+  it("keeps a weekly evening at the same local hour across the fall DST change", () => {
+    const e = {
+      start: "2026-10-31T19:00:00-07:00",
+      end: "2026-10-31T21:00:00-07:00",
+      recurrence: "FREQ=WEEKLY;BYDAY=SA",
+    };
+    const next = nextOccurrence(e, new Date("2026-11-01T12:00:00-07:00"), tz);
+    expect(wall(next.start)).toBe("Sat, Nov 7, 7:00 PM PST");
+  });
+
+  it("treats a monthly ordinal as the nth weekday, not every weekday", () => {
+    expect(normalizeRRule("FREQ=MONTHLY;BYDAY=1MO")).toBe("FREQ=MONTHLY;BYDAY=1MO");
+    const e = {
+      start: "2026-09-07T19:00:00-07:00",
+      end: "2026-09-07T21:00:00-07:00",
+      recurrence: "FREQ=MONTHLY;BYDAY=1MO",
+    };
+    const next = nextOccurrence(e, new Date("2026-09-08T12:00:00-07:00"), tz);
+    expect(wall(next.start)).toBe("Mon, Oct 5, 7:00 PM PDT");
+  });
+
+  it("includes the whole local day of a date-only UNTIL", () => {
+    const e = {
+      start: "2026-09-05T19:00:00-07:00",
+      end: "2026-09-05T21:00:00-07:00",
+      recurrence: "FREQ=WEEKLY;BYDAY=SA;UNTIL=20261003",
+    };
+    const last = nextOccurrence(e, new Date("2026-10-04T12:00:00-07:00"), tz);
+    expect(wall(last.start)).toBe("Sat, Oct 3, 7:00 PM PDT");
   });
 });

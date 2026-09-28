@@ -5,7 +5,7 @@
  * evaluates "Open now" against its own clock, so the answer can never go stale
  * inside the server's cache window.
  *
- * This covers the subset real venues actually use — weekday ranges and lists,
+ * This covers the subset real venues actually use: weekday ranges and lists,
  * several spans a day, spans running past midnight, "off", and "24/7".
  * Anything more exotic (public holidays, month ranges, "sunset") parses to
  * null and callers fall back to showing the raw string verbatim.
@@ -20,7 +20,7 @@ export interface Interval {
   to: number;
 }
 
-/** Seven entries, Monday first — matching OSM's weekday order. */
+/** Seven entries, Monday first, matching OSM's weekday order. */
 export type OpeningHours = Interval[][];
 
 const DAY_TOKENS = ["mo", "tu", "we", "th", "fr", "sa", "su"];
@@ -116,7 +116,7 @@ export function parseOpeningHours(spec: string): OpeningHours | null {
   return parsedAnything ? week : null;
 }
 
-/** "7:30 PM" / "9 AM" — minutes from midnight to a compact wall-clock label. */
+/** "7:30 PM" / "9 AM": minutes from midnight to a compact wall-clock label. */
 export function clockLabel(mins: number): string {
   const h24 = Math.floor(mins / 60) % 24;
   const min = mins % 60;
@@ -150,7 +150,7 @@ export interface OpenState {
   open: boolean;
   /** When it closes (if open) or next opens (if closed). Absent if unknown. */
   at?: string;
-  /** True when the next opening is not today — "Opens Monday", not "Opens 9 AM". */
+  /** True when the next opening is not today ("Opens Monday", not "Opens 9 AM"). */
   laterInWeek?: boolean;
 }
 

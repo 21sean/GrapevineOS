@@ -1,14 +1,16 @@
 /**
- * Free, keyless web access for the agent — no accounts, no billed APIs.
+ * Free, keyless web access for the agent: no accounts, no billed APIs.
  *
  * Search prefers a self-hosted SearXNG instance when SEARXNG_URL is set
  * (docker one-liner, see .env.example) and falls back to scraping DuckDuckGo
  * in-process via duck-duck-scrape. Page reading fetches the URL and distills
  * it with Mozilla's Readability (the Firefox reader-mode extractor).
  *
- * Framework-free like context.ts — the LangChain tool wrappers live in
+ * Framework-free like context.ts; the LangChain tool wrappers live in
  * tools.ts.
  */
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import { Readability } from "@mozilla/readability";
 import { search as ddg, SafeSearchType } from "duck-duck-scrape";
 import { JSDOM } from "jsdom";
@@ -81,7 +83,7 @@ async function duckduckgo(query: string, limit: number): Promise<WebHit[]> {
 }
 
 /**
- * Last-resort scrape of DuckDuckGo's no-JS HTML endpoint — more lenient than
+ * Last-resort scrape of DuckDuckGo's no-JS HTML endpoint, more lenient than
  * the API endpoint duck-duck-scrape uses when its anomaly detection trips.
  * Result links are uddg redirect params, so unwrap them.
  */
@@ -143,7 +145,7 @@ export async function webSearch(
     try {
       const results = await searxng(base, q, limit, opts.signal);
       if (results.length) return { provider: "searxng", count: results.length, results };
-      // fall through — an empty SearXNG answer is often an engine hiccup
+      // fall through: an empty SearXNG answer is often an engine hiccup
     } catch {
       // fall through to DuckDuckGo
     }
@@ -188,34 +190,68 @@ export type ReadPageResult =
 /**
  * The model picks the URLs, so treat every fetch as untrusted: only plain
  * http(s), and never anything that resolves into the local network (Ollama,
- * Supabase CLI, this very server). Hostname-level checks only — good enough
- * for a local single-user app (DNS rebinding and redirect hops can still reach
- * private hosts; this stops a URL from naming one directly).
+ * Supabase CLI, this very server). This checks a hostname or address
+ * literal; fetchPublic below also checks what a name resolves to and every
+ * redirect hop. A rebinding resolver can still answer differently between
+ * the check and the connect, which is acceptable for a single-user app.
  */
 export function blockedHost(hostname: string): boolean {
   const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (h === "localhost" || h.endsWith(".local") || h.endsWith(".internal")) return true;
-  if (
-    h === "::" ||
-    h === "::1" ||
-    h.startsWith("fe80:") ||
-    h.startsWith("fc") ||
-    h.startsWith("fd")
-  )
-    return true;
-  // Any IPv4-mapped IPv6 literal — the URL parser serializes ::ffff:127.0.0.1
-  // to ::ffff:7f00:1, so match the whole class rather than the dotted form;
-  // it is never a legitimate public target.
-  if (h.startsWith("::ffff:")) return true;
+  if (h === "localhost" || h.endsWith(".localhost")) return true;
+  if (h.endsWith(".local") || h.endsWith(".internal")) return true;
+  if (h.includes(":")) {
+    if (h === "::" || h === "::1") return true;
+    if (h.startsWith("fe80:") || h.startsWith("fc") || h.startsWith("fd")) return true;
+    // Any IPv4-mapped IPv6 literal. The URL parser serializes ::ffff:127.0.0.1
+    // to ::ffff:7f00:1, so match the whole class rather than the dotted form;
+    // it is never a legitimate public target.
+    if (h.startsWith("::ffff:")) return true;
+    return false;
+  }
   const m = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(h);
   if (m) {
     const [a, b] = [Number(m[1]), Number(m[2])];
-    if (a === 0 || a === 10 || a === 127) return true;
+    if (a === 0 || a === 10 || a === 127 || a >= 224) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true; // carrier-grade NAT
     if (a === 169 && b === 254) return true;
     if (a === 172 && b >= 16 && b <= 31) return true;
     if (a === 192 && b === 168) return true;
+    if (a === 198 && (b === 18 || b === 19)) return true; // benchmarking
   }
   return false;
+}
+
+const MAX_REDIRECTS = 5;
+
+async function resolvesPrivate(hostname: string): Promise<boolean> {
+  const h = hostname.replace(/^\[|\]$/g, "");
+  if (isIP(h)) return false;
+  try {
+    const addrs = await lookup(h, { all: true });
+    return addrs.some((a) => blockedHost(a.address));
+  } catch {
+    return false; // fetch reports the resolution failure itself
+  }
+}
+
+/**
+ * fetch for URLs from untrusted content. Redirects are followed by hand so
+ * every hop passes the same gate as the first URL, including what its name
+ * resolves to; a public page that 302s to 127.0.0.1 is refused.
+ */
+export async function fetchPublic(rawUrl: string | URL, init: RequestInit = {}): Promise<Response> {
+  let url = new URL(rawUrl);
+  for (let hop = 0; ; hop++) {
+    if (isBlockedUrl(url.href) || (await resolvesPrivate(url.hostname))) {
+      throw new Error("url not allowed");
+    }
+    const res = await fetch(url, { ...init, redirect: "manual" });
+    const location = res.headers.get("location");
+    if (res.status < 300 || res.status >= 400 || !location) return res;
+    await res.body?.cancel();
+    if (hop >= MAX_REDIRECTS) throw new Error("too many redirects");
+    url = new URL(location, url);
+  }
 }
 
 /**
@@ -269,16 +305,17 @@ export async function readPage(
 
   let res: Response;
   try {
-    res = await fetch(url, {
+    res = await fetchPublic(url, {
       signal: withDeadline(PAGE_TIMEOUT_MS, opts.signal),
       headers: {
         "user-agent": "Mozilla/5.0 (compatible; Grapevine/1.0; local events agent)",
         accept: "text/html,application/xhtml+xml,text/plain;q=0.8",
       },
-      redirect: "follow",
     });
   } catch (err) {
-    return { error: `fetch failed: ${String((err as Error)?.message ?? err).slice(0, 120)}` };
+    const message = String((err as Error)?.message ?? err);
+    if (message === "url not allowed") return { error: message };
+    return { error: `fetch failed: ${message.slice(0, 120)}` };
   }
   if (!res.ok) return { error: `http ${res.status}` };
   const type = res.headers.get("content-type") ?? "";

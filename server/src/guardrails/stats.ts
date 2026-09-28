@@ -144,8 +144,8 @@ function driftVerdict(value: number | null): GuardrailRailStats["driftVerdict"] 
  *   allowed + correct         → really was benign          (negative)
  *   allowed + false_negative  → really was an injection    (positive)
  *
- * Anything else (allowed + false_positive) is a contradiction — somebody
- * mislabelled — and is dropped rather than guessed at.
+ * Anything else (allowed + false_positive) is a contradiction (somebody
+ * mislabelled) and is dropped rather than guessed at.
  */
 function groundTruth(row: LabelledScan): boolean | null {
   if (row.label === "correct") return row.flagged;
@@ -164,7 +164,7 @@ function groundTruth(row: LabelledScan): boolean | null {
  *    the number that says "0.6 would block one message in twenty", which is
  *    the cost side of the decision and needs no labels at all.
  *  - the confusion counts come from the labelled rows only. They are the
- *    benefit side, and they are only as good as the labelling — which is why
+ *    benefit side, and they are only as good as the labelling, which is why
  *    the count of labelled rows is reported next to them rather than buried.
  *
  * Candidates are the histogram's own bucket edges, so `blockRate` is exact
@@ -229,9 +229,9 @@ export function sweep(buckets: GuardrailBucket[], labelled: LabelledScan[]): Gua
   let note: string | undefined;
   if (!labelled.length) {
     note =
-      "No labelled decisions yet. Block rate is measured from all traffic; precision and recall need labels — judge a few from the review queue below.";
+      "No labelled decisions yet. Block rate is measured from all traffic; precision and recall need labels. Judge a few from the review queue below.";
   } else if (truths.length < 20) {
-    note = `Only ${truths.length} labelled decision${truths.length === 1 ? "" : "s"} — the block-rate column is solid, but treat precision, recall and the suggested threshold as a hint until there are a few dozen.`;
+    note = `Only ${truths.length} labelled decision${truths.length === 1 ? "" : "s"}. The block-rate column is solid, but treat precision, recall and the suggested threshold as a hint until there are a few dozen.`;
   } else if (truths.length < labelled.length) {
     note = `${labelled.length - truths.length} labelled row${labelled.length - truths.length === 1 ? "" : "s"} excluded: no score (output rail) or a contradictory label.`;
   }

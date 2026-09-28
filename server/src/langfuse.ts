@@ -1,10 +1,10 @@
 /**
- * Langfuse — optional LLM observability, wired the same way LangSmith is:
+ * Langfuse: optional LLM observability, wired the same way LangSmith is:
  * env-gated, off by default, and with it off nothing initializes and nothing
  * leaves the machine. Set LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY (and
  * LANGFUSE_BASE_URL for a self-hosted instance) to turn it on.
  *
- * Current SDK (v5, OTEL-based, the scoped @langfuse/* packages — the legacy
+ * Current SDK (v5, OTEL-based, the scoped @langfuse/* packages; the legacy
  * `langfuse` package is the superseded v3 line): a LangfuseSpanProcessor on a
  * NodeSDK exports spans, the LangChain CallbackHandler turns every Ask
  * Grapevine turn into a trace grouped by thread via sessionId, and the client
@@ -77,7 +77,7 @@ export async function shutdownLangfuse(): Promise<void> {
  * PII scrub applied to every exported observation (LANGFUSE_MASK=off skips
  * it). Chat text is the payload here, so this is deliberately narrow: strip
  * the identifiers people paste (emails, phone numbers) and leave the
- * conversation readable — a mask that redacts the transcript would defeat
+ * conversation readable. A mask that redacts the transcript would defeat
  * the reason for exporting it.
  */
 function scrubPII(text: string): string {
@@ -151,7 +151,7 @@ export function langfuseHandler(opts: {
 /**
  * Mirror one guardrail decision as a session score, so a blocked turn's
  * trace sits next to the number that blocked it. Only scored rails ship
- * (input/content — the output rail is regex and has no measurement), and
+ * (input/content; the output rail is regex and has no measurement), and
  * only decisions that belong to a thread. Fire-and-forget like everything
  * else here; Postgres (guardrail_scans) stays the source of truth.
  */
@@ -184,7 +184,7 @@ export function recordRailScore(scan: {
 }
 
 /**
- * Mirror one judged conversation into Langfuse as session scores — the
+ * Mirror one judged conversation into Langfuse as session scores: the
  * overall verdict plus each metric, attached to the same sessionId the
  * turn traces carry. Postgres stays the source of truth; this is the copy
  * that makes Langfuse's score dashboards and alerts usable.

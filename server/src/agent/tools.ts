@@ -75,7 +75,12 @@ export function makeTools(ctx: AgentCtx, chat: ChatContext) {
       // Chat keeps latency tolerable by reading fewer pages than a scheduled
       // run; the verification gate (source-quote check, LLM cross-read,
       // catalog dedupe) is identical.
-      const run = await runDiscovery({ query: input.query, commit, maxPages: 3 });
+      const run = await runDiscovery({
+        query: input.query,
+        commit,
+        maxPages: 3,
+        signal: config?.signal,
+      });
       if (commit && run.added > 0) {
         emit(config, { type: "action", action: { kind: "eventsRefresh", count: run.added } });
       }

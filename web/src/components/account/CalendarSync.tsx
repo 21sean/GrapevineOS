@@ -10,7 +10,7 @@ import { useGrapevine } from "@/lib/store"
 import { connectGoogleCalendar } from "@/lib/supabase"
 
 /**
- * "Calendar sync" — the Google connect/disconnect row plus the Apple webcal
+ * "Calendar sync": the Google connect/disconnect row plus the Apple webcal
  * feed, as a section of the account dialog. `onOpenCalendar` hands off to the
  * full calendar dialog (closing this one first).
  */
@@ -34,7 +34,7 @@ export function CalendarSync({
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      toast.error("Couldn't copy — feed link: " + webcal)
+      toast.error("Couldn't copy. Feed link: " + webcal)
     }
   }
 

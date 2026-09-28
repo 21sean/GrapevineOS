@@ -3,17 +3,25 @@ name: nightly
 # The suites that need a model: the guardrail classifier, its calibration
 # against the labelled corpus, the LLM judge, and the PyRIT red team. They
 # run on a self-hosted runner with Ollama and the models installed (see
-# docs/setup.md); without one registered, the job simply waits and the
-# scheduled run times out, so the workflow only triggers on the upstream
-# repository. Run it by hand from the Actions tab on a fork that has a runner.
+# docs/setup.md). A job for a runner that is not registered queues until
+# GitHub cancels it a day later, so the schedule only fires once the
+# repository variable GPU_RUNNER is set to "true". Manual runs from the
+# Actions tab always go ahead.
 on:
   schedule:
     - cron: "0 9 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: true
+
 jobs:
   model-suites:
-    if: github.repository == '21sean/GrapevineOS' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || vars.GPU_RUNNER == 'true'
     runs-on: [self-hosted]
     timeout-minutes: 90
     steps:

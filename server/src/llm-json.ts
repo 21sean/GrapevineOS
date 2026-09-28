@@ -1,6 +1,6 @@
 /**
  * One JSON-salvage parser for every LLM output path (Ollama chat and the CLI
- * providers) — models wrap JSON in think-tags, code fences, and prose, and
+ * providers). Models wrap JSON in think-tags, code fences, and prose, and
  * the same malformed output must parse the same way no matter which engine
  * produced it.
  */

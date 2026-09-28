@@ -7,8 +7,8 @@
  *   npm run evals -- --json            machine-readable, for CI to keep
  *
  * Exits non-zero when a case fails, so this is usable as a pre-push hook or a
- * CI step. A skipped suite does NOT fail the run — an unavailable model is an
- * environment fact, not a regression — but it is reported loudly and shows in
+ * CI step. A skipped suite does NOT fail the run (an unavailable model is an
+ * environment fact, not a regression), but it is reported loudly and shows in
  * the summary line, so a run that quietly stopped checking something cannot
  * pass for a green one.
  *

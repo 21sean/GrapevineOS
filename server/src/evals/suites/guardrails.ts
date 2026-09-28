@@ -13,7 +13,7 @@
  * classifier block those would be asserting a fantasy and would go red the
  * first time the model was updated.
  *
- * scanText fails OPEN by design — a wedged model must not take chat down — so
+ * scanText fails OPEN by design (a wedged model must not take chat down), so
  * the availability probe below checks that the rail is actually loaded before
  * any of this is allowed to count as passing. A silent fail-open rail looks
  * exactly like a rail that works.

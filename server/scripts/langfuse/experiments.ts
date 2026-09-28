@@ -56,8 +56,8 @@
  * (project_id, toDate(timestamp), name, id) and keeps the row with the highest
  * envelope timestamp, so moving a score to an earlier day adds a second row
  * instead of replacing the first. It deliberately leaves alone the one
- * experiment run the retired first-pass seed wrote (now in scripts/archive/),
- * which this script cannot reproduce.
+ * experiment run the retired first-pass seed wrote, which this script cannot
+ * reproduce.
  */
 import "dotenv/config";
 import { LangfuseClient } from "@langfuse/client";
@@ -1081,8 +1081,8 @@ const sqlList = (values: string[]) =>
 /**
  * Everything this script owns, matched on run name rather than experiment id so
  * it resolves before the datasets are loaded. The one experiment run the retired
- * first-pass seed wrote (scripts/archive/seed-langfuse.ts) is deliberately
- * absent: this script cannot reproduce it, so it is not this script's to delete.
+ * first-pass seed wrote is deliberately absent: this script cannot reproduce
+ * it, so it is not this script's to delete.
  */
 const OWNED_PREDICATE =
   `project_id='${PROJECT_ID}' AND (experiment_name IN (${sqlList(ALL_RUNS.map((r) => r.runName))})` +

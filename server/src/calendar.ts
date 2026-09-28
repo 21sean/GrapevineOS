@@ -1,5 +1,5 @@
 /**
- * "My calendar" — the set of events a user saved from the map.
+ * "My calendar": the set of events a user saved from the map.
  *
  * Adding an event stores a CalendarEntry and, when Google Calendar is
  * connected, also creates it on their primary calendar (removal deletes it
@@ -78,7 +78,7 @@ export async function saveEventForUser(
       const googleEventId = await insertGoogleEvent(user, event, tz);
       entry = await store.upsertCalendarEntry(user.id, event.id, { googleEventId });
     } catch (err) {
-      // Saved locally either way — the feed still serves it; surface the miss.
+      // Saved locally either way (the feed still serves it); surface the miss.
       warning = String(err).slice(0, 200);
     }
   }
@@ -94,7 +94,7 @@ export async function removeEventForUser(
   eventId: string,
 ): Promise<{ removed: boolean } | { error: string; code: 502 }> {
   const entry = (await store.userCalendar(user.id)).find((e) => e.eventId === eventId);
-  if (!entry) return { removed: false }; // already gone — idempotent
+  if (!entry) return { removed: false }; // already gone; idempotent
 
   if (entry.googleEventId && calendarConnected(user)) {
     try {
@@ -126,7 +126,7 @@ calendar.delete("/api/calendar/events/:id", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// In-app Google Calendar preview — list/create/edit/delete on the user's
+// In-app Google Calendar preview: list/create/edit/delete on the user's
 // primary calendar, powering the month/agenda popup.
 // ---------------------------------------------------------------------------
 
@@ -144,7 +144,7 @@ async function googleUser(req: Request, res: Response): Promise<User | null> {
   return user;
 }
 
-/** Sanitize the patch body — only known fields, only sane shapes. */
+/** Sanitize the patch body: only known fields, only sane shapes. */
 function readPatch(body: unknown): GcalEventPatch {
   const b = (body ?? {}) as Record<string, unknown>;
   const str = (k: string) => (typeof b[k] === "string" ? (b[k] as string) : undefined);
@@ -206,7 +206,7 @@ calendar.get("/api/calendar/google/events", async (req, res) => {
   }
 });
 
-/** "New event" in the popup — a free-form event on the user's calendar. */
+/** "New event" in the popup: a free-form event on the user's calendar. */
 calendar.post("/api/calendar/google/events", async (req, res) => {
   const user = await googleUser(req, res);
   if (!user) return;
@@ -264,7 +264,7 @@ calendar.delete("/api/calendar/google/events/:gid", async (req, res) => {
  * through Supabase (signInWithOAuth with the calendar.events scope +
  * access_type=offline) and posts the provider_refresh_token from the
  * resulting session here; we move it straight into Vault. The token is
- * stored for the *verified* session user — nothing in the body picks the
+ * stored for the *verified* session user; nothing in the body picks the
  * account.
  */
 calendar.post("/api/calendar/google/connect", async (req, res) => {
@@ -279,7 +279,7 @@ calendar.post("/api/calendar/google/connect", async (req, res) => {
     return res.status(502).json({ error: String(err).slice(0, 200) });
   }
   const fresh = (await store.userById(user.id)) ?? user;
-  // Events saved before Google was connected only lived in the ICS feed —
+  // Events saved before Google was connected only lived in the ICS feed;
   // push them to the newly connected calendar so both sides match.
   await backfillGoogleCalendar(fresh);
   res.json(await status(fresh));
@@ -316,7 +316,7 @@ calendar.post("/api/calendar/google/disconnect", async (req, res) => {
 });
 
 /**
- * Personal ICS feed — subscribe from Apple Calendar (or anything that speaks
+ * Personal ICS feed: subscribe from Apple Calendar (or anything that speaks
  * webcal). Auth is the unguessable token in the path; calendar apps can't
  * send cookies.
  */
@@ -333,7 +333,7 @@ calendar.get("/api/calendar/feed/:token", async (req, res) => {
   res.send(icsCalendar(mine, "Grapevine", tz));
 });
 
-/** Single-event .ics — the universal "Add to Apple Calendar" fallback. */
+/** Single-event .ics: the universal "Add to Apple Calendar" fallback. */
 calendar.get("/api/events/:id/ics", async (req, res) => {
   const event = await store.eventById(req.params.id);
   if (!event) return res.status(404).json({ error: "unknown event" });

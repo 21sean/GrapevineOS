@@ -5,7 +5,7 @@
 -- history share one identifier. Access control lives in the server: every
 -- read/write checks the session user owns the thread, and a threadId that
 -- belongs to someone else is re-minted before it ever reaches the agent.
--- Same deny-all posture as the rest of the schema — RLS on, no policies,
+-- Same deny-all posture as the rest of the schema: RLS on, no policies,
 -- no anon/authenticated grants; only the server's secret key gets through.
 
 create table public.chat_threads (

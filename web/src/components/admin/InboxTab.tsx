@@ -10,7 +10,7 @@ import { useGrapevine } from "@/lib/store"
 import type { InboxEmail } from "@/lib/types"
 
 /**
- * The raw emails sitting in Cloudflare KV, straight from the email worker —
+ * The raw emails sitting in Cloudflare KV, straight from the email worker:
  * what arrived, whether the poller has processed it, and a re-run button for
  * when a newsletter deserves a second pass (better model, tweaked prompt).
  */
@@ -111,7 +111,7 @@ export function InboxTab() {
           <AlertTitle>Couldn't reach KV</AlertTitle>
           <AlertDescription>
             {error.includes("401") || error.includes("403")
-              ? "Cloudflare rejected the API token — is it still active?"
+              ? "Cloudflare rejected the API token. Is it still active?"
               : error}
           </AlertDescription>
         </Alert>

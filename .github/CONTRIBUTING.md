@@ -69,7 +69,8 @@ npm run evals -- --json --suite personas --suite dedupe --suite recurrence --sui
 All of it works in a fresh clone with no Ollama and no Supabase; the offline
 evals run with placeholder credentials. The model suites, the red team and
 the classifier fixtures need a local model and run nightly on a self-hosted
-runner (`workflows/nightly.yml`), or on demand with `npm run evals`.
+runner (`workflows/nightly.yml`, which only schedules once the repository
+variable `GPU_RUNNER` is `true`), or on demand with `npm run evals`.
 
 ## Tests and evals
 

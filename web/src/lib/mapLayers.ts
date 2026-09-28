@@ -12,7 +12,7 @@ import {
  * The Mapbox Standard basemap layers the user can hide from the map. Each maps
  * to a Standard-style configuration property set via
  * `map.setConfigProperty("basemap", config, visible)`. Live traffic is a
- * separate custom overlay (see store.trafficOn / EventMap) — it isn't part of
+ * separate custom overlay (see store.trafficOn / EventMap). It isn't part of
  * the basemap config, so it rides in the same panel but its own toggle.
  */
 export interface BasemapLayer {
@@ -72,7 +72,7 @@ export const BASEMAP_LAYERS = [
 
 export type MapLayerKey = (typeof BASEMAP_LAYERS)[number]["key"]
 
-/** Everything visible by default — mirrors the Standard style out of the box. */
+/** Everything visible by default, mirroring the Standard style out of the box. */
 export const DEFAULT_MAP_LAYERS = Object.fromEntries(
   BASEMAP_LAYERS.map((l) => [l.key, true])
 ) as Record<MapLayerKey, boolean>

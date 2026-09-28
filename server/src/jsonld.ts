@@ -1,5 +1,5 @@
 /**
- * schema.org/Event harvesting — the deterministic fast path.
+ * schema.org/Event harvesting: the deterministic fast path.
  *
  * When a page publishes its events as JSON-LD, the exact start instant, venue,
  * address, price and ticket URL are already there as data. Reading them beats
@@ -123,11 +123,40 @@ function firstString(v: unknown): string | undefined {
   return undefined;
 }
 
-/** schema.org allows a bare date; treat that as local midnight, not UTC. */
-function isoOrUndefined(v: unknown): string | undefined {
+const FLOATING = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?)?$/;
+
+/** Minutes east of UTC for `tz` at instant `ms`. */
+function offsetMinutes(ms: number, tz: string): number {
+  const name =
+    new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "longOffset" })
+      .formatToParts(ms)
+      .find((p) => p.type === "timeZoneName")?.value ?? "";
+  const m = /GMT([+-])(\d{2}):?(\d{2})?/.exec(name);
+  if (!m) return 0;
+  return (m[1] === "-" ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3] ?? 0));
+}
+
+/**
+ * A date or date-time with no offset is wall-clock time where the event is.
+ * Without a zone it would be read in the server's own zone, which in a
+ * container is UTC and puts an evening show on the wrong day.
+ */
+export function inZone(s: string, tz: string): string {
+  const m = FLOATING.exec(s);
+  if (!m) return s;
+  const [, y, mo, d, hh = "00", mi = "00", ss = "00"] = m;
+  const wall = Date.UTC(+y, +mo - 1, +d, +hh, +mi, +ss);
+  const off = offsetMinutes(wall - offsetMinutes(wall, tz) * 60_000, tz);
+  const abs = Math.abs(off);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${y}-${mo}-${d}T${hh}:${mi}:${ss}${off < 0 ? "-" : "+"}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`;
+}
+
+/** schema.org allows a bare date; that is midnight where the event is. */
+function isoOrUndefined(v: unknown, tz?: string): string | undefined {
   const s = firstString(v);
   if (!s) return undefined;
-  const withTime = /^\d{4}-\d{2}-\d{2}$/.test(s) ? `${s}T00:00:00` : s;
+  const withTime = tz ? inZone(s, tz) : /^\d{4}-\d{2}-\d{2}$/.test(s) ? `${s}T00:00:00` : s;
   return Number.isFinite(Date.parse(withTime)) ? withTime : undefined;
 }
 
@@ -218,15 +247,21 @@ export type JsonLdCandidate = Omit<CityEvent, "id" | "lng" | "lat"> & {
   precise: boolean;
 };
 
-function toCandidate(o: Record<string, unknown>, sourceUrl: string): JsonLdCandidate | null {
+function toCandidate(
+  o: Record<string, unknown>,
+  sourceUrl: string,
+  tz?: string,
+): JsonLdCandidate | null {
   const title = firstString(prop(o, "name"));
   const rawStart = firstString(prop(o, "startDate"));
-  const start = isoOrUndefined(prop(o, "startDate"));
+  const start = isoOrUndefined(prop(o, "startDate"), tz);
   if (!title || !start) return null; // no name or no date is not an event listing
-  const end = isoOrUndefined(prop(o, "endDate")) ?? start;
+  const end = isoOrUndefined(prop(o, "endDate"), tz) ?? start;
   // A multi-day run legitimately has no start hour, so it counts as precise;
-  // a single day without one is simply missing the time.
-  const hasClock = /\d{2}:\d{2}/.test(rawStart ?? "");
+  // a single day without one is simply missing the time. Publishers fill a
+  // missing hour with T00:00:00 as often as they leave it off.
+  const clock = /T(\d{2}):(\d{2})/.exec(rawStart ?? "");
+  const hasClock = !!clock && !(clock[1] === "00" && clock[2] === "00");
   const spansDays = end.slice(0, 10) > start.slice(0, 10);
   const precise = hasClock || spansDays;
   const status = firstString(prop(o, "eventStatus"));
@@ -277,7 +312,11 @@ function toCandidate(o: Record<string, unknown>, sourceUrl: string): JsonLdCandi
  * case of a page with no event markup, which is the caller's signal to fall
  * back to the model.
  */
-export function extractJsonLdEvents(html: string, sourceUrl: string): JsonLdCandidate[] {
+export function extractJsonLdEvents(
+  html: string,
+  sourceUrl: string,
+  tz?: string,
+): JsonLdCandidate[] {
   let dom: JSDOM;
   try {
     dom = new JSDOM(html);
@@ -289,14 +328,19 @@ export function extractJsonLdEvents(html: string, sourceUrl: string): JsonLdCand
     const text = block.textContent?.trim();
     if (text) blocks.push(text);
   }
-  return eventsFromJsonLdBlocks(blocks, sourceUrl);
+  return eventsFromJsonLdBlocks(blocks, sourceUrl, tz);
 }
 
 /**
  * The same harvest from block texts already pulled out of a page, so a caller
  * that parsed the page once (discovery, via readPage) does not parse it again.
+ * `tz` is the city's zone, for dates the markup gives without an offset.
  */
-export function eventsFromJsonLdBlocks(blocks: string[], sourceUrl: string): JsonLdCandidate[] {
+export function eventsFromJsonLdBlocks(
+  blocks: string[],
+  sourceUrl: string,
+  tz?: string,
+): JsonLdCandidate[] {
   const nodes: Record<string, unknown>[] = [];
   for (const text of blocks) {
     try {
@@ -309,7 +353,7 @@ export function eventsFromJsonLdBlocks(blocks: string[], sourceUrl: string): Jso
   const out: JsonLdCandidate[] = [];
   const seen = new Set<string>();
   for (const n of nodes) {
-    const c = toCandidate(n, sourceUrl);
+    const c = toCandidate(n, sourceUrl, tz);
     if (!c) continue;
     // The same event often appears in both @graph and an ItemList.
     const key = `${c.title.toLowerCase()}|${Date.parse(c.start)}`;

@@ -2,7 +2,7 @@
  * The judge, on a timer: conversations get graded without anyone clicking
  * the gavel. Every sweep looks at the monitor view, picks threads that have
  * gone quiet and have no verdict newer than their last message, and judges
- * ONE of them — the judge is a 27B model on the same GPU that serves chat,
+ * ONE of them. The judge is a 27B model on the same GPU that serves chat,
  * so the sweep deliberately trickles instead of batching. A busy day catches
  * up over the following hours; the panel's numbers stop being "whenever
  * someone last remembered".
@@ -12,7 +12,7 @@
  *   EVAL_SWEEP_IDLE_MINUTES  how long a thread must be quiet first, default 30
  *
  * Skips, never errors: judge not installed, Ollama down, a thread with no
- * assistant replies — each just leaves the thread for a later sweep.
+ * assistant replies: each just leaves the thread for a later sweep.
  */
 import { recordConversationScores } from "../langfuse.js";
 import { startLoop } from "../lifecycle.js";

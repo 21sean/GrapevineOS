@@ -1,10 +1,10 @@
 /**
- * Supabase Auth — the browser signs in with supabase-js (Google/GitHub via
+ * Supabase Auth: the browser signs in with supabase-js (Google/GitHub via
  * the PKCE authorization-code flow) and sends its access token on every API
  * call as `Authorization: Bearer <jwt>`.
  *
  * This project uses asymmetric JWT signing keys (ES256), so the server
- * verifies tokens locally against the project's JWKS — no auth-server round
+ * verifies tokens locally against the project's JWKS, no auth-server round
  * trip per request. The profile row in public.users is created/refreshed by
  * a DB trigger on auth.users; sessionUser falls back to a JIT upsert from
  * the verified claims so a trigger race can never 401 a valid user.
@@ -53,7 +53,7 @@ export interface SupabaseClaims {
 /**
  * Verifies a Supabase-issued JWT against the project JWKS; returns its claims
  * or null (never throws). Covers both browser session tokens and access
- * tokens minted by Supabase's OAuth 2.1 server (MCP clients) — same issuer,
+ * tokens minted by Supabase's OAuth 2.1 server (MCP clients): same issuer,
  * same keys. No audience constraint here: OAuth tokens can carry a custom
  * `aud`, so the real gate is the `role === "authenticated"` check that every
  * caller applies via userFromClaims.
@@ -63,7 +63,7 @@ export async function verifySupabaseToken(token: string): Promise<SupabaseClaims
     const { payload } = await jwtVerify(token, JWKS, { issuer: ISSUER });
     return payload as SupabaseClaims;
   } catch {
-    return null; // expired, forged, or not ours — treated as signed out
+    return null; // expired, forged, or not ours; treated as signed out
   }
 }
 

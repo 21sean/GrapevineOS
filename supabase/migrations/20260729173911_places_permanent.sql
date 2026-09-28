@@ -7,7 +7,7 @@
 -- Losing them nightly meant re-buying the same venue out of a 1,000-record
 -- monthly preview quota, and a venue card that vanished for no visible reason.
 --
--- Cached *misses* still expire (90 days, unchanged) — a venue Mapbox has
+-- Cached *misses* still expire (90 days, unchanged): a venue Mapbox has
 -- nothing for today may have something next year, and remembering "nothing"
 -- forever would pin it as blank permanently.
 

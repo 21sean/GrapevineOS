@@ -17,7 +17,7 @@ export function interestTerms(e: CityEvent): string[] {
 /**
  * What the feedback loop has learned: the user's own reactions plus the
  * per-tag affinity derived from them (see selectTagAffinity in derived.ts).
- * Both are optional — a fresh browser scores exactly as before.
+ * Both are optional; a fresh browser scores exactly as before.
  */
 export interface Taste {
   reactions?: Readonly<Record<string, Reaction>>
@@ -26,7 +26,7 @@ export interface Taste {
 
 /** How hard one reaction pulls the event itself. */
 const REACTION_SELF_BOOST: Record<Reaction, number> = {
-  going: 3, // committed — keep it in sight
+  going: 3, // committed; keep it in sight
   went: 0.5, // past tense; mostly teaches the tags
   not_for_me: -8, // sinks below everything with a pulse
 }
@@ -45,13 +45,85 @@ export function isFarmersMarket(e: CityEvent): boolean {
   return e.tags.some((t) => t.toLowerCase() === FARMERS_MARKET_TAG)
 }
 
+const REACTION_REASON: Record<Reaction, string> = {
+  going: "You're going",
+  went: "You went",
+  not_for_me: "You passed on it",
+}
+
+/** One named contribution to an event's personal score. */
+export interface ScorePart {
+  key:
+    | "buzz"
+    | "avoid"
+    | "promoted"
+    | "rarity"
+    | "timing"
+    | "loves"
+    | "free"
+    | "reaction"
+    | "learned"
+  label: string
+  points: number
+}
+
 /**
- * Personal relevance score. Buzz rating is the backbone; live events and
+ * Personal relevance, itemized. Buzz rating is the backbone; live events and
  * rare one-offs float up; promoted junk sinks; interests tilt the rest.
  * Avoided topics sink an event hard (but don't erase it); reactions layer on
  * top: the event's own reaction moves it directly, and learned tag affinity
- * ("went — great" at two jazz shows) tilts lookalikes.
+ * ("went, great" at two jazz shows) tilts lookalikes. Parts worth zero are
+ * left out, so the list doubles as the explanation shown on the event panel.
  */
+export function scoreParts(
+  e: CityEvent,
+  interests: Interests,
+  now: Date,
+  tz?: string,
+  taste?: Taste
+): ScorePart[] {
+  const terms = interestTerms(e)
+  const parts: ScorePart[] = []
+  const add = (key: ScorePart["key"], label: string, points: number) => {
+    if (points !== 0) parts.push({ key, label, points })
+  }
+
+  add("buzz", `${e.rating}/5 local buzz`, e.rating * 2)
+  const avoided = terms.filter((t) => interests.avoids.includes(t))
+  if (avoided.length)
+    add("avoid", `You avoid ${avoided.join(", ")}`, -AVOID_PENALTY)
+  if (e.promoted) add("promoted", "Paid placement", -4)
+  if (e.rarity === "rare") add("rarity", "Rare find", 1.5)
+  if (e.rarity === "notable") add("rarity", "Notable", 0.5)
+  if (isLive(e, now, tz)) add("timing", "Happening now", 2)
+  else {
+    const mins = minutesUntilStart(e, now, tz)
+    if (mins > 0 && mins <= 180) add("timing", "Starts soon", 1)
+  }
+  const loved = terms.filter((t) => interests.loves.includes(t))
+  if (loved.length)
+    add("loves", `You love ${loved.join(", ")}`, Math.min(loved.length * 2, 4))
+  if (e.free) add("free", "Free", 0.3)
+
+  const reaction = taste?.reactions?.[e.id]
+  if (reaction)
+    add("reaction", REACTION_REASON[reaction], REACTION_SELF_BOOST[reaction])
+  if (taste?.tagAffinity) {
+    // capped like loves, so a pile of reactions can't drown the buzz backbone
+    const learned = terms.reduce(
+      (sum, t) => sum + (taste.tagAffinity!.get(t) ?? 0),
+      0
+    )
+    const points = Math.max(-3, Math.min(3, learned))
+    add(
+      "learned",
+      points > 0 ? "Like events you enjoyed" : "Like events you passed on",
+      points
+    )
+  }
+  return parts
+}
+
 export function scoreEvent(
   e: CityEvent,
   interests: Interests,
@@ -59,38 +131,14 @@ export function scoreEvent(
   tz?: string,
   taste?: Taste
 ): number {
-  const terms = interestTerms(e)
-
-  let s = e.rating * 2
-  if (terms.some((t) => interests.avoids.includes(t))) s -= AVOID_PENALTY
-  if (e.promoted) s -= 4
-  if (e.rarity === "rare") s += 1.5
-  if (e.rarity === "notable") s += 0.5
-  if (isLive(e, now, tz)) s += 2
-  else {
-    const mins = minutesUntilStart(e, now, tz)
-    if (mins > 0 && mins <= 180) s += 1
-  }
-  const loved = terms.filter((t) => interests.loves.includes(t)).length
-  s += Math.min(loved * 2, 4)
-  if (e.free) s += 0.3
-
-  const reaction = taste?.reactions?.[e.id]
-  if (reaction) s += REACTION_SELF_BOOST[reaction]
-  if (taste?.tagAffinity) {
-    // capped like loves, so a pile of reactions can't drown the buzz backbone
-    const learned = terms.reduce(
-      (sum, t) => sum + (taste.tagAffinity!.get(t) ?? 0),
-      0
-    )
-    s += Math.max(-3, Math.min(3, learned))
-  }
+  let s = 0
+  for (const p of scoreParts(e, interests, now, tz, taste)) s += p.points
   return s
 }
 
 /**
  * Badge count for collapsed filter disclosures, so active filters aren't
- * invisible. Counts every non-default filter (see DEFAULT_FILTERS) —
+ * invisible. Counts every non-default filter (see DEFAULT_FILTERS);
  * hidePromoted defaults to true, so false is the active state there.
  */
 export function activeFilterCount(f: Filters): number {
@@ -139,13 +187,13 @@ export function matchesFilters(
   if (f.hideCategories.length && f.hideCategories.includes(e.category))
     return false
   if (f.dateFrom || f.dateTo) {
-    // window over the next occurrence, city-local — same rule the agent's
+    // window over the next occurrence, city-local: same rule the agent's
     // search_events uses server-side
     const occ = nextOccurrence(e, now, tz)
     if (f.dateFrom && localDay(occ.end, tz) < f.dateFrom) return false
     if (f.dateTo && localDay(occ.start, tz) > f.dateTo) return false
   }
-  // Avoids no longer hide here — they sink the event via scoreEvent instead, so
+  // Avoids no longer hide here; they sink the event via scoreEvent instead, so
   // an incidental avoided tag can't erase an otherwise-wanted (or just-added)
   // event. Deliberate hiding lives in hideCategories / farmers / mute above.
   return true
@@ -167,7 +215,7 @@ export function matchesSearch(e: CityEvent, query: string): boolean {
 
 /**
  * Dollars for price sorting: free → 0, "$25–44" → 25, "From $39" → 39.
- * Null when the string carries no number ("Varies", "Donation") — those
+ * Null when the string carries no number ("Varies", "Donation"); those
  * events sink to the bottom under either price direction.
  */
 export function priceValue(e: CityEvent): number | null {
@@ -190,7 +238,7 @@ export function sortEvents(
   if (sort === "relevance") return events
   const sorted = [...events]
   if (sort === "date") {
-    // next occurrence, not anchor start — recurring events sort by when
+    // next occurrence, not anchor start: recurring events sort by when
     // they actually happen next. Keyed once per event, not per comparison.
     const startMs = new Map(
       events.map(
@@ -225,11 +273,11 @@ export function visibleEvents(
   taste?: Taste,
   muted?: Muted,
   // "Near me" membership for the resolved isochrone; undefined = zone not
-  // ready yet (or filter off), which deliberately filters nothing — better
+  // ready yet (or filter off), which deliberately filters nothing. Better
   // a beat of "everything" than a flash of empty while the zone loads.
   near?: (e: CityEvent) => boolean
 ): CityEvent[] {
-  // Score each event once, then sort by the cached number — scoring inside
+  // Score each event once, then sort by the cached number; scoring inside
   // the comparator would re-run isLive/nextOccurrence O(n log n) times.
   const scored: [number, CityEvent][] = []
   for (const e of events) {
@@ -244,7 +292,7 @@ export function visibleEvents(
 }
 
 /**
- * Events the carousel should tour: live first, else starting soon — by score.
+ * Events the carousel should tour: live first, else starting soon, by score.
  * Takes the already filtered+ranked list (see selectVisible in derived.ts).
  */
 export function carouselEvents(

@@ -1,5 +1,5 @@
 /**
- * RRULE expansion — the code that decides which night a weekly event is on.
+ * RRULE expansion: the code that decides which night a weekly event is on.
  *
  * Every surface in the app reads through nextOccurrence: the map pin, the
  * "live now" count, the agent's snapshot, the digest push, the ICS feed. When
@@ -16,7 +16,7 @@ import { FIXTURE_NOW, FIXTURE_SETTINGS } from "../fixtures.js";
 
 const TZ = FIXTURE_SETTINGS.tz;
 
-/** Wall-clock rendering in the city's own zone — how a user reads a time. */
+/** Wall-clock rendering in the city's own zone, how a user reads a time. */
 const wall = (iso: string) =>
   new Intl.DateTimeFormat("en-US", {
     timeZone: TZ,

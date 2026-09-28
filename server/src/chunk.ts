@@ -12,7 +12,7 @@ import { CHUNK_OVERLAP_CHARS, MAX_CHUNKS } from "./budget.js";
  * Split a document into model-sized pieces that overlap.
  *
  * Prefers to cut on a blank line, then any newline, searching backwards from
- * the budget within the last 20% of the window — newsletters separate events
+ * the budget within the last 20% of the window. Newsletters separate events
  * with blank lines, so cutting there keeps an event whole far more often than
  * cutting at an arbitrary character. The overlap covers what that still
  * misses: an event split across the seam appears complete in the next piece,

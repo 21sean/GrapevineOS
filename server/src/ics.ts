@@ -1,9 +1,9 @@
 /**
- * Minimal iCalendar (RFC 5545) generation — enough for Apple Calendar,
+ * Minimal iCalendar (RFC 5545) generation, enough for Apple Calendar,
  * Google, and Outlook to import a Grapevine event or subscribe to a
  * per-user feed.
  *
- * Why a feed for Apple: iCloud Calendar has no public write API — writing
+ * Why a feed for Apple: iCloud Calendar has no public write API; writing
  * directly needs CalDAV plus an app-specific password from the user. So the
  * Apple path is a .ics download per event, or subscribing to the personal
  * feed URL, where adds/removes sync on the calendar app's refresh cadence.
@@ -137,7 +137,7 @@ function tzBlock(tz: string, transitionMs: number): string[] {
 
 /**
  * A VTIMEZONE for `tz`, derived from the zone's actual behavior in `year`
- * (via Intl) and generalized with yearly rules — exact for zones with
+ * (via Intl) and generalized with yearly rules: exact for zones with
  * nth-weekday DST rules (all US/EU zones), a close approximation elsewhere.
  */
 function vtimezone(tz: string, year: number): string[] {
@@ -147,7 +147,7 @@ function vtimezone(tz: string, year: number): string[] {
   const offJan = offsetAt(jan, tz);
   const offJul = offsetAt(jul, tz);
   if (offJan === offJul) {
-    // No DST — a single fixed STANDARD block.
+    // No DST: a single fixed STANDARD block.
     return [
       "BEGIN:VTIMEZONE",
       `TZID:${tz}`,
@@ -172,7 +172,7 @@ function vtimezone(tz: string, year: number): string[] {
 // Events
 // ---------------------------------------------------------------------------
 
-/** Fold lines longer than 75 octets (RFC 5545 §3.1) — counted in bytes. */
+/** Fold lines longer than 75 octets (RFC 5545 §3.1), counted in bytes. */
 function fold(line: string): string {
   const out: string[] = [];
   let cur = "";

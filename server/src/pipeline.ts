@@ -1,5 +1,5 @@
 /**
- * The shared tail of every ingestion path — email, manual paste, preview
+ * The shared tail of every ingestion path. Email, manual paste, preview
  * commit, and web discovery all end the same way: write the events, log the
  * run, and kick off image enrichment for whatever was new. One implementation
  * keeps the four paths from drifting (and keeps "added" meaning the same
@@ -28,7 +28,7 @@ export async function commitIngest(opts: {
     added: added.length,
     events: added.map((e) => ({ id: e.id, title: e.title, start: e.start })),
   });
-  // Artwork pass runs after the response — decoration, not a gate.
+  // Artwork pass runs after the response: decoration, not a gate.
   if (added.length) void enrichEventImages(added).catch(() => {});
   // Rare-find pushes too: opt-in subscribers hear about a matching rare
   // one-off the moment it lands, without holding the ingest response.

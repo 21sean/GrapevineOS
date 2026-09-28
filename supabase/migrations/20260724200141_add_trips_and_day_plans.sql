@@ -2,11 +2,11 @@
 --
 -- Two features share these tables:
 --
---  * "Plan my day" — a saved, editable itinerary for one calendar date. It
+--  * "Plan my day": a saved, editable itinerary for one calendar date. It
 --    works with no trip at all (the default mode: plan a Tuesday at home) and
 --    inside a trip, where the trip's dates and destination ground what the
 --    agent proposes.
---  * The trip's money tab — expenses filed against a trip, with a per-trip
+--  * The trip's money tab: expenses filed against a trip, with a per-trip
 --    budget and a by-category breakdown.
 --
 -- Same access model as the rest of the schema: RLS on, no policies, no
@@ -21,7 +21,7 @@ create type public.trip_expense_category as enum
 create type public.day_plan_item_kind as enum
   ('event', 'food', 'activity', 'travel', 'lodging', 'rest', 'note');
 
--- trips — a named date range, optionally anchored to a destination. Dates are
+-- trips: a named date range, optionally anchored to a destination. Dates are
 -- plain dates (not instants): a trip runs "Apr 18 - Apr 26" wherever you are.
 create table public.trips (
   id uuid primary key default gen_random_uuid(),
@@ -47,7 +47,7 @@ create trigger trips_updated_at
   before update on public.trips
   for each row execute function public.set_updated_at();
 
--- trip_expenses — what the trip cost. user_id is denormalized from the trip
+-- trip_expenses: what the trip cost. user_id is denormalized from the trip
 -- so every query can filter on the session user without a join.
 create table public.trip_expenses (
   id uuid primary key default gen_random_uuid(),
@@ -70,7 +70,7 @@ create trigger trip_expenses_updated_at
   before update on public.trip_expenses
   for each row execute function public.set_updated_at();
 
--- day_plans — one planned date. trip_id null is the default (at-home) mode;
+-- day_plans: one planned date. trip_id null is the default (at-home) mode;
 -- the same user/date can hold one plan per trip plus one untripped plan, so
 -- the unique index treats nulls as a value ("nulls not distinct").
 create table public.day_plans (
@@ -91,7 +91,7 @@ create trigger day_plans_updated_at
   before update on public.day_plans
   for each row execute function public.set_updated_at();
 
--- day_plan_items — the ordered slots inside a planned day. event_id links a
+-- day_plan_items: the ordered slots inside a planned day. event_id links a
 -- slot to a catalog event when the plan came from the map; the link is
 -- nulled (not cascaded away) if retention later prunes that event, so the
 -- itinerary keeps its shape.

@@ -147,7 +147,7 @@ export function StatsSection({
                   <span className="text-muted-foreground">Loading rails…</span>
                 ) : rails.mode === "off" ? (
                   <span className="text-muted-foreground">
-                    Rails off — only the persona scrubber is running.
+                    Rails off; only the persona scrubber is running.
                   </span>
                 ) : rails.classifierReady ? (
                   <>
@@ -163,8 +163,8 @@ export function StatsSection({
                   </>
                 ) : (
                   <span className="text-destructive">
-                    {rails.modelLabel} has not answered — the rails are failing
-                    open.
+                    {rails.modelLabel} has not answered, so the rails are
+                    failing open.
                   </span>
                 )}
               </span>

@@ -49,10 +49,17 @@ import { useEta } from "@/hooks/useEta"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useVenue } from "@/hooks/useVenue"
 import { api } from "@/lib/api"
+import { selectTagAffinity } from "@/lib/derived"
+import { scoreParts } from "@/lib/score"
 import { useGrapevine } from "@/lib/store"
 import { fmtTime, isLive, statusLabel } from "@/lib/time"
 import { nextOccurrence, recurrenceSummary } from "@/lib/recurrence"
-import { CATEGORY_META, REACTION_META, type Reaction } from "@/lib/types"
+import {
+  CATEGORY_META,
+  REACTION_META,
+  type CityEvent,
+  type Reaction,
+} from "@/lib/types"
 import { cn, safeHttpUrl } from "@/lib/utils"
 
 // Desktop panel width bounds; the default (448) lives in the store.
@@ -66,8 +73,8 @@ const REACTION_BUTTONS: { value: Reaction; icon: typeof ThumbsUpIcon }[] = [
 ]
 
 /**
- * The feedback loop's input: one tap files "going" / "went — great" / "not
- * for me". Tapping the active one clears it. The score reacts instantly —
+ * The feedback loop's input: one tap files "going" / "went, great" / "not
+ * for me". Tapping the active one clears it. The score reacts instantly:
  * this event moves, and its tags teach the ranking about lookalikes.
  */
 function ReactionRow({ eventId }: { eventId: string }) {
@@ -80,7 +87,7 @@ function ReactionRow({ eventId }: { eventId: string }) {
     setReaction(eventId, next)
     if (next) {
       toast.success(`Noted: ${REACTION_META[next].label}`, {
-        description: `${REACTION_META[next].blurb}${user ? "" : " — sign in to keep this across devices"}`,
+        description: `${REACTION_META[next].blurb}${user ? "" : ". Sign in to keep this across devices"}`,
       })
     }
   }
@@ -115,8 +122,58 @@ function ReactionRow({ eventId }: { eventId: string }) {
   )
 }
 
+/**
+ * What moved this event up or down the list, straight from the same parts
+ * the ranking sums. The buzz baseline is on the stars already, so it is left
+ * out; the rest are ordered by how much they mattered.
+ */
+function RankReasons({
+  event,
+  now,
+  tz,
+}: {
+  event: CityEvent
+  now: Date
+  tz: string
+}) {
+  const interests = useGrapevine((s) => s.interests)
+  const reactions = useGrapevine((s) => s.reactions)
+  const tagAffinity = useGrapevine(selectTagAffinity)
+  const parts = scoreParts(event, interests, now, tz, {
+    reactions,
+    tagAffinity,
+  })
+    .filter((p) => p.key !== "buzz")
+    .sort((a, b) => Math.abs(b.points) - Math.abs(a.points))
+    .slice(0, 4)
+  if (!parts.length) return null
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="font-mono text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
+        Why it's ranked here
+      </span>
+      <ul className="flex flex-wrap gap-1.5">
+        {parts.map((p) => (
+          <li
+            key={p.key}
+            className={cn(
+              "rounded-full border px-2 py-0.5 text-xs",
+              p.points > 0
+                ? "border-live/30 text-live"
+                : "border-destructive/30 text-destructive"
+            )}
+          >
+            {p.points > 0 ? "↑" : "↓"} {p.label}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 export function EventDetail() {
-  // Subscribe to the selected event itself, not the whole list — unrelated
+  // Subscribe to the selected event itself, not the whole list; unrelated
   // event refreshes and selections of other panels don't re-render this one.
   const event = useGrapevine((s) => s.events.find((e) => e.id === s.selectedId))
   const detailOpen = useGrapevine((s) => s.detailOpen)
@@ -135,6 +192,7 @@ export function EventDetail() {
   const detailWidth = useGrapevine((s) => s.detailWidth)
   const setDetailWidth = useGrapevine((s) => s.setDetailWidth)
   const select = useGrapevine((s) => s.select)
+  const setSearchQuery = useGrapevine((s) => s.setSearchQuery)
   const muteVenue = useGrapevine((s) => s.muteVenue)
   const unmuteVenue = useGrapevine((s) => s.unmuteVenue)
   const muteSource = useGrapevine((s) => s.muteSource)
@@ -145,7 +203,7 @@ export function EventDetail() {
   const isMobile = useIsMobile()
 
   const eta = useEta(detailOpen ? event : null)
-  // Only while open — the Places preview quota is 1,000 records a month, so a
+  // Only while open: the Places preview quota is 1,000 records a month, so a
   // venue lookup should cost something only when someone is actually looking.
   const venue = useVenue(detailOpen ? event : null)
   const tz = settings?.tz ?? "UTC"
@@ -154,7 +212,7 @@ export function EventDetail() {
   const conflicts = useConflicts(event, detailOpen, now, tz)
 
   // Mirror the open event into ?event=<id> so the address bar is itself a
-  // shareable deep link — App.tsx already restores it on load (the push
+  // shareable deep link. App.tsx already restores it on load (the push
   // notification path). replaceState keeps Back for the map, not sheet history.
   const eventId = event?.id
   useEffect(() => {
@@ -191,7 +249,7 @@ export function EventDetail() {
 
   const gmaps = `https://www.google.com/maps/dir/?api=1&destination=${event.lat},${event.lng}`
   const saved = calendar?.synced.includes(event.id) ?? false
-  // ticketUrl is LLM-extracted from untrusted sources — only link it if it's http(s).
+  // ticketUrl is LLM-extracted from untrusted sources; only link it if it's http(s).
   const ticketUrl = safeHttpUrl(event.ticketUrl)
 
   async function toggleCalendar() {
@@ -219,7 +277,7 @@ export function EventDetail() {
         setCalendar(res)
         toast.success("Added to your calendar", {
           description: res.warning
-            ? "Google Calendar didn't sync — it's still in your Grapevine feed"
+            ? "Google Calendar didn't sync, but it's still in your Grapevine feed"
             : res.googleSynced
               ? "Synced to your Google Calendar"
               : "Connect Google Calendar in your account to sync",
@@ -248,7 +306,7 @@ export function EventDetail() {
     if (!event) return
     const venue = event.venue
     muteVenue(venue)
-    select(null) // the event just left the map — don't strand its panel
+    select(null) // the event just left the map; don't strand its panel
     toast(`Muted venue: ${venue}`, {
       description: "Nothing from this venue on your map, list, or digest.",
       action: { label: "Undo", onClick: () => unmuteVenue(venue) },
@@ -266,7 +324,7 @@ export function EventDetail() {
     })
   }
 
-  // "Want to go to this?" — the ?event= deep link the push notifications
+  // "Want to go to this?": the ?event= deep link the push notifications
   // already use, handed to the native share sheet where there is one and the
   // clipboard everywhere else.
   async function shareEvent() {
@@ -276,14 +334,14 @@ export function EventDetail() {
     const link = url.toString()
     const data = {
       title: event.title,
-      text: `${event.title} — ${event.venue}`,
+      text: `${event.title} at ${event.venue}`,
       url: link,
     }
     if (navigator.canShare?.(data)) {
       try {
         await navigator.share(data)
       } catch {
-        // user closed the share sheet — not an error
+        // user closed the share sheet; not an error
       }
       return
     }
@@ -313,6 +371,7 @@ export function EventDetail() {
     const onUp = () => {
       window.removeEventListener("pointermove", onMove)
       window.removeEventListener("pointerup", onUp)
+      window.removeEventListener("pointercancel", onUp)
       document.body.style.userSelect = ""
       document.body.style.cursor = ""
     }
@@ -320,12 +379,13 @@ export function EventDetail() {
     document.body.style.cursor = "ew-resize"
     window.addEventListener("pointermove", onMove)
     window.addEventListener("pointerup", onUp)
+    window.addEventListener("pointercancel", onUp)
   }
 
   const body = (
     <>
-      {/* scraped og:image as a hero. Sources vary wildly — a tall gig poster,
-          a wide logo banner, a landscape photo — so we letterbox: a blurred,
+      {/* scraped og:image as a hero. Sources vary wildly (a tall gig poster,
+          a wide logo banner, a landscape photo), so we letterbox: a blurred,
           zoomed copy fills the frame while the real image sits *contained* on
           top, whole and uncropped. The dominant color holds the space while it
           loads; a load failure collapses the whole banner. */}
@@ -463,12 +523,28 @@ export function EventDetail() {
         {event.tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {event.tags.map((t) => (
-              <Badge key={t} variant="secondary" className="font-normal">
-                {t}
+              <Badge
+                key={t}
+                variant="secondary"
+                className="font-normal hover:bg-secondary/70"
+                asChild
+              >
+                <button
+                  type="button"
+                  aria-label={`Search for ${t}`}
+                  onClick={() => {
+                    setSearchQuery(t)
+                    setDetailOpen(false)
+                  }}
+                >
+                  {t}
+                </button>
               </Badge>
             ))}
           </div>
         )}
+
+        <RankReasons event={event} now={now} tz={tz} />
 
         <ReactionRow eventId={event.id} />
 
@@ -483,7 +559,9 @@ export function EventDetail() {
                 <span className="font-mono">{eta.km} km</span>
               </span>
             ) : (
-              <span className="text-muted-foreground">Checking traffic…</span>
+              <span className="text-muted-foreground">
+                {eta ? "Drive time unavailable" : "Checking traffic…"}
+              </span>
             )}
           </span>
           <Button variant="outline" size="sm" asChild>
@@ -524,7 +602,7 @@ export function EventDetail() {
             )}
             {saved ? "On your calendar" : "Add to calendar"}
           </Button>
-          {/* Apple Calendar has no write API — .ics import is the reliable path. */}
+          {/* Apple Calendar has no write API; .ics import is the reliable path. */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="outline" size="sm" asChild>

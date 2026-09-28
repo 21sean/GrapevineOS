@@ -57,7 +57,7 @@ successfully returned. This is small enough to change the design:
 temporary display and use only" and that storing it requires a separate
 agreement. Grapevine stores it anyway, deliberately: `place_details` is
 permanent, nothing purges it, and a stored record is always served. Only the
-projected fields the card renders are kept — never the whole record — and age
+projected fields the card renders are kept (never the whole record), and age
 decides refresh rather than expiry, so a venue is re-fetched about monthly and
 never disappears from the panel in between. If you are running this against a
 Mapbox account whose terms you need to honour to the letter, that is the
@@ -103,7 +103,7 @@ city silently had no card, and nothing said why. A name match is stronger
 evidence than a coordinate here, so it wins.
 
 The tight radius still applies to venues whose name proves nothing ("Bayard St
-between Garnet Ave and Hornblend St") — those have only the coordinates going
+between Garnet Ave and Hornblend St"). Those have only the coordinates going
 for them, and letting them roam would put a POI across town on the card.
 
 ## Where the cache lives
@@ -118,8 +118,8 @@ cache (`supabase/migrations/20260729170913_places_cache.sql`):
 
 Keying details by `mapbox_id` rather than by query is the point: two events at
 the same bar, spelled two different ways, resolve to one id and share one
-fetch. Misses are stored at both hops — a venue Search Box doesn't know, and an
-id the Details endpoint rejects — and re-asked hourly, so a venue with no data
+fetch. Misses are stored at both hops (a venue Search Box doesn't know, and an
+id the Details endpoint rejects) and re-asked hourly, so a venue with no data
 costs one lookup an hour instead of one per panel open.
 
 Reads go through the `venue_cache(p_query)` function, which left-joins the two
@@ -127,7 +127,7 @@ tables, so an open costs a single round trip whether the venue is warm, cold,
 or a remembered miss. Concurrent opens of the same cold venue are deduped in
 process, so a link doing the rounds buys the record once.
 
-Retention: hits live forever — both the resolution (venues don't move) and the
+Retention: hits live forever, both the resolution (venues don't move) and the
 record itself. Only _misses_ are purged, after 90 days, so a transient Mapbox
 failure can't pin a venue as unresolvable and a POI that gains a record later
 is picked up.

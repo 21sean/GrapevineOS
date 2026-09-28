@@ -4,13 +4,13 @@
 --
 --  * public.users becomes a profile table keyed by auth.users.id (existing
 --    ids are preserved by seeding auth.users/auth.identities from the old
---    rows, so every FK — calendar_entries, event_reactions, chat_threads,
---    push_subscriptions — survives untouched).
+--    rows, so every FK (calendar_entries, event_reactions, chat_threads,
+--    push_subscriptions) survives untouched).
 --  * Sessions are GoTrue's problem now: public.sessions and its pg_cron
 --    purge job are gone.
 --  * The Google Calendar refresh token moves into Supabase Vault (encrypted
 --    at rest, never in a plaintext column). Access is only through
---    security-definer RPCs granted to service_role — the deny-all posture
+--    security-definer RPCs granted to service_role; the deny-all posture
 --    for anon/authenticated is unchanged.
 
 -- ---------------------------------------------------------------------------
@@ -219,7 +219,7 @@ grant execute on function public.google_calendar_get(uuid) to service_role;
 grant execute on function public.google_calendar_clear(uuid) to service_role;
 
 -- migrate the existing plaintext grant into Vault, then drop the old table.
--- (access tokens are short-lived and deliberately not preserved — the server
+-- (access tokens are short-lived and deliberately not preserved; the server
 -- mints a fresh one from the refresh token on demand.)
 select public.google_calendar_set(t.user_id, t.refresh_token, t.scope)
 from public.user_google_tokens t
@@ -228,7 +228,7 @@ where t.refresh_token <> '';
 drop table public.user_google_tokens;
 
 -- ---------------------------------------------------------------------------
--- 5. sessions are GoTrue's now — drop the app table and its purge job.
+-- 5. sessions are GoTrue's now: drop the app table and its purge job.
 -- ---------------------------------------------------------------------------
 
 drop table public.sessions;

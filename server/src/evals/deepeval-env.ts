@@ -3,12 +3,12 @@
  *
  * DeepEval ships PostHog product analytics, a New Relic OTLP span exporter and
  * an optional Sentry client. Today it reads the opt-out lazily, so setting the
- * variable anywhere before the first metric runs happens to work — but that is
+ * variable anywhere before the first metric runs happens to work, but that is
  * a property of their current implementation, not a promise, and an eval
  * harness reporting on a deliberately local, no-paid-API pipeline should not
  * be the one component quietly making outbound calls.
  *
- * So this is imported FIRST — above the deepeval imports — in every module
+ * So this is imported FIRST (above the deepeval imports) in every module
  * that touches the library. `??=` so an operator who genuinely wants to send
  * telemetry can still set it to "NO" and be obeyed.
  */

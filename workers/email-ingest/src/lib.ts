@@ -8,7 +8,7 @@ import PostalMime from "postal-mime";
 
 export interface Env {
   RAW_EMAILS: KVNamespace;
-  // Supabase Data API — SUPABASE_URL is a plain var in wrangler.toml;
+  // Supabase Data API. SUPABASE_URL is a plain var in wrangler.toml;
   // SUPABASE_SECRET_KEY is a secret: npx wrangler secret put SUPABASE_SECRET_KEY
   SUPABASE_URL?: string;
   SUPABASE_SECRET_KEY?: string;
@@ -22,7 +22,7 @@ export interface Env {
  * attachment bomb can't blow the Workers CPU budget; newsletters are <1 MB. */
 export const MAX_PARSE_BYTES = 5 * 1024 * 1024;
 
-/** Bodies are capped before insert — larger than any real newsletter, small
+/** Bodies are capped before insert: larger than any real newsletter, small
  * enough that one pathological email can't bloat the table or a KV value. */
 export const MAX_BODY_CHARS = 200_000;
 
@@ -48,7 +48,7 @@ interface EmailPayload {
 
 /**
  * The To: local part becomes the source slug, and the server auto-registers
- * it into sources.id, which is check-constrained to ^[a-z0-9][a-z0-9_-]*$ —
+ * it into sources.id, which is check-constrained to ^[a-z0-9][a-z0-9_-]*$;
  * an unnormalized "John.Doe" would fail that insert on every retry. So:
  * lowercase, drop any +tag, map disallowed characters to "-", and fall back
  * to "inbound" when nothing survives.
@@ -143,7 +143,7 @@ export function stripHtml(html: string): string {
 /**
  * Stable per-message key: the RFC 5322 Message-ID when the email carries one,
  * else a content hash. Deriving it from the message (never from the clock)
- * is what makes redeliveries actually idempotent — a retried delivery
+ * is what makes redeliveries actually idempotent: a retried delivery
  * produces the same email_key and the insert below no-ops on conflict.
  * Bounded well under the 512-byte KV key limit.
  */
@@ -196,7 +196,7 @@ async function attemptInsert(env: Env, key: string, p: EmailPayload): Promise<vo
       signal: AbortSignal.timeout(SUPABASE_TIMEOUT_MS),
     });
   } catch (err) {
-    // Network error or timeout — transient by nature, worth the one retry.
+    // Network error or timeout: transient by nature, worth the one retry.
     throw new InsertError(`raw_emails fetch failed: ${err}`, true);
   }
   if (!res.ok) {
@@ -211,7 +211,7 @@ async function attemptInsert(env: Env, key: string, p: EmailPayload): Promise<vo
 /** Insert into raw_emails via PostgREST. The unique email_key makes worker
  * retries/redeliveries idempotent (duplicates are silently ignored). One
  * retry on transient failures (network, 5xx, 429); config errors like a bad
- * key (401) fail straight through to the dead letter — retrying can't fix
+ * key (401) fail straight through to the dead letter; retrying can't fix
  * those and the KV copy is what preserves the email. */
 export async function insertRawEmail(env: Env, key: string, p: EmailPayload): Promise<void> {
   if (!env.SUPABASE_URL || !env.SUPABASE_SECRET_KEY) {
@@ -272,7 +272,7 @@ async function buildPayload(
   };
 }
 
-/** The email() handler body — index.ts wraps this as the default export. */
+/** The email() handler body; index.ts wraps this as the default export. */
 export async function handleEmail(
   message: ForwardableEmailMessage,
   env: Env,
@@ -294,14 +294,14 @@ export async function handleEmail(
       });
     } catch (kvErr) {
       // Both stores down: throw so Cloudflare answers the sender with a
-      // transient failure and the message is redelivered later — the
+      // transient failure and the message is redelivered later. The
       // message-derived key keeps that redelivery idempotent.
       throw new Error(`insert failed (${err}); dead-letter failed (${kvErr})`, { cause: kvErr });
     }
   }
 
   // Optional ping (tunnel/deploy): the row is already in Postgres, so this
-  // just wakes the server to process it now — no body needed. waitUntil
+  // just wakes the server to process it now; no body needed. waitUntil
   // keeps a slow tunnel from delaying the SMTP response.
   if (pushEnabled(env.INGEST_URL)) {
     ctx.waitUntil(pingIngest(env.INGEST_URL, env.INGEST_KEY, key));
@@ -315,14 +315,14 @@ export async function handleEmail(
  * email in KV with a 30-day TTL and a comment telling a human to run
  * `wrangler kv key get` and re-ingest it by hand. Nobody was ever going to
  * notice in time, so "nothing is lost" quietly expired after a month. This
- * closes the loop — once Supabase is reachable again the parked emails insert
+ * closes the loop: once Supabase is reachable again the parked emails insert
  * themselves and are deleted from KV.
  *
  * Bounded per run so a large backlog can't blow the CPU budget; whatever is
  * left waits for the next tick. Deletion only happens after a successful
  * insert, so a crash mid-drain re-tries rather than loses. The insert is
  * idempotent on email_key, so a redelivered email that already made it in is
- * a no-op followed by a KV cleanup — exactly what we want.
+ * a no-op followed by a KV cleanup, exactly what we want.
  */
 export const DRAIN_LIMIT = 100;
 
@@ -337,7 +337,7 @@ export async function drainDeadLetters(env: Env): Promise<{ drained: number; fai
     try {
       payload = JSON.parse(raw) as EmailPayload;
     } catch {
-      // Not a dead letter we wrote (or corrupt) — leave it for a human rather
+      // Not a dead letter we wrote (or corrupt): leave it for a human rather
       // than deleting data we can't identify.
       console.log(`dead-letter ${entry.name} is not valid JSON: skipping`);
       failed++;
@@ -356,7 +356,7 @@ export async function drainDeadLetters(env: Env): Promise<{ drained: number; fai
   if (drained || failed) {
     console.log(`dead-letter drain: ${drained} recovered, ${failed} still parked`);
   }
-  // Recovered rows are new work — wake the processor the same way an inbound
+  // Recovered rows are new work: wake the processor the same way an inbound
   // email does. (Realtime already covers this; the ping is for tunnel setups.)
   if (drained && pushEnabled(env.INGEST_URL)) {
     await pingIngest(env.INGEST_URL, env.INGEST_KEY, `drain:${drained}`);

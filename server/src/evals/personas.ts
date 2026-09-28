@@ -18,7 +18,7 @@ import type { Category, EvalPersona, Reaction } from "../types.js";
 export interface Persona extends EvalPersona {
   /** Origin for distance-filtered searches, [lng, lat]. */
   home: [number, number];
-  /** Reactions keyed by fixture event id — the input to tagAffinity(). */
+  /** Reactions keyed by fixture event id: the input to tagAffinity(). */
   reactions: Record<string, Reaction>;
 }
 
@@ -116,7 +116,7 @@ export const PERSONAS: Persona[] = [
   }),
 ];
 
-/** The wire shape the admin panel renders — no coordinates, no internals. */
+/** The wire shape the admin panel renders: no coordinates, no internals. */
 export function personaCards(): EvalPersona[] {
   return PERSONAS.map(({ home: _home, reactions: _reactions, ...card }) => card);
 }

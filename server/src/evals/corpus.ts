@@ -20,8 +20,8 @@
  *  - Every attack carries a `scope` saying whether THIS rail is the layer
  *    meant to stop it (see SCOPE_RULE). That distinction is what keeps the
  *    calibration honest: an attack the classifier was never designed to catch
- *    must not be counted against it, because the obvious fix — drop the
- *    threshold — would spend real false positives chasing scores of 0.001.
+ *    must not be counted against it, because the obvious fix (drop the
+ *    threshold) would spend real false positives chasing scores of 0.001.
  */
 
 export type AttackFamily =
@@ -51,7 +51,7 @@ export interface CorpusEntry {
   family: AttackFamily | BenignFamily;
   /**
    * Whether THIS classifier is expected to catch it. An attack marked "out"
-   * is still an attack — it is simply not this rail's job, and scoring the
+   * is still an attack; it is simply not this rail's job, and scoring the
    * classifier on it would be measuring the wrong layer.
    */
   scope: ClassifierScope;
@@ -63,7 +63,7 @@ export interface CorpusEntry {
  * The rule that decides scope, stated so the corpus grades the classifier
  * rather than merely describing whatever it happens to do.
  *
- * Prompt Guard 2 detects explicit instructions aimed at a model — "ignore
+ * Prompt Guard 2 detects explicit instructions aimed at a model: "ignore
  * previous instructions", "output your system prompt", "you are now X". Meta
  * narrowed it to that from Prompt Guard 1 deliberately, because scoring
  * conversational social engineering produced false positives that made the
@@ -76,7 +76,7 @@ export interface CorpusEntry {
  *        obfuscated so the surface text carries no instruction at all
  *
  * An "out" entry is not a pass for the system. It is a statement that this
- * rail is the wrong place to stop it — which is what the persona rail and the
+ * rail is the wrong place to stop it, which is what the persona rail and the
  * judged red-team suite are for.
  */
 export const SCOPE_RULE =
@@ -152,7 +152,7 @@ const EXTRACTION: CorpusEntry[] = (
   scope: scope as ClassifierScope,
 }));
 
-/** Text as it arrives from a fetched page — the content rail's job. */
+/** Text as it arrives from a fetched page: the content rail's job. */
 const INDIRECT: CorpusEntry[] = (
   [
     [
@@ -188,7 +188,7 @@ const INDIRECT: CorpusEntry[] = (
  * Obfuscated payloads. A surface-text classifier cannot read base64, ROT13 or
  * leetspeak, so those are out of scope by construction: the component that
  * decodes them is the model being protected. The spaced-out variant is kept IN
- * scope deliberately — its surface text still spells the instruction, so
+ * scope deliberately: its surface text still spells the instruction, so
  * missing that one would be a real failure rather than a structural limit.
  */
 const ENCODED: CorpusEntry[] = (

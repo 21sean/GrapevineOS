@@ -1,5 +1,5 @@
 /**
- * Model catalog, fully data-driven — no hardcoded model facts.
+ * Model catalog, fully data-driven: no hardcoded model facts.
  *
  * Pipeline:
  *  1. models.dev/api.json (open-source, community-maintained) supplies every
@@ -90,7 +90,7 @@ function candidateTags(rawName: string, providerWords: Set<string>): string[] {
     .filter(Boolean)
     .filter((t) => !DECORATION.test(t));
   const variants: string[][] = [tokens];
-  // "google gemma 4" — also try without the lab prefix, but keep the
+  // "google gemma 4": also try without the lab prefix, but keep the
   // original too ("mistral small" would lose its family otherwise)
   if (tokens.length > 1 && providerWords.has(tokens[0])) variants.push(tokens.slice(1));
 
@@ -126,14 +126,14 @@ interface Meta {
   family: string;
   blurb: string;
   context?: number;
-  /** every provider's claimed release date — reduced to a median later */
+  /** every provider's claimed release date, reduced to a median later */
   dates: string[];
   releaseDate?: string;
   reasoning?: boolean;
   vision?: boolean;
 }
 
-/** Lower median — robust against providers with wrong outlier dates. */
+/** Lower median: robust against providers with wrong outlier dates. */
 function medianDate(dates: string[]): string | undefined {
   if (!dates.length) return undefined;
   const sorted = [...dates].sort();
@@ -184,7 +184,7 @@ function collectCandidates(db: any): Map<string, Meta> {
       if (!m?.open_weights) continue;
       const name = String(m.name ?? "");
       if (!name) continue;
-      // "(latest)" entries are provider aliases, not models — the ollama tag
+      // "(latest)" entries are provider aliases, not models; the ollama tag
       // they'd normalize to can point at an older generation
       if (/\(latest\)/i.test(name)) continue;
       // chat catalog: skip purpose-built embedding / reranker models
@@ -279,7 +279,7 @@ export async function catalog(): Promise<CatalogCompany[]> {
   const tags = [...candidates.keys()];
   const found = await mapLimit(tags, 12, manifest);
 
-  // several aliases can resolve to the same blobs (qwen3.5 vs qwen3.5:9b) —
+  // several aliases can resolve to the same blobs (qwen3.5 vs qwen3.5:9b);
   // keep one per digest, preferring the explicit, shorter tag
   const byDigest = new Map<string, { tag: string; gb: number; meta: Meta }>();
   tags.forEach((tag, i) => {
@@ -334,15 +334,28 @@ export async function catalog(): Promise<CatalogCompany[]> {
 const logoCache = new Map<string, string>();
 const FALLBACK_LOGO = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/><path d="M12 7v10M7 12h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
 
+// The web app inlines these with innerHTML, so anything that can run or load
+// something (scripts, handlers, foreign content, non-fragment links) is refused.
+const UNSAFE_SVG =
+  /<script|<foreignobject|<iframe|<embed|<object|<!entity|<!doctype|\son[a-z]+\s*=|javascript:|href\s*=\s*(?!["']?\s*#)/i;
+
+export function safeSvg(text: string): string | null {
+  const svg = text.trim();
+  if (!/^(?:<\?xml[^>]*\?>\s*)?<svg[\s>]/i.test(svg)) return null;
+  if (UNSAFE_SVG.test(svg)) return null;
+  return svg;
+}
+
 export async function logo(id: string): Promise<string> {
-  const safe = id.replace(/[^a-z0-9-]/g, "");
+  const safe = id.toLowerCase().replace(/[^a-z0-9-]/g, "");
+  if (!safe) return FALLBACK_LOGO;
   if (logoCache.has(safe)) return logoCache.get(safe)!;
   try {
     const res = await fetch(`https://models.dev/logos/${safe}.svg`, {
       signal: AbortSignal.timeout(8000),
     });
     if (res.ok) {
-      const svg = await res.text();
+      const svg = safeSvg(await res.text()) ?? FALLBACK_LOGO;
       logoCache.set(safe, svg);
       return svg;
     }

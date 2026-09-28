@@ -90,7 +90,7 @@ export async function modelSupportsTools(model: string): Promise<boolean> {
  * model doesn't accept the thinking flag.
  *
  * Every request carries a deadline. Without one, a model that wedges (or a
- * connection that dies without an RST) blocks the caller forever — and since
+ * connection that dies without an RST) blocks the caller forever, and since
  * the inbox processes rows serially, one such call stops the whole pipeline
  * with no error and no timestamp to show for it. A timeout turns that into an
  * ordinary failed row that retries. Budgets live in budget.ts.
@@ -131,7 +131,7 @@ export async function chatJSON(opts: {
       if (!res.ok) throw new Error(`ollama chat failed: ${errText.slice(0, 300)}`);
     }
     const body = (await res.json()) as any;
-    // Same salvage parser the CLI providers use — identical model output must
+    // Same salvage parser the CLI providers use: identical model output must
     // parse identically no matter which engine produced it.
     return parseLooseJSON(body.message?.content ?? "");
   };

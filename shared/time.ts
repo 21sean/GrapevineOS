@@ -1,6 +1,6 @@
 /**
  * Timezone helpers shared by the server and the web client. City-local day
- * math must be identical on both sides — the dedupe key, date filters, and
+ * math must be identical on both sides: the dedupe key, date filters, and
  * digest grouping all compare these strings.
  *
  * Keep this file self-contained (no imports): it is compiled by two
@@ -24,7 +24,7 @@ function dayFormatter(tz: string): Intl.DateTimeFormat {
   return f;
 }
 
-/** "2026-07-11" in the given timezone — string-comparable. */
+/** "2026-07-11" in the given timezone, string-comparable. */
 export function dayInTz(iso: string | Date, tz: string): string {
   return dayFormatter(tz).format(typeof iso === "string" ? new Date(iso) : iso);
 }

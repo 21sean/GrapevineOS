@@ -3,7 +3,7 @@
 --
 -- Access model: every read/write goes through the Express server (or the
 -- email worker) using the secret API key. RLS is enabled on every table with
--- NO policies, and anon/authenticated grants are revoked — deny-all for the
+-- NO policies, and anon/authenticated grants are revoked: deny-all for the
 -- Data API. If the web app ever reads Supabase directly, add explicit
 -- policies + grants then.
 
@@ -40,7 +40,7 @@ $$;
 revoke execute on function public.set_updated_at() from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------------
--- sources — newsletter/inbox registry. Ingestion auto-registers unknown
+-- sources: newsletter/inbox registry. Ingestion auto-registers unknown
 -- slugs (active = false) so events.source_id always resolves.
 -- ---------------------------------------------------------------------------
 
@@ -55,7 +55,7 @@ create table public.sources (
 );
 
 -- ---------------------------------------------------------------------------
--- events — the map's catalog. Text ids preserved from the JSON store
+-- events: the map's catalog. Text ids preserved from the JSON store
 -- (slug + content hash, minted by the server). dedupe_key carries the
 -- title+local-date dedupe rule; the unique index turns "read all and
 -- compare" into a single upsert.
@@ -97,7 +97,7 @@ create trigger events_set_updated_at
   for each row execute function public.set_updated_at();
 
 -- ---------------------------------------------------------------------------
--- users — app-managed Google sign-in (not Supabase Auth). prefs is a
+-- users: app-managed Google sign-in (not Supabase Auth). prefs is a
 -- client-shaped blob (filters/interests/pinnedIds) and stays jsonb.
 -- ---------------------------------------------------------------------------
 
@@ -129,7 +129,7 @@ create trigger user_google_tokens_set_updated_at
   for each row execute function public.set_updated_at();
 
 -- ---------------------------------------------------------------------------
--- sessions — sha256 cookie-token hashes; raw tokens are never stored.
+-- sessions: sha256 cookie-token hashes; raw tokens are never stored.
 -- ---------------------------------------------------------------------------
 
 create table public.sessions (
@@ -143,7 +143,7 @@ create index sessions_user_id_idx on public.sessions (user_id);
 create index sessions_expires_at_idx on public.sessions (expires_at);
 
 -- ---------------------------------------------------------------------------
--- calendar_entries — a user's saved events ("My Calendar"). google_event_id
+-- calendar_entries: a user's saved events ("My Calendar"). google_event_id
 -- is set once pushed to Google Calendar; the ICS feed serves the same rows.
 -- ---------------------------------------------------------------------------
 
@@ -158,7 +158,7 @@ create table public.calendar_entries (
 create index calendar_entries_event_id_idx on public.calendar_entries (event_id);
 
 -- ---------------------------------------------------------------------------
--- ingests — pipeline log. events is a snapshot of what landed, intentionally
+-- ingests: pipeline log. events is a snapshot of what landed, intentionally
 -- denormalized so history survives event edits/deletes.
 -- ---------------------------------------------------------------------------
 
@@ -176,7 +176,7 @@ create table public.ingests (
 create index ingests_received_at_idx on public.ingests (received_at desc);
 
 -- ---------------------------------------------------------------------------
--- raw_emails — replaces the RAW_EMAILS KV namespace. The email worker
+-- raw_emails: replaces the RAW_EMAILS KV namespace. The email worker
 -- inserts a row per inbound newsletter; the server polls unprocessed rows
 -- (partial index) and stamps processed_at / error. email_key mirrors the
 -- old "<receivedAt>_<source>" KV key so redelivery stays idempotent.
@@ -201,7 +201,7 @@ create index raw_emails_unprocessed_idx on public.raw_emails (received_at)
 create index raw_emails_received_at_idx on public.raw_emails (received_at desc);
 
 -- ---------------------------------------------------------------------------
--- app_settings — singleton config row (city, map center, tz, model).
+-- app_settings: singleton config row (city, map center, tz, model).
 -- ---------------------------------------------------------------------------
 
 create table public.app_settings (
@@ -220,7 +220,7 @@ create trigger app_settings_set_updated_at
   for each row execute function public.set_updated_at();
 
 -- ---------------------------------------------------------------------------
--- geocode_cache — permanent Mapbox geocode results (venues don't move),
+-- geocode_cache: permanent Mapbox geocode results (venues don't move),
 -- keyed by the normalized query string. Replaces geocache.json.
 -- ---------------------------------------------------------------------------
 

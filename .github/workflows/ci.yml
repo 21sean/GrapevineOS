@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 # Everything that needs no model and no database: types, lint, formatting,
 # the unit tests, the generated skill file, and the five offline eval suites.
 # The placeholder credentials satisfy modules that read the environment at

@@ -32,10 +32,12 @@ ollama.get("/api/ollama/models", requireAdmin, async (_req, res) => {
 ollama.post("/api/ollama/pull", requireAdmin, async (req, res) => {
   const model = String(req.body?.model ?? "");
   if (!model) return res.status(400).json({ error: "model required" });
-  const upstream = await fetch(`${await ollamaBase()}/api/pull`, {
+  const base = await ollamaBase().catch(() => "http://localhost:11434");
+  const upstream = await fetch(`${base}/api/pull`, {
     method: "POST",
     body: JSON.stringify({ model, stream: true }),
-  });
+  }).catch(() => null);
+  if (!upstream) return res.status(502).json({ error: `Ollama is not reachable at ${base}` });
   if (!upstream.ok || !upstream.body) {
     return res.status(502).json({ error: await upstream.text() });
   }
@@ -57,6 +59,8 @@ ollama.get("/api/system", requireAdmin, async (_req, res) => {
 /** Provider logos proxied from models.dev; public, cacheable, no secrets. */
 ollama.get("/api/logo/:id", async (req, res) => {
   res.setHeader("Content-Type", "image/svg+xml");
+  res.setHeader("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'");
+  res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Cache-Control", "public, max-age=86400");
   res.send(await logo(String(req.params.id)));
 });

@@ -2,13 +2,13 @@ import type { ReactNode } from "react"
 import { ROUTES } from "@/lib/routes"
 
 /**
- * Standalone legal pages — Privacy Policy and Terms of Service. Rendered at
+ * Standalone legal pages: Privacy Policy and Terms of Service. Rendered at
  * /privacy and /terms (see main.tsx) with no map, store, or app shell, so the
  * URLs are stable and cheap to link from OAuth consent screens, app-store
  * listings, and Google's OAuth verification review.
  *
  * Plain language on purpose. The substance below is grounded in what Grapevine
- * actually does — Supabase Auth, coarse geolocation, Google Calendar sync, the
+ * actually does: Supabase Auth, coarse geolocation, Google Calendar sync, the
  * Ask Grapevine assistant, reactions/interests, and Web Push. If a data flow
  * changes, update the matching section and bump the "Last updated" date.
  */

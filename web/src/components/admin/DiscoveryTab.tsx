@@ -50,7 +50,7 @@ const cadenceLabel = (hours: number) =>
 /**
  * Admin → Discover: build events from an AI web search. A run searches the
  * web, reads the top pages, extracts candidates, and verifies each one
- * against its source page — the preview shows what passed (with evidence)
+ * against its source page. The preview shows what passed (with evidence)
  * and what got rejected (with the reason). Saved searches re-run themselves
  * on the server on a cadence.
  */
@@ -346,7 +346,7 @@ export function DiscoveryTab() {
         {!searches && <Spinner className="mx-auto" />}
         {searches?.length === 0 && (
           <p className="text-sm text-muted-foreground italic">
-            None yet — type a query above and hit Schedule.
+            None yet. Type a query above and hit Schedule.
           </p>
         )}
         {searches?.map((s) => (

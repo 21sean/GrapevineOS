@@ -20,7 +20,7 @@ import type { Category, Reaction } from "../../../shared/types"
 export const REACTION_META: Record<Reaction, { label: string; blurb: string }> =
   {
     going: { label: "Going", blurb: "boosts this and events like it" },
-    went: { label: "Went — great", blurb: "teaches your taste" },
+    went: { label: "Went, great", blurb: "teaches your taste" },
     not_for_me: { label: "Not for me", blurb: "sinks this and events like it" },
   }
 
