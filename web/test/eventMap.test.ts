@@ -7,7 +7,41 @@ vi.hoisted(() => vi.stubEnv("VITE_MAPBOX_TOKEN", "test-token"))
 vi.mock("@/lib/api", () => ({ api: {} }))
 vi.mock("@/lib/supabase", () => ({ supabase: null }))
 
-const { markers, FakeMarker } = vi.hoisted(() => {
+const { markers, maps, FakeMarker, FakeMap } = vi.hoisted(() => {
+  class FakeMap {
+    container: HTMLElement
+    offset = 0
+    listeners = new Map<string, ((event: object) => void)[]>()
+    constructor({ container }: { container: HTMLElement }) {
+      this.container = container
+      maps.push(this)
+    }
+    addControl() {}
+    on(name: string, callback: (event: object) => void) {
+      this.listeners.set(name, [...(this.listeners.get(name) ?? []), callback])
+    }
+    fire(name: string) {
+      for (const callback of this.listeners.get(name) ?? []) callback({})
+    }
+    getContainer() {
+      return this.container
+    }
+    project({ lng }: { lng: number }) {
+      return { x: (lng + 117.16) * 1000 + this.offset, y: 0 }
+    }
+    getZoom() {
+      return 11.8
+    }
+    getPitch() {
+      return 35
+    }
+    getBearing() {
+      return 20
+    }
+    flyTo = vi.fn()
+    remove() {}
+  }
+  const maps: FakeMap[] = []
   const markers: FakeMarker[] = []
   class FakeMarker {
     element: HTMLElement
@@ -27,24 +61,12 @@ const { markers, FakeMarker } = vi.hoisted(() => {
     }
     remove = vi.fn(() => this.element.remove())
   }
-  return { markers, FakeMarker }
+  return { markers, maps, FakeMarker, FakeMap }
 })
 
 vi.mock("mapbox-gl", () => ({
   default: {
-    Map: class {
-      container: HTMLElement
-      constructor({ container }: { container: HTMLElement }) {
-        this.container = container
-      }
-      addControl() {}
-      on() {}
-      getZoom() {
-        return 11.8
-      }
-      flyTo() {}
-      remove() {}
-    },
+    Map: FakeMap,
     Marker: FakeMarker,
     NavigationControl: class {},
   },
@@ -83,6 +105,7 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
   vi.stubGlobal("matchMedia", () => ({ matches: false }))
   markers.length = 0
+  maps.length = 0
   useGrapevine.setState(
     {
       ...useGrapevine.getInitialState(),
@@ -105,6 +128,61 @@ afterEach(() => {
 })
 
 describe("map marker updates", () => {
+  it("detaches offscreen pins and restores their pager state when they return", () => {
+    act(() => useGrapevine.setState({ events: [event("a"), event("b")] }))
+    const marker = markers[0]
+    act(() =>
+      container
+        .querySelector<HTMLButtonElement>(
+          '[aria-label="Next event at this spot"]'
+        )!
+        .click()
+    )
+    maps[0].offset = 1000
+    maps[0].fire("moveend")
+    expect(container.querySelector(".gv-marker")).toBeNull()
+    maps[0].offset = 0
+    maps[0].fire("moveend")
+    expect(container.querySelector(".gv-marker-root")).toBe(marker.element)
+    expect(
+      marker.element
+        .querySelector(".gv-marker-trigger")
+        ?.getAttribute("aria-label")
+    ).toContain("Jazz b")
+  })
+
+  it("keeps keyboard focus attached and restores motion effects after moving", () => {
+    const trigger =
+      container.querySelector<HTMLButtonElement>(".gv-marker-trigger")!
+    trigger.focus()
+    maps[0].fire("movestart")
+    expect(document.documentElement.classList.contains("gv-map-moving")).toBe(
+      true
+    )
+    maps[0].offset = 1000
+    maps[0].fire("moveend")
+    expect(document.activeElement).toBe(trigger)
+    expect(trigger.isConnected).toBe(true)
+    expect(document.documentElement.classList.contains("gv-map-moving")).toBe(
+      false
+    )
+    trigger.blur()
+    maps[0].fire("resize")
+    expect(container.querySelector(".gv-marker")).toBeNull()
+  })
+
+  it("preserves the user's camera orientation when selecting an event", () => {
+    act(() => useGrapevine.getState().select("a"))
+    expect(maps[0].flyTo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pitch: 35,
+        bearing: 20,
+        duration: 900,
+        essential: false,
+      })
+    )
+  })
+
   it("labels native event buttons and keeps stack paging separate from selection", () => {
     act(() => useGrapevine.setState({ events: [event("a"), event("b")] }))
     const trigger =

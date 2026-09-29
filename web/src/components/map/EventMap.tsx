@@ -114,6 +114,7 @@ function locKey(e: CityEvent): string {
 /** One marker representing every event at a location; idx picks the face. */
 interface Stack {
   marker: mapboxgl.Marker
+  attached: boolean
   el: HTMLDivElement
   triggerEl: HTMLButtonElement
   iconEl: HTMLSpanElement
@@ -133,6 +134,27 @@ function setData(el: HTMLElement, key: string, value: string) {
 
 function setText(el: HTMLElement, value: string) {
   if (el.textContent !== value) el.textContent = value
+}
+
+// Detached markers keep their pager state, but Mapbox no longer projects them
+// or checks their occlusion on every frame. A screen-space buffer lets pins
+// enter smoothly during a drag, including when the map is pitched or rotated.
+function syncViewportMarkers(map: mapboxgl.Map, stacks: Map<string, Stack>) {
+  const container = map.getContainer()
+  const padding = 200
+  for (const stack of stacks.values()) {
+    const point = map.project(stack.marker.getLngLat())
+    const visible =
+      (point.x >= -padding &&
+        point.x <= container.clientWidth + padding &&
+        point.y >= -padding &&
+        point.y <= container.clientHeight + padding) ||
+      stack.el.contains(document.activeElement)
+    if (visible === stack.attached) continue
+    if (visible) stack.marker.addTo(map)
+    else stack.marker.remove()
+    stack.attached = visible
+  }
 }
 
 function LiveMap() {
@@ -214,7 +236,8 @@ function LiveMap() {
       config: { basemap: { lightPreset: lightPresetRef.current } },
       center: FALLBACK_CENTER,
       zoom: 11.8,
-      pitch: 52,
+      // A gentler angle draws less distant geometry while keeping 3D depth.
+      pitch: 40,
       bearing: -12,
       attributionControl: false,
     })
@@ -226,7 +249,23 @@ function LiveMap() {
     // originalEvent is only set for user gestures, not programmatic moves
     map.on("movestart", (e) => {
       if (e.originalEvent) cameraTouchedRef.current = true
+      document.documentElement.classList.add("gv-map-moving")
     })
+    // Reconcile at most ten times a second, outside React. Only attached
+    // markers incur Mapbox's per-frame position and occlusion work.
+    let lastViewportSync = 0
+    const syncViewport = () => {
+      syncViewportMarkers(map, stacksRef.current)
+      lastViewportSync = performance.now()
+    }
+    map.on("move", () => {
+      if (performance.now() - lastViewportSync >= 100) syncViewport()
+    })
+    map.on("moveend", () => {
+      syncViewport()
+      document.documentElement.classList.remove("gv-map-moving")
+    })
+    map.on("resize", syncViewport)
 
     // POI-style labels only past neighborhood zoom, so downtown doesn't clutter;
     // markers scale with zoom (via a CSS var that cascades to every .gv-marker).
@@ -274,6 +313,7 @@ function LiveMap() {
     mapRef.current = map
     const stacks = stacksRef.current
     return () => {
+      document.documentElement.classList.remove("gv-map-moving")
       styleReadyRef.current = false
       stacks.forEach(({ marker }) => marker.remove())
       stacks.clear()
@@ -427,15 +467,14 @@ function LiveMap() {
           element: root,
           anchor: "center",
           offset: [0, -MARKER_LIFT],
-        })
-          .setLngLat([group[0].lng, group[0].lat])
-          .addTo(map)
+        }).setLngLat([group[0].lng, group[0].lat])
         // Mapbox assigns role="img" to custom markers. These contain
         // interactive controls, which must stay exposed to screen readers.
         root.setAttribute("role", "group")
         root.setAttribute("aria-label", "Events at this spot")
         const created: Stack = {
           marker,
+          attached: false,
           el,
           triggerEl,
           iconEl,
@@ -511,6 +550,7 @@ function LiveMap() {
       }
       decorateStack(stack, liveIds, activeId, agentIds, searchIds, bookedLines)
     }
+    syncViewportMarkers(map, stacksRef.current)
   }, [
     groups,
     liveIds,
@@ -578,9 +618,9 @@ function LiveMap() {
     map.flyTo({
       center: [focus.lng, focus.lat],
       zoom: carouselOn ? 14.6 : 15.2,
-      pitch: 60,
-      bearing: -30 + ((focusSeq >= 0 ? focusSeq : 0) % 5) * 18,
-      duration: carouselOn ? 3200 : 2200,
+      pitch: carouselOn ? 45 : map.getPitch(),
+      bearing: carouselOn ? -30 + (focusSeq % 5) * 18 : map.getBearing(),
+      duration: carouselOn ? 2400 : 900,
       padding: phone
         ? { top: 110, bottom: 300, left: 24, right: 24 }
         : { top: 0, bottom: 0, left: 0, right: 0 },
@@ -607,9 +647,9 @@ function LiveMap() {
       map.flyTo({
         center: [pts[0].lng, pts[0].lat],
         zoom: 15.2,
-        pitch: 60,
-        bearing: -18,
-        duration: 2200,
+        pitch: map.getPitch(),
+        bearing: map.getBearing(),
+        duration: 900,
         padding,
         essential: false,
       })

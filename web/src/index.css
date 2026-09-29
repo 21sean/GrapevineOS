@@ -168,6 +168,16 @@
 /* ---------- map markers ---------- */
 
 /* POI-style dot: category icon inside, label below (like Mapbox's own POIs) */
+/* Blur must resample the moving WebGL canvas beneath every overlay. Keep
+   panels readable while navigating without that extra compositing pass. */
+.gv-map-moving .glass,
+.gv-map-moving .gv-map .mapboxgl-ctrl-group,
+.gv-map-moving .gv-marker-label,
+.gv-map-moving .gv-stack-pager {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
 .gv-marker {
   position: relative;
   display: grid;
