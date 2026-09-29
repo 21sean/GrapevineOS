@@ -47,7 +47,7 @@ export default defineConfig({
   customLogger: logger,
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(import.meta.dirname, "./src"),
     },
   },
   build: {

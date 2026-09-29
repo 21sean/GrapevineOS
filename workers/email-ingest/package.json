@@ -11,10 +11,10 @@
     "lint": "eslint src test"
   },
   "dependencies": {
-    "postal-mime": "^2.4.3"
+    "postal-mime": "^4.0.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260729.1",
-    "wrangler": "^4.115.0"
+    "@cloudflare/workers-types": "^5.20260929.1",
+    "wrangler": "^4.143.1"
   }
 }

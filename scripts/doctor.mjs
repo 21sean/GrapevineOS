@@ -68,10 +68,17 @@ function onPath(cmd) {
 }
 
 // --- Node and the install ---------------------------------------------------
-const major = Number(process.versions.node.split(".")[0]);
-if (major >= 22) ok(`Node ${process.versions.node}`);
+const [major, minor, patch] = process.versions.node.split(".").map(Number);
+const supportedNode =
+  (major === 22 && (minor > 22 || (minor === 22 && patch >= 2))) ||
+  (major === 24 && minor >= 15) ||
+  major >= 26;
+if (supportedNode) ok(`Node ${process.versions.node}`);
 else
-  fail(`Node ${process.versions.node} is older than 22`, "install Node 22 (nvm use reads .nvmrc)");
+  fail(
+    `Node ${process.versions.node} is unsupported`,
+    "install the Node version in .nvmrc (nvm use)",
+  );
 
 if (existsSync(path.join(root, "node_modules", "@langchain", "langgraph"))) {
   ok("dependencies installed");

@@ -1,5 +1,5 @@
 /**
- * deepeval@0.9.13 ships a stale build artifact: dist/telemetry.js (two dead
+ * deepeval@0.9.13–0.9.20 ships a stale build artifact: dist/telemetry.js (two dead
  * exports from an old layout) sitting next to the real dist/telemetry/
  * directory. Node resolves `require("../telemetry")` to the FILE, so every
  * metric's `measure()` crashes at startProgress with

@@ -17,7 +17,7 @@ npm run dev          # api  -> http://localhost:8787
 
 Requirements:
 
-- **Node 22+** (`.nvmrc` says which; `nvm use` reads it)
+- **Node 22.23.3** (`.nvmrc` pins the tested version; `nvm use` reads it). Node 24.15+ and 26+ are also supported by the dependencies.
 - **[Ollama](https://ollama.com)** running locally with at least one chat
   model (`ollama pull qwen3:8b` works fine; pick it in Admin → Models).
   No GPU? Chat and/or newsletter extraction can instead run through a
