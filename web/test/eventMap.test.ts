@@ -11,6 +11,7 @@ const { markers, maps, FakeMarker, FakeMap } = vi.hoisted(() => {
   class FakeMap {
     container: HTMLElement
     offset = 0
+    zoom = 11.8
     listeners = new Map<string, ((event: object) => void)[]>()
     constructor({ container }: { container: HTMLElement }) {
       this.container = container
@@ -30,8 +31,9 @@ const { markers, maps, FakeMarker, FakeMap } = vi.hoisted(() => {
       return { x: (lng + 117.16) * 1000 + this.offset, y: 0 }
     }
     getZoom() {
-      return 11.8
+      return this.zoom
     }
+    setConfigProperty = vi.fn()
     getPitch() {
       return 35
     }
@@ -110,6 +112,7 @@ beforeEach(() => {
     {
       ...useGrapevine.getInitialState(),
       now: new Date("2026-09-28T19:00:00Z"),
+      trafficOn: false,
       filters: { ...DEFAULT_FILTERS, dateFrom: null, dateTo: null },
       events: [event("a"), event("b", { lng: -117.2 })],
     },
@@ -128,6 +131,44 @@ afterEach(() => {
 })
 
 describe("map marker updates", () => {
+  it("shows detailed landmarks only at close zoom without flapping at the boundary", () => {
+    const map = maps[0]
+    map.fire("style.load")
+    expect(map.setConfigProperty).toHaveBeenCalledWith(
+      "basemap",
+      "show3dObjects",
+      true
+    )
+    expect(map.setConfigProperty).toHaveBeenCalledWith(
+      "basemap",
+      "show3dLandmarks",
+      false
+    )
+    map.setConfigProperty.mockClear()
+    map.zoom = 16
+    map.fire("zoom")
+    expect(map.setConfigProperty).toHaveBeenCalledExactlyOnceWith(
+      "basemap",
+      "show3dLandmarks",
+      true
+    )
+    map.setConfigProperty.mockClear()
+    map.zoom = 15.8
+    map.fire("zoom")
+    expect(map.setConfigProperty).not.toHaveBeenCalled()
+    map.zoom = 15.4
+    map.fire("zoom")
+    expect(map.setConfigProperty).toHaveBeenCalledExactlyOnceWith(
+      "basemap",
+      "show3dLandmarks",
+      false
+    )
+    map.setConfigProperty.mockClear()
+    map.zoom = 15.8
+    map.fire("zoom")
+    expect(map.setConfigProperty).not.toHaveBeenCalled()
+  })
+
   it("detaches offscreen pins and restores their pager state when they return", () => {
     act(() => useGrapevine.setState({ events: [event("a"), event("b")] }))
     const marker = markers[0]

@@ -30,6 +30,11 @@ const TRAFFIC_LAYER = "gv-traffic-line"
 
 /** Zoom at which marker labels fade in, mirroring Mapbox's own POI labels. */
 const LABEL_MIN_ZOOM = 13
+// Detailed landmark meshes dominate rendering at neighborhood scale. Keep
+// ordinary 3D buildings and trees, and load landmarks when close enough to
+// inspect them. Hysteresis prevents repeated model toggles near the boundary.
+const LANDMARK_DETAIL_ZOOM = 16
+const LANDMARK_OVERVIEW_ZOOM = 15.5
 
 // Markers are plain DOM, so Mapbox renders them at a fixed pixel size at every
 // zoom — full size at street zoom is right, but pulled back to the whole county
@@ -233,7 +238,12 @@ function LiveMap() {
     const map = new mapboxgl.Map({
       container: containerRef.current,
       style: "mapbox://styles/mapbox/standard",
-      config: { basemap: { lightPreset: lightPresetRef.current } },
+      config: {
+        basemap: {
+          lightPreset: lightPresetRef.current,
+          show3dLandmarks: false,
+        },
+      },
       center: FALLBACK_CENTER,
       zoom: 11.8,
       // A gentler angle draws less distant geometry while keeping 3D depth.
@@ -274,7 +284,19 @@ function LiveMap() {
     // so a 3s tour flight costs a handful of recalcs instead of ~200.
     let lastScale = ""
     let lastLabels: boolean | undefined
+    let landmarkDetail = false
+    const applyLandmarkDetail = () => {
+      if (!styleReadyRef.current) return
+      const zoom = map.getZoom()
+      const detail = landmarkDetail
+        ? zoom >= LANDMARK_OVERVIEW_ZOOM
+        : zoom >= LANDMARK_DETAIL_ZOOM
+      if (detail === landmarkDetail) return
+      landmarkDetail = detail
+      map.setConfigProperty("basemap", "show3dLandmarks", detail)
+    }
     const applyZoom = () => {
+      applyLandmarkDetail()
       const zoom = map.getZoom()
       const el = containerRef.current
       if (!el) return
@@ -294,6 +316,8 @@ function LiveMap() {
 
     map.on("style.load", () => {
       styleReadyRef.current = true
+      landmarkDetail = map.getZoom() >= LANDMARK_DETAIL_ZOOM
+      map.setConfigProperty("basemap", "show3dLandmarks", landmarkDetail)
       map.setConfigProperty("basemap", "lightPreset", lightPresetRef.current)
       // Basemap layer toggles are persisted; a fresh style resets them to the
       // Standard defaults, so re-apply the stored visibility once it can take
