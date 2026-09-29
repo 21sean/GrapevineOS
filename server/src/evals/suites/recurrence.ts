@@ -200,7 +200,16 @@ export const recurrenceSuite: EvalSuite = {
       run: () => {
         expectEq(
           parseRRule("FREQ=WEEKLY;BYDAY=SA,SU;COUNT=4"),
-          { freq: "WEEKLY", interval: 1, byday: [0, 6], bymonthday: [], count: 4 },
+          {
+            freq: "WEEKLY",
+            interval: 1,
+            byday: [0, 6],
+            bynthday: [],
+            bymonthday: [],
+            bymonth: [],
+            bysetpos: [],
+            count: 4,
+          },
           "parsed rule",
         );
         expectEq(recurrenceSummary("FREQ=WEEKLY;BYDAY=SA"), "Weekly on Sat", "weekly summary");
