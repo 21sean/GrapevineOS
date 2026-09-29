@@ -336,11 +336,9 @@ function LiveMap() {
   const lastSearchRef = useRef("")
   const lastBookedRef = useRef<ReadonlyMap<string, string>>(new Map())
 
-  // --- markers: one stack per location, diffed by location key ---
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
-
+  // Search, selection, and liveness only change decoration. Reuse venue
+  // groups until the rendered event data actually changes.
+  const groups = useMemo(() => {
     const groups = new Map<string, CityEvent[]>()
     for (const e of rendered) {
       const k = locKey(e)
@@ -348,6 +346,13 @@ function LiveMap() {
       if (g) g.push(e)
       else groups.set(k, [e])
     }
+    return groups
+  }, [rendered])
+
+  // --- markers: one stack per location, diffed by location key ---
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
 
     for (const [key, stack] of stacksRef.current) {
       if (!groups.has(key)) {
@@ -462,13 +467,18 @@ function LiveMap() {
 
         stack = created
         stacksRef.current.set(key, stack)
-      } else {
+      } else if (stack.events !== group) {
         // keep whichever event this stack is showing across list refreshes
         const shownId = stack.events[stack.idx]?.id
         stack.events = group
         const keep = group.findIndex((e) => e.id === shownId)
         stack.idx = keep >= 0 ? keep : 0
-        stack.marker.setLngLat([group[0].lng, group[0].lat])
+        // setLngLat projects the marker again and schedules DOM work, even
+        // for identical coordinates. A text/ranking refresh needs neither.
+        const position = stack.marker.getLngLat()
+        if (position.lng !== group[0].lng || position.lat !== group[0].lat) {
+          stack.marker.setLngLat([group[0].lng, group[0].lat])
+        }
       }
 
       if (targetChanged && target) {
@@ -489,7 +499,7 @@ function LiveMap() {
       decorateStack(stack, liveIds, activeId, agentIds, searchIds, bookedLines)
     }
   }, [
-    rendered,
+    groups,
     liveIds,
     activeId,
     selectedId,
