@@ -115,6 +115,7 @@ function locKey(e: CityEvent): string {
 interface Stack {
   marker: mapboxgl.Marker
   el: HTMLDivElement
+  triggerEl: HTMLButtonElement
   iconEl: HTMLSpanElement
   labelMainEl: HTMLSpanElement
   labelSubEl: HTMLSpanElement
@@ -382,10 +383,17 @@ function LiveMap() {
         // what pushed every marker out of place and re-triggered transitions
         // on each animation frame.
         const root = document.createElement("div")
+        root.className = "gv-marker-root"
         const el = document.createElement("div")
         el.className = "gv-marker"
+        // Keep the event button and pager buttons as siblings. A native
+        // button gives Enter/Space activation without trapping map keys.
+        const triggerEl = document.createElement("button")
+        triggerEl.type = "button"
+        triggerEl.className = "gv-marker-trigger"
         const iconEl = document.createElement("span")
         iconEl.className = "gv-marker-icon"
+        triggerEl.append(iconEl)
         const countEl = document.createElement("span")
         countEl.className = "gv-marker-count"
         const labelEl = document.createElement("div")
@@ -412,7 +420,7 @@ function LiveMap() {
         next.textContent = "›"
         next.setAttribute("aria-label", "Next event at this spot")
         pager.append(prev, numEl, next)
-        el.append(iconEl, countEl, labelEl, pager)
+        el.append(triggerEl, countEl, labelEl, pager)
         root.appendChild(el)
 
         const marker = new mapboxgl.Marker({
@@ -422,9 +430,14 @@ function LiveMap() {
         })
           .setLngLat([group[0].lng, group[0].lat])
           .addTo(map)
+        // Mapbox assigns role="img" to custom markers. These contain
+        // interactive controls, which must stay exposed to screen readers.
+        root.setAttribute("role", "group")
+        root.setAttribute("aria-label", "Events at this spot")
         const created: Stack = {
           marker,
           el,
+          triggerEl,
           iconEl,
           labelMainEl,
           labelSubEl,
@@ -632,6 +645,14 @@ function decorateStack(
   const e = stack.events[stack.idx]
   if (!e) return
   const { el } = stack
+  const label = `Show ${e.title} at ${e.venue}${
+    stack.events.length > 1
+      ? ` (event ${stack.idx + 1} of ${stack.events.length})`
+      : ""
+  }`
+  if (stack.triggerEl.getAttribute("aria-label") !== label) {
+    stack.triggerEl.setAttribute("aria-label", label)
+  }
   // a booked face wears calendar-salmon head to toe (dot, ring, venue name),
   // the way Apple Maps paints a venue holding one of your calendar events
   const bookedLine = bookedLines?.get(e.id)

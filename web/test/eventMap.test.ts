@@ -105,6 +105,31 @@ afterEach(() => {
 })
 
 describe("map marker updates", () => {
+  it("labels native event buttons and keeps stack paging separate from selection", () => {
+    act(() => useGrapevine.setState({ events: [event("a"), event("b")] }))
+    const trigger =
+      container.querySelector<HTMLButtonElement>(".gv-marker-trigger")!
+    const pager = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Next event at this spot"]'
+    )!
+    expect(trigger.tagName).toBe("BUTTON")
+    expect(trigger.closest('[role="group"]')?.getAttribute("aria-label")).toBe(
+      "Events at this spot"
+    )
+    expect(trigger.contains(pager)).toBe(false)
+    expect(trigger.getAttribute("aria-label")).toBe(
+      "Show Jazz a at The Park (event 1 of 2)"
+    )
+    act(() => pager.click())
+    expect(useGrapevine.getState().detailOpen).toBe(false)
+    expect(trigger.getAttribute("aria-label")).toBe(
+      "Show Jazz b at The Park (event 2 of 2)"
+    )
+    act(() => trigger.click())
+    expect(useGrapevine.getState().selectedId).toBe("b")
+    expect(useGrapevine.getState().detailOpen).toBe(true)
+  })
+
   it("searches and selects without repositioning unchanged pins", () => {
     expect(markers).toHaveLength(2)
     markers.forEach((m) => m.setLngLat.mockClear())

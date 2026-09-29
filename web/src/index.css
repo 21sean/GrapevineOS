@@ -193,13 +193,32 @@
 /* the search box narrows the map too: markers that miss the query recede
    instead of vanishing, so hits stay lit with the city still readable.
    Selecting a dimmed marker lights it back up while its sheet is open. */
-.gv-marker[data-dimmed="true"]:not([data-selected="true"]) {
+.gv-marker[data-dimmed="true"]:not([data-selected="true"]):not(:focus-within) {
   opacity: 0.25;
   filter: saturate(0.4);
 }
 
-.gv-marker:hover {
+.gv-marker:is(:hover, :focus-within) {
   transform: scale(calc(var(--gv-marker-scale, 1) * 1.2));
+}
+
+.gv-marker-root:focus-within {
+  z-index: 2;
+}
+
+.gv-marker-trigger {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: inherit;
+  cursor: pointer;
+}
+
+.gv-marker-trigger:focus-visible,
+.gv-stack-btn:focus-visible {
+  outline: 2px solid oklch(0.98 0 0);
+  outline-offset: 3px;
 }
 
 .gv-marker[data-selected="true"] {
@@ -254,6 +273,7 @@
 
 /* labels appear past neighborhood zoom (class set from EventMap), or when selected */
 .gv-labels-on .gv-marker-label,
+.gv-marker:focus-within .gv-marker-label,
 .gv-marker[data-selected="true"] .gv-marker-label {
   opacity: 1;
 }
@@ -343,6 +363,7 @@
 .gv-marker[data-stack="true"]:is(
     .gv-labels-on *,
     [data-selected="true"],
+    :focus-within,
     :hover
   )
   .gv-stack-pager {
