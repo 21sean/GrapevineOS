@@ -167,6 +167,18 @@
 
 /* ---------- map markers ---------- */
 
+/* Canvas pins keep native buttons available to screen readers and Tab.
+   Focusing one restores its full HTML controls at the map location. */
+.gv-marker-proxy {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* POI-style dot: category icon inside, label below (like Mapbox's own POIs) */
 /* Blur must resample the moving WebGL canvas beneath every overlay. Keep
    panels readable while navigating without that extra compositing pass. */

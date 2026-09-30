@@ -11,17 +11,49 @@ const { markers, maps, FakeMarker, FakeMap } = vi.hoisted(() => {
   class FakeMap {
     container: HTMLElement
     offset = 0
+    sources = new Map<string, { setData: ReturnType<typeof vi.fn> }>()
+    layers = new Map<string, object>()
+    addImage = vi.fn()
+    updateImage = vi.fn()
+    removeImage = vi.fn()
+    setFilter = vi.fn()
+    queryRenderedFeatures = vi.fn(() => [] as { properties: { key: string } }[])
     listeners = new Map<string, ((event: object) => void)[]>()
     constructor({ container }: { container: HTMLElement }) {
       this.container = container
       maps.push(this)
     }
     addControl() {}
+    setConfigProperty() {}
     on(name: string, callback: (event: object) => void) {
       this.listeners.set(name, [...(this.listeners.get(name) ?? []), callback])
     }
-    fire(name: string) {
-      for (const callback of this.listeners.get(name) ?? []) callback({})
+    off(name: string, callback: (event: object) => void) {
+      this.listeners.set(
+        name,
+        (this.listeners.get(name) ?? []).filter((f) => f !== callback)
+      )
+    }
+    fire(name: string, event: object = {}) {
+      for (const callback of this.listeners.get(name) ?? []) callback(event)
+    }
+    isStyleLoaded() {
+      return true
+    }
+    isMoving() {
+      return false
+    }
+    getCanvas() {
+      return this.container
+    }
+    getSource(id: string) {
+      return this.sources.get(id)
+    }
+    addSource(id: string) {
+      this.sources.set(id, { setData: vi.fn() })
+    }
+    addLayer(layer: { id: string }) {
+      this.layers.set(layer.id, layer)
     }
     getContainer() {
       return this.container
@@ -55,6 +87,7 @@ const { markers, maps, FakeMarker, FakeMap } = vi.hoisted(() => {
       return this
     })
     getLngLat = () => this.position
+    getElement = () => this.element
     addTo = (map: { container: HTMLElement }) => {
       map.container.append(this.element)
       return this
@@ -125,9 +158,120 @@ afterEach(() => {
   act(() => root.unmount())
   container.remove()
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
 
 describe("map marker updates", () => {
+  async function enableCanvas() {
+    act(() => root.unmount())
+    vi.stubGlobal(
+      "Image",
+      class {
+        src = ""
+        decode = () => Promise.resolve()
+      }
+    )
+    const ctx = {
+      scale: vi.fn(),
+      beginPath: vi.fn(),
+      arc: vi.fn(),
+      fill: vi.fn(),
+      stroke: vi.fn(),
+      drawImage: vi.fn(),
+      roundRect: vi.fn(),
+      fillText: vi.fn(),
+      measureText: (text: string) => ({ width: text.length * 6 }),
+      getImageData: () => ({
+        width: 128,
+        height: 96,
+        data: new Uint8ClampedArray(128 * 96 * 4),
+      }),
+    }
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
+      ctx as unknown as CanvasRenderingContext2D
+    )
+    root = createRoot(container)
+    await act(async () => {
+      root.render(createElement(EventMap))
+    })
+    return maps.at(-1)!
+  }
+
+  it("renders ordinary pins in the canvas and restores HTML on keyboard focus", async () => {
+    const map = await enableCanvas()
+    expect(map.layers.has("gv-event-pins")).toBe(true)
+    const proxies = container.querySelectorAll(".gv-marker-proxy")
+    expect(proxies).toHaveLength(2)
+    const trigger =
+      proxies[0].querySelector<HTMLButtonElement>(".gv-marker-trigger")!
+    act(() => trigger.focus())
+    expect(document.activeElement).toBe(trigger)
+    expect(trigger.closest(".gv-marker-proxy")).toBeNull()
+    expect(
+      container.querySelectorAll(".gv-marker-root:not(.gv-marker-proxy)")
+    ).toHaveLength(1)
+    await act(async () => trigger.blur())
+    expect(container.querySelectorAll(".gv-marker-proxy")).toHaveLength(2)
+    // Ordinary navigation does not rebuild images or change layer filters.
+    map.addImage.mockClear()
+    map.updateImage.mockClear()
+    map.setFilter.mockClear()
+    map.fire("moveend")
+    expect(map.addImage).not.toHaveBeenCalled()
+    expect(map.updateImage).not.toHaveBeenCalled()
+    expect(map.setFilter).not.toHaveBeenCalled()
+  })
+
+  it("keeps a hovered pin visible when the pointer crosses from canvas to its controls", async () => {
+    const map = await enableCanvas()
+    const trigger =
+      container.querySelector<HTMLButtonElement>(".gv-marker-trigger")!
+    map.queryRenderedFeatures.mockReturnValue([
+      { properties: { key: "-117.1600,32.7200" } },
+    ])
+    map.fire("mousemove", {
+      point: { x: 0, y: -13 },
+      originalEvent: { target: map.container },
+    })
+    expect(trigger.closest(".gv-marker-proxy")).toBeNull()
+    map.fire("mouseout", { originalEvent: { relatedTarget: trigger } })
+    expect(trigger.closest(".gv-marker-proxy")).toBeNull()
+    map.fire("mouseout", { originalEvent: { relatedTarget: document.body } })
+    expect(trigger.closest(".gv-marker-proxy")).not.toBeNull()
+  })
+
+  it("selects canvas pins, pages their faces, and recovers after a style reload", async () => {
+    act(() => useGrapevine.setState({ events: [event("a"), event("b")] }))
+    const map = await enableCanvas()
+    const key = "-117.1600,32.7200"
+    const source = map.getSource("gv-event-locations")!
+    expect(source.setData.mock.lastCall?.[0].features).toHaveLength(1)
+    act(() =>
+      container
+        .querySelector<HTMLButtonElement>(
+          '[aria-label="Next event at this spot"]'
+        )!
+        .click()
+    )
+    expect(
+      container.querySelector(".gv-marker-trigger")?.getAttribute("aria-label")
+    ).toContain("Jazz b")
+    map.queryRenderedFeatures.mockReturnValue([{ properties: { key } }])
+    act(() => map.fire("click", { point: { x: 0, y: 0 } }))
+    expect(useGrapevine.getState().selectedId).toBe("b")
+    expect(
+      container.querySelectorAll(".gv-marker-root:not(.gv-marker-proxy)")
+    ).toHaveLength(1)
+    // A new style discards the application's sources, layers, and sprites.
+    map.sources.clear()
+    map.layers.clear()
+    map.fire("style.load")
+    expect(map.layers.has("gv-event-pins")).toBe(true)
+    expect(
+      map.getSource("gv-event-locations")!.setData.mock.lastCall?.[0].features
+    ).toHaveLength(1)
+    expect(map.addImage.mock.calls.length).toBe(4)
+  })
   it("detaches offscreen pins and restores their pager state when they return", () => {
     act(() => useGrapevine.setState({ events: [event("a"), event("b")] }))
     const marker = markers[0]

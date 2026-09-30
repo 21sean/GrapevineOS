@@ -20,6 +20,11 @@ import {
   type CityEvent,
 } from "@/lib/types"
 import { BASEMAP_LAYERS } from "@/lib/mapLayers"
+import {
+  EventPinLayer,
+  EVENT_PIN_LAYER,
+  type PinSnapshot,
+} from "./EventPinLayer"
 
 const MAPBOX_TOKEN =
   (import.meta.env.VITE_MAPBOX_TOKEN as string | undefined) ?? ""
@@ -115,6 +120,7 @@ function locKey(e: CityEvent): string {
 interface Stack {
   marker: mapboxgl.Marker
   attached: boolean
+  html: boolean
   el: HTMLDivElement
   triggerEl: HTMLButtonElement
   iconEl: HTMLSpanElement
@@ -139,28 +145,83 @@ function setText(el: HTMLElement, value: string) {
 // Detached markers keep their pager state, but Mapbox no longer projects them
 // or checks their occlusion on every frame. A screen-space buffer lets pins
 // enter smoothly during a drag, including when the map is pitched or rotated.
-function syncViewportMarkers(map: mapboxgl.Map, stacks: Map<string, Stack>) {
+function syncViewportMarkers(
+  map: mapboxgl.Map,
+  stacks: Map<string, Stack>,
+  pins?: EventPinLayer | null,
+  hoveredKey?: string | null
+) {
   const container = map.getContainer()
+  const width = container.clientWidth
+  const height = container.clientHeight
+  const focused = document.activeElement
   const padding = 200
-  for (const stack of stacks.values()) {
+  const htmlKeys: string[] = []
+  // Read viewport geometry before attaching/removing DOM, avoiding forced
+  // layout between each pair of pins crossing the viewport boundary.
+  const changes = [...stacks].map(([key, stack]) => {
     const point = map.project(stack.marker.getLngLat())
     const visible =
       (point.x >= -padding &&
-        point.x <= container.clientWidth + padding &&
+        point.x <= width + padding &&
         point.y >= -padding &&
-        point.y <= container.clientHeight + padding) ||
-      stack.el.contains(document.activeElement)
-    if (visible === stack.attached) continue
-    if (visible) stack.marker.addTo(map)
-    else stack.marker.remove()
+        point.y <= height + padding) ||
+      stack.el.contains(focused)
+    const html =
+      visible &&
+      (!pins?.ready ||
+        key === hoveredKey ||
+        stack.el.dataset.selected === "true" ||
+        stack.el.contains(focused))
+    if (html) htmlKeys.push(key)
+    return { stack, visible, html }
+  })
+  for (const { stack, visible, html } of changes) {
+    if (visible === stack.attached && html === stack.html) continue
+    const root = stack.marker.getElement()
+    if (stack.html) stack.marker.remove()
+    else root.remove()
     stack.attached = visible
+    stack.html = html
+    root.classList.toggle("gv-marker-proxy", !html)
+    if (html) stack.marker.addTo(map)
+    else if (visible) container.append(root)
+    // Reparenting a proxy to Mapbox's marker container may drop focus.
+    if (
+      focused instanceof HTMLElement &&
+      stack.el.contains(focused) &&
+      document.activeElement !== focused
+    )
+      focused.focus({ preventScroll: true })
   }
+  pins?.setHtmlKeys(htmlKeys)
+}
+
+function pinSnapshots(stacks: Map<string, Stack>): PinSnapshot[] {
+  return [...stacks].map(([key, stack]) => {
+    const position = stack.marker.getLngLat()
+    return {
+      key,
+      coordinates: [position.lng, position.lat],
+      category: stack.el.dataset.category!,
+      color: stack.el.dataset.color!,
+      count: stack.countEl.textContent ?? "",
+      main: stack.labelMainEl.textContent ?? "",
+      sub: stack.labelSubEl.textContent ?? "",
+      booked: stack.el.dataset.booked === "true",
+      live: stack.el.dataset.live === "true",
+      agent: stack.el.dataset.agent === "true",
+      dimmed: stack.el.dataset.dimmed === "true",
+    }
+  })
 }
 
 function LiveMap() {
   const mapRef = useRef<mapboxgl.Map | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const stacksRef = useRef(new Map<string, Stack>())
+  const pinLayerRef = useRef<EventPinLayer | null>(null)
+  const hoveredKeyRef = useRef<string | null>(null)
   const userMarkerRef = useRef<mapboxgl.Marker | null>(null)
   const styleReadyRef = useRef(false)
   // Once the user (or the tour) moves the camera, a late settings fetch must
@@ -245,17 +306,79 @@ function LiveMap() {
       new mapboxgl.NavigationControl({ visualizePitch: true }),
       "bottom-right"
     )
+    const syncPins = () =>
+      syncViewportMarkers(
+        map,
+        stacksRef.current,
+        pinLayerRef.current,
+        hoveredKeyRef.current
+      )
+    pinLayerRef.current = new EventPinLayer(map, ICON_SVG, syncPins)
+
+    const hovered = (key: string | null) => {
+      if (key === hoveredKeyRef.current) return
+      hoveredKeyRef.current = key
+      syncPins()
+      map.getCanvas().style.cursor = key ? "pointer" : ""
+    }
+    const hitPin = (point: mapboxgl.PointLike) => {
+      const [x, y] = Array.isArray(point) ? point : [point.x, point.y]
+      const scale = markerScaleForZoom(map.getZoom())
+      let closest: string | null = null
+      let distance = window.matchMedia("(pointer: coarse)").matches ? 22 : 20
+      // Sprites include transparent padding for shadows. In a dense venue
+      // cluster, choose the closest actual dot instead of that padding.
+      for (const feature of map.queryRenderedFeatures(point, {
+        layers: [EVENT_PIN_LAYER],
+      })) {
+        const key = feature.properties?.key as string
+        const stack = stacksRef.current.get(key)
+        if (!stack) continue
+        const position = map.project(stack.marker.getLngLat())
+        const delta = Math.hypot(
+          position.x - x,
+          position.y - MARKER_LIFT * scale - y
+        )
+        if (delta < distance) {
+          closest = key
+          distance = delta
+        }
+      }
+      return closest
+    }
+    map.on("mousemove", (e) => {
+      if (!pinLayerRef.current?.ready || map.isMoving()) return
+      const target = e.originalEvent.target
+      const root =
+        target instanceof Element
+          ? target.closest<HTMLElement>(".gv-marker-root")
+          : null
+      const key = root?.dataset.stackKey ?? hitPin(e.point)
+      hovered(typeof key === "string" ? key : null)
+    })
+    map.on("mouseout", (e) => {
+      const next = e.originalEvent.relatedTarget
+      if (next instanceof Node && map.getContainer().contains(next)) return
+      hovered(null)
+    })
+    map.on("click", (e) => {
+      if (!pinLayerRef.current?.ready) return
+      const key = hitPin(e.point)
+      const stack = key ? stacksRef.current.get(key) : undefined
+      if (stack) select(stack.events[stack.idx].id)
+    })
 
     // originalEvent is only set for user gestures, not programmatic moves
     map.on("movestart", (e) => {
       if (e.originalEvent) cameraTouchedRef.current = true
       document.documentElement.classList.add("gv-map-moving")
+      hovered(null)
     })
     // Reconcile at most ten times a second, outside React. Only attached
     // markers incur Mapbox's per-frame position and occlusion work.
     let lastViewportSync = 0
     const syncViewport = () => {
-      syncViewportMarkers(map, stacksRef.current)
+      syncPins()
       lastViewportSync = performance.now()
     }
     map.on("move", () => {
@@ -315,13 +438,15 @@ function LiveMap() {
     return () => {
       document.documentElement.classList.remove("gv-map-moving")
       styleReadyRef.current = false
+      pinLayerRef.current?.dispose()
+      pinLayerRef.current = null
       stacks.forEach(({ marker }) => marker.remove())
       stacks.clear()
       userMarkerRef.current = null
       map.remove()
       mapRef.current = null
     }
-  }, [])
+  }, [select])
 
   // --- keep basemap lighting in sync as the hour (or city timezone) changes ---
   useEffect(() => {
@@ -424,6 +549,7 @@ function LiveMap() {
         // on each animation frame.
         const root = document.createElement("div")
         root.className = "gv-marker-root"
+        root.dataset.stackKey = key
         const el = document.createElement("div")
         el.className = "gv-marker"
         // Keep the event button and pager buttons as siblings. A native
@@ -475,6 +601,7 @@ function LiveMap() {
         const created: Stack = {
           marker,
           attached: false,
+          html: false,
           el,
           triggerEl,
           iconEl,
@@ -503,6 +630,7 @@ function LiveMap() {
             ctx.searchIds,
             ctx.bookedLines
           )
+          pinLayerRef.current?.update(pinSnapshots(stacksRef.current))
           // Sheet open means the user is inspecting this venue; retarget it.
           // Sheet closed, paging is a silent preview: no camera move, no popup.
           const st = useGrapevine.getState()
@@ -516,6 +644,26 @@ function LiveMap() {
         pager.addEventListener("click", (ev) => ev.stopPropagation())
         prev.addEventListener("click", () => cycle(-1))
         next.addEventListener("click", () => cycle(1))
+        root.addEventListener("focusin", () => {
+          syncViewportMarkers(
+            map,
+            stacksRef.current,
+            pinLayerRef.current,
+            hoveredKeyRef.current
+          )
+        })
+        root.addEventListener("focusout", () => {
+          // Wait for focus to reach the next button before reconciling.
+          queueMicrotask(() => {
+            if (mapRef.current === map)
+              syncViewportMarkers(
+                map,
+                stacksRef.current,
+                pinLayerRef.current,
+                hoveredKeyRef.current
+              )
+          })
+        })
 
         stack = created
         stacksRef.current.set(key, stack)
@@ -550,7 +698,13 @@ function LiveMap() {
       }
       decorateStack(stack, liveIds, activeId, agentIds, searchIds, bookedLines)
     }
-    syncViewportMarkers(map, stacksRef.current)
+    pinLayerRef.current?.update(pinSnapshots(stacksRef.current))
+    syncViewportMarkers(
+      map,
+      stacksRef.current,
+      pinLayerRef.current,
+      hoveredKeyRef.current
+    )
   }, [
     groups,
     liveIds,
