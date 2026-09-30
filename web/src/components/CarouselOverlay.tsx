@@ -38,6 +38,7 @@ export function CarouselOverlay() {
   const setCarouselMin = useGrapevine((s) => s.setCarouselMin)
   const setCarouselWidth = useGrapevine((s) => s.setCarouselWidth)
   const railWidth = useGrapevine((s) => s.railWidth)
+  const desktopRail = `min(${railWidth}px, calc(100vw - 332px))`
 
   const isMobile = useIsMobile()
   const dockState = useGrapevine((s) => s.dockState)
@@ -130,10 +131,9 @@ export function CarouselOverlay() {
   const startResize = (e: React.PointerEvent) => {
     e.preventDefault()
     const onMove = (ev: PointerEvent) => {
-      const half = Math.abs(
-        ev.clientX - (window.innerWidth + railWidth + 32) / 2
-      )
-      const max = Math.min(CAROUSEL_MAX_W, window.innerWidth - railWidth - 64)
+      const rail = Math.min(railWidth, window.innerWidth - 332)
+      const half = Math.abs(ev.clientX - (window.innerWidth + rail + 32) / 2)
+      const max = Math.min(CAROUSEL_MAX_W, window.innerWidth - rail - 64)
       setCarouselWidth(Math.min(max, Math.max(CAROUSEL_MIN_W, half * 2)))
     }
     const onUp = () => {
@@ -174,7 +174,7 @@ export function CarouselOverlay() {
         style={
           isMobile
             ? { bottom: MOBILE_BOTTOM }
-            : { left: `calc((100% + ${railWidth + 32}px) / 2)` }
+            : { left: `calc((100% + ${desktopRail} + 32px) / 2)` }
         }
         className={cn(
           "glass absolute left-1/2 z-10 -translate-x-1/2 rounded-full",
@@ -204,8 +204,8 @@ export function CarouselOverlay() {
         isMobile
           ? { bottom: MOBILE_BOTTOM }
           : {
-              left: `calc((100% + ${railWidth + 32}px) / 2)`,
-              width: `min(${carouselWidth}px, calc(100vw - ${railWidth + 64}px))`,
+              left: `calc((100% + ${desktopRail} + 32px) / 2)`,
+              width: `min(${carouselWidth}px, calc(100vw - ${desktopRail} - 64px))`,
             }
       }
       onPointerDown={onSwipeStart}

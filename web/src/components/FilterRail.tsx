@@ -106,6 +106,7 @@ export function FilterRail() {
     const onMove = (ev: PointerEvent) => {
       const next = Math.min(
         RAIL_MAX,
+        window.innerWidth - 332,
         Math.max(RAIL_MIN, startW + ev.clientX - startX)
       )
       setRailWidth(next)
@@ -126,7 +127,7 @@ export function FilterRail() {
 
   return (
     <aside
-      style={{ width: railWidth }}
+      style={{ width: railWidth, maxWidth: "calc(100vw - 332px)" }}
       className="glass absolute top-20 bottom-4 left-4 z-10 flex flex-col overflow-hidden rounded-xl"
     >
       <div className="flex flex-col gap-3 p-4 pb-3">
@@ -168,7 +169,7 @@ export function FilterRail() {
           </button>
 
           {filtersOpen && (
-            <div className="animate-in duration-150 fade-in-0 slide-in-from-top-1">
+            <div className="max-h-[35dvh] animate-in overflow-y-auto overscroll-contain pr-1 duration-150 fade-in-0 slide-in-from-top-1">
               <BuzzAndCategoryFilters />
             </div>
           )}
@@ -329,6 +330,7 @@ export function BuzzAndCategoryFilters() {
           Buzz
         </span>
         <Slider
+          aria-label="Minimum event rating"
           value={[filters.minRating]}
           min={0}
           max={5}
