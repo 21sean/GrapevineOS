@@ -50,17 +50,17 @@ export function TopBar() {
     // Safe-area maxes keep the pills clear of the notch and rounded corners
     // when the app runs full-bleed (viewport-fit=cover / add-to-home-screen).
     <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 pt-[max(env(safe-area-inset-top),0.75rem)] pr-[max(env(safe-area-inset-right),0.75rem)] pl-[max(env(safe-area-inset-left),0.75rem)] sm:gap-4 sm:pt-4 sm:pr-4 sm:pl-4">
-      <div className="glass pointer-events-auto flex h-11 items-center gap-2.5 rounded-full px-3.5 sm:gap-3 sm:px-4">
+      <div className="glass pointer-events-auto flex h-11 shrink-0 items-center gap-2.5 rounded-full px-3 max-[360px]:px-2 sm:gap-3 sm:px-4">
         <span className="font-heading text-base font-semibold tracking-tight italic sm:text-lg">
           Grapevine
         </span>
         {/* the city is ambient context — the live count earns the phone space */}
-        <Separator orientation="vertical" className="!h-4 max-sm:hidden" />
-        <span className="text-sm text-muted-foreground max-sm:hidden">
+        <Separator orientation="vertical" className="!h-4 max-lg:hidden" />
+        <span className="text-sm text-muted-foreground max-lg:hidden">
           {city}
         </span>
-        <Separator orientation="vertical" className="!h-4" />
-        <span className="inline-flex items-center gap-1.5 font-mono text-xs whitespace-nowrap">
+        <Separator orientation="vertical" className="!h-4 max-[480px]:hidden" />
+        <span className="inline-flex items-center gap-1.5 font-mono text-xs whitespace-nowrap max-[480px]:hidden">
           <span
             className={cn(
               "size-2 rounded-full",
@@ -75,7 +75,7 @@ export function TopBar() {
       <button
         type="button"
         onClick={() => setAskOpen(true)}
-        className="glass pointer-events-auto hidden h-11 max-w-md min-w-0 flex-1 items-center gap-2.5 rounded-full px-4 text-sm text-muted-foreground transition-colors hover:text-foreground sm:flex"
+        className="glass pointer-events-auto hidden h-11 max-w-md min-w-0 flex-1 items-center gap-2.5 rounded-full px-4 text-sm text-muted-foreground transition-colors hover:text-foreground md:flex"
       >
         <SparklesIcon className="size-4 shrink-0 text-wine" />
         <span className="truncate">Ask Grapevine</span>
@@ -84,11 +84,11 @@ export function TopBar() {
         </kbd>
       </button>
 
-      <div className="glass pointer-events-auto flex h-11 items-center gap-1 rounded-full px-2">
+      <div className="glass pointer-events-auto flex h-11 shrink-0 items-center gap-1 rounded-full px-2 max-[360px]:gap-0 max-[360px]:px-1">
         <Button
           variant="ghost"
           size="icon-sm"
-          className="rounded-full sm:hidden"
+          className="rounded-full md:hidden"
           aria-label="Ask Grapevine"
           onClick={() => setAskOpen(true)}
         >
@@ -177,11 +177,12 @@ export function TopBar() {
           <Button
             variant="ghost"
             size="sm"
-            className="rounded-full"
+            className="rounded-full max-sm:size-8 max-sm:p-0"
+            aria-label="Sign in"
             onClick={() => setSignInOpen(true)}
           >
             <LogInIcon data-icon="inline-start" />
-            Sign in
+            <span className="max-sm:hidden">Sign in</span>
           </Button>
         )}
       </div>
