@@ -82,15 +82,16 @@ export function App() {
     // refresh token now and vault it server-side.
     if (params.get("calendar") === "oauth" && supabase) {
       void (async () => {
-        const { data } = await supabase.auth.getSession()
-        const refreshToken = data.session?.provider_refresh_token
-        if (!refreshToken) {
-          toast.error(
-            "Google Calendar didn't connect. Try again from your account."
-          )
-          return
-        }
         try {
+          const { data, error } = await supabase.auth.getSession()
+          if (error) throw error
+          const refreshToken = data.session?.provider_refresh_token
+          if (!refreshToken) {
+            toast.error(
+              "Google Calendar didn't connect. Try again from your account."
+            )
+            return
+          }
           const status = await api.calendarConnect(refreshToken)
           useGrapevine.getState().setCalendar(status)
           toast.success("Google Calendar connected", {
@@ -116,7 +117,14 @@ export function App() {
           session &&
           current?.id !== session.user.id
         ) {
-          void load()
+          // Run outside Supabase's auth callback before requesting its session.
+          setTimeout(() => {
+            void load().catch(() => {
+              toast.error("Your account couldn't refresh", {
+                description: "Check your connection and reload to try again.",
+              })
+            })
+          }, 0)
         }
         if (event === "SIGNED_OUT" && current) {
           useGrapevine.setState({ user: null, calendar: null })
@@ -225,9 +233,7 @@ export function App() {
             {loadError ? (
               <>
                 <p className="max-w-sm text-center text-sm text-muted-foreground">
-                  The API isn't answering. Start it with{" "}
-                  <span className="font-mono text-foreground">npm run dev</span>{" "}
-                  at the project root.
+                  Events couldn't load. Check your connection and try again.
                 </p>
                 <Button
                   variant="outline"
@@ -241,7 +247,7 @@ export function App() {
                 </Button>
               </>
             ) : (
-              <Spinner className="size-5" />
+              <Spinner className="size-5" aria-label="Loading events" />
             )}
           </div>
         )}
