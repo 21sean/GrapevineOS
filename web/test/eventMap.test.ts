@@ -202,6 +202,11 @@ describe("map marker updates", () => {
     expect(map.layers.has("gv-event-pins")).toBe(true)
     const proxies = container.querySelectorAll(".gv-marker-proxy")
     expect(proxies).toHaveLength(2)
+    const data = map.getSource("gv-event-locations")!.setData
+    data.mockClear()
+    act(() => useGrapevine.getState().select("a"))
+    act(() => useGrapevine.getState().setDetailOpen(false))
+    expect(data).not.toHaveBeenCalled()
     const trigger =
       proxies[0].querySelector<HTMLButtonElement>(".gv-marker-trigger")!
     act(() => trigger.focus())
