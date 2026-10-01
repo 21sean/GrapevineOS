@@ -33,6 +33,9 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+        env:
+          # Offline checks use the bundled CPU runtime, so no CUDA download is needed.
+          ONNXRUNTIME_NODE_INSTALL: skip
       - run: npm run typecheck
       - run: npm run build
       - run: npm run lint
