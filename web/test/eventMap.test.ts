@@ -245,6 +245,18 @@ describe("map marker updates", () => {
     expect(trigger.closest(".gv-marker-proxy")).not.toBeNull()
   })
 
+  it("shares identical pin artwork without removing it while another venue uses it", async () => {
+    const map = await enableCanvas()
+    const features =
+      map.getSource("gv-event-locations")!.setData.mock.lastCall?.[0].features
+    expect(features[0].properties.dot).toBe(features[1].properties.dot)
+    expect(
+      map.addImage.mock.calls.filter(([id]) => id.startsWith("gv-dot-"))
+    ).toHaveLength(1)
+    act(() => useGrapevine.setState({ events: [event("b", { lng: -117.2 })] }))
+    expect(map.removeImage).not.toHaveBeenCalledWith(features[0].properties.dot)
+  })
+
   it("selects canvas pins, pages their faces, and recovers after a style reload", async () => {
     act(() => useGrapevine.setState({ events: [event("a"), event("b")] }))
     const map = await enableCanvas()
