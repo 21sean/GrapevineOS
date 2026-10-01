@@ -137,6 +137,7 @@ export class EventPinLayer {
   private htmlKeys: string[] = []
   private htmlSignature = ""
   private installed = false
+  private dataSignature = ""
   private map: MapboxMap
   private onReady: () => void
 
@@ -170,6 +171,7 @@ export class EventPinLayer {
     this.installed = false
     this.ready = false
     this.sprites.clear()
+    this.dataSignature = ""
     this.map.addSource(SOURCE, {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
@@ -224,6 +226,8 @@ export class EventPinLayer {
   update(pins: PinSnapshot[]) {
     this.pins = pins
     if (!this.installed) return
+    const signature = JSON.stringify(pins)
+    if (signature === this.dataSignature) return
     const wanted = new Set<string>()
     const data: FeatureCollection<Point> = {
       type: "FeatureCollection",
@@ -263,6 +267,7 @@ export class EventPinLayer {
       }),
     }
     ;(this.map.getSource(SOURCE) as GeoJSONSource).setData(data)
+    this.dataSignature = signature
     for (const id of this.sprites.keys()) {
       if (wanted.has(id)) continue
       this.map.removeImage(id)
