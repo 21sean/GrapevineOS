@@ -6,7 +6,7 @@ is built, see the [README](../README.md); for the agent's design, see
 
 ## Quick start
 
-The README's "Ten minutes to ⌘K" is the short version. In full:
+The README's [quick start](../README.md#quick-start) is the short version. In full:
 
 ```bash
 npm install          # one install for the server, the web app and the worker

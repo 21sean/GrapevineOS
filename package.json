@@ -1,7 +1,7 @@
 {
   "name": "grapevine",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.6.0",
   "description": "Grapevine: a real-time map of the local events actually worth going to, with an agent built in",
   "license": "Apache-2.0",
   "engines": {
