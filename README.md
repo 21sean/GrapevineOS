@@ -6,7 +6,7 @@
 [![Release](https://img.shields.io/github/v/release/21sean/GrapevineOS)](https://github.com/21sean/GrapevineOS/releases/latest)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-0b3b2e)](LICENSE)
 
-[Screenshots](#screenshots) · [Quick start](#quick-start) · [Documentation](#documentation) · [Releases](https://github.com/21sean/GrapevineOS/releases)
+[Screenshots](#screenshots) · [Quick start](#quick-start) · [Diagrams](#how-it-works) · [Documentation](#documentation) · [Releases](https://github.com/21sean/GrapevineOS/releases)
 
 Grapevine turns local newsletters and verified web discoveries into a map of
 San Diego events. Browse by date, category, and drive time, learn what is on
@@ -99,6 +99,60 @@ A fresh database starts empty. Paste a newsletter into **Admin → Ingest**, or
 use **Admin → Discover** to review and add verified events.
 
 Press **Ctrl K** on Windows and Linux, or **⌘K** on macOS, to open Ask Grapevine.
+
+## How it works
+
+### From newsletters to the map
+
+Newsletters become structured events, enriched with local buzz ratings and
+venue coordinates, then appear on the 3D map. Local models handle extraction;
+Supabase and Mapbox provide hosted storage and location services.
+
+<p align="center">
+  <img src="docs/images/how-it-works.png" width="900" alt="Grapevine overview: newsletter intake, Supabase storage, local model enrichment, and the React and Mapbox 3D map">
+</p>
+
+### Newsletter delivery
+
+The email worker parses incoming newsletters and stores them once. Delivery
+recovery keeps failed inserts available for retry.
+
+<p align="center">
+  <img src="docs/images/email-worker.png" width="900" alt="Newsletter delivery through Cloudflare Email Routing, parsing, Supabase storage, and a dead-letter recovery path">
+</p>
+
+### Ask Grapevine
+
+The agent screens messages, recalls conversation context, calls validated
+tools, and keeps durable thread memory. Actions that write arrive as proposals
+for you to confirm.
+
+<p align="center">
+  <img src="docs/images/ask-grapevine.png" width="900" alt="Ask Grapevine LangGraph architecture with input and content rails, recall, agent and tool nodes, a finalize node, and durable memory">
+</p>
+
+### Guardrails
+
+Input and fetched content pass through classifier checks. A separate output
+filter runs on the streamed response. The
+[technical guide](docs/product-guide.md#guardrails) explains the checks and
+their failure behavior.
+
+<p align="center">
+  <img src="docs/images/guardrails.png" width="900" alt="Input, content, and output guardrails around the Grapevine agent, including blocked input and withheld tool results">
+</p>
+
+### Interest learning
+
+Interests and event reactions adjust tag affinities and personal scores. The
+same ranking signals feed the map, event list, weekly view, and notifications.
+
+<p align="center">
+  <img src="docs/images/interest-learning.png" width="900" alt="Interest learning feedback loop from preferences and event reactions to tag affinity, personal scores, and ranked event surfaces">
+</p>
+
+See the [product guide](docs/product-guide.md) and
+[agent architecture](docs/agent-architecture.md) for the complete walkthrough.
 
 ## Documentation
 
