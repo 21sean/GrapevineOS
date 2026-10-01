@@ -125,6 +125,14 @@ export function CarouselOverlay() {
     }
   }
 
+  const onSwipeCancel = () => {
+    swipe.current = null
+    if (cardRef.current) {
+      cardRef.current.style.transitionDuration = ""
+      cardRef.current.style.transform = ""
+    }
+  }
+
   // Drag the right edge to resize. The card is centered, so its width is twice
   // the pointer's distance from the viewport midline; the handle tracks the
   // cursor while both edges grow symmetrically.
@@ -211,7 +219,7 @@ export function CarouselOverlay() {
       onPointerDown={onSwipeStart}
       onPointerMove={onSwipeMove}
       onPointerUp={onSwipeEnd}
-      onPointerCancel={onSwipeEnd}
+      onPointerCancel={onSwipeCancel}
       className={cn(
         "glass absolute z-10 overflow-hidden rounded-xl",
         isMobile
