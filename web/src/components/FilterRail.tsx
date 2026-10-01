@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { PanelResizeHandle } from "@/components/PanelResizeHandle"
 import {
   ArrowUpDownIcon,
   CalendarRangeIcon,
@@ -223,16 +224,17 @@ export function FilterRail() {
       </ScrollArea>
 
       {/* drag the right edge to resize the panel */}
-      <div
+      <PanelResizeHandle
         onPointerDown={startResize}
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize event list"
-        title="Drag to resize"
+        label="Resize event list"
+        value={railWidth}
+        min={RAIL_MIN}
+        max={Math.min(RAIL_MAX, window.innerWidth - 332)}
+        onChange={setRailWidth}
         className="group/resize absolute inset-y-0 right-0 z-30 flex w-2 cursor-ew-resize touch-none items-center justify-end"
       >
         <span className="h-10 w-1 rounded-full bg-border/80 transition-colors group-hover/resize:bg-ring" />
-      </div>
+      </PanelResizeHandle>
     </aside>
   )
 }
