@@ -191,6 +191,10 @@ export function MobileDock() {
   }
 
   const filterCount = activeFilterCount(filters)
+  const cancelDrag = () => {
+    drag.current = null
+    snapTo(dockState)
+  }
 
   return (
     <aside
@@ -210,7 +214,7 @@ export function MobileDock() {
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
-        onPointerCancel={endDrag}
+        onPointerCancel={cancelDrag}
         className="shrink-0 select-none"
       >
         <div className="flex touch-none justify-center pt-2 pb-1">
@@ -281,7 +285,7 @@ export function MobileDock() {
       </div>
 
       {filtersOpen && (
-        <div className="animate-in px-4 pb-3 duration-150 fade-in-0 slide-in-from-top-1">
+        <div className="max-h-[35dvh] shrink-0 animate-in overflow-y-auto overscroll-contain px-4 pb-3 duration-150 fade-in-0 slide-in-from-top-1">
           <BuzzAndCategoryFilters />
         </div>
       )}
