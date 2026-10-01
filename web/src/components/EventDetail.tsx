@@ -106,7 +106,7 @@ function ReactionRow({ eventId }: { eventId: string }) {
             aria-pressed={reaction === value}
             onClick={() => pick(value)}
             className={cn(
-              "flex-1",
+              "h-auto min-w-0 flex-1 flex-col gap-1 px-2 py-2 text-xs whitespace-normal sm:h-8 sm:flex-row sm:text-sm",
               reaction === value &&
                 (value === "not_for_me"
                   ? "border-destructive/40 text-destructive"
@@ -680,10 +680,10 @@ export function EventDetail() {
             : { width: detailWidth, maxWidth: "min(40rem, calc(100vw - 2rem))" }
         }
         className={cn(
-          "glass gap-0 overflow-hidden bg-background/70",
+          "glass gap-0 overflow-hidden",
           isMobile
-            ? "max-h-[86svh] rounded-t-2xl border-b-0 pb-[env(safe-area-inset-bottom)]"
-            : "rounded-xl data-[side=right]:inset-y-3 data-[side=right]:right-3 data-[side=right]:h-auto data-[side=right]:border"
+            ? "max-h-[86svh] rounded-t-2xl border-b-0 bg-background/95 pb-[env(safe-area-inset-bottom)]"
+            : "rounded-xl bg-background/70 data-[side=right]:inset-y-3 data-[side=right]:right-3 data-[side=right]:h-auto data-[side=right]:border"
         )}
       >
         {/* category wash: the panel is lit by the same hue as its map marker */}
