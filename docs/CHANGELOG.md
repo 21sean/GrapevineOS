@@ -1,8 +1,41 @@
 # Changelog
 
-Cut from the commit history. Dates are commit dates; there are no version
-tags yet, so entries are grouped by the day or week the work landed. Newest
-first.
+Release notes and earlier development history, newest first. Tagged releases
+are listed on [GitHub](https://github.com/21sean/GrapevineOS/releases).
+
+## v0.6.0: smoother maps and a clearer interface (2026-09-30)
+
+- Render ordinary event annotations in the Mapbox canvas and reserve detailed
+  HTML markers for inspection. Share matching pin sprites and skip unchanged
+  source updates while preserving 3D buildings and their display distance.
+- Reuse event timing calculations and concurrent venue ETA requests, bound the
+  ETA cache, and skip unnecessary rendering of offscreen event cards.
+- Keep navigation and reaction controls accessible on narrow screens. Position
+  the event tour beside the desktop rail, keep expanded filters scrollable,
+  and improve mobile detail readability.
+- Restore the mobile dock and tour after cancelled gestures. Add keyboard
+  resizing for the event list, tour, and detail panels, plus larger map-layer
+  touch targets.
+- Handle account and calendar refresh failures, and provide clearer loading
+  recovery instructions.
+- Restrict monitoring RPCs to the service role, validate fetched addresses
+  against private network targets, and tighten calendar and discovery input
+  validation.
+- Refresh compatible dependencies, including Mapbox GL 3.32.0, update GitHub
+  Actions, and include the production build in CI.
+- Reorganize the README around real UI screenshots, a quick start, and linked
+  documentation. Add a close 3D view of downtown San Diego and community concert
+  screenshots for the phone layout.
+
+Validation: 130 tests, 67 offline evaluation cases, type checks, production
+build, formatting, and contract checks passed. Desktop and mobile browser
+checks found no console errors. The dependency audit reports no vulnerabilities.
+
+Upgrading from v0.5.0: review the tracked migration history and apply pending
+Supabase migrations, including `20260928234500_lock_down_monitor_rpcs.sql`.
+Follow the [setup guide](setup.md) and the
+[migration workflow](../.github/CONTRIBUTING.md#database-migrations) before applying
+changes to an existing database. A fresh clone needs the full schema applied.
 
 ## 2026-09-02 to 2026-09-03: the reference cut
 
