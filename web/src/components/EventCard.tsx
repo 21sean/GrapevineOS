@@ -1,11 +1,11 @@
-import { memo } from "react"
+import { memo, useMemo } from "react"
 import { EyeOffIcon, PinIcon, RepeatIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { StarRating } from "@/components/StarRating"
 import { useGrapevine } from "@/lib/store"
 import { recurrenceSummary } from "@/lib/recurrence"
-import { isLive, timeRange } from "@/lib/time"
+import { eventTimingSelectors } from "@/lib/eventTiming"
 import { CATEGORY_META, type CityEvent } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -23,12 +23,9 @@ export const EventCard = memo(function EventCard({
   const hideEvent = useGrapevine((s) => s.hideEvent)
   const unhideEvent = useGrapevine((s) => s.unhideEvent)
 
-  const live = useGrapevine((s) =>
-    isLive(event, s.now, s.settings?.tz ?? "UTC")
-  )
-  const range = useGrapevine((s) =>
-    timeRange(event, s.settings?.tz ?? "UTC", s.now)
-  )
+  const timing = useMemo(() => eventTimingSelectors(event), [event])
+  const live = useGrapevine(timing.live)
+  const range = useGrapevine(timing.range)
   // Highlight only while the detail is actually open, so closing it clears the
   // card the same moment it clears the map marker.
   const active = useGrapevine((s) => s.detailOpen && s.selectedId === event.id)
@@ -43,6 +40,7 @@ export const EventCard = memo(function EventCard({
     <div
       role="button"
       tabIndex={0}
+      style={{ contentVisibility: "auto", containIntrinsicSize: "auto 116px" }}
       onClick={() => select(event.id)}
       onKeyDown={(e) => {
         if (e.target !== e.currentTarget) return // let the pin button handle its own keys
