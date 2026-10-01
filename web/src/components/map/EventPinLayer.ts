@@ -232,10 +232,7 @@ export class EventPinLayer {
     const data: FeatureCollection<Point> = {
       type: "FeatureCollection",
       features: pins.map((pin) => {
-        const dotId = `gv-dot-${pin.key}`
         const labelId = `gv-label-${pin.key}`
-        wanted.add(dotId)
-        wanted.add(labelId)
         const dotSignature = JSON.stringify([
           pin.category,
           pin.color,
@@ -243,6 +240,10 @@ export class EventPinLayer {
           pin.live,
           pin.agent,
         ])
+        // Reuse identical category/count/status artwork across venues.
+        const dotId = `gv-dot-${encodeURIComponent(dotSignature)}`
+        wanted.add(dotId)
+        wanted.add(labelId)
         const labelSignature = JSON.stringify([
           pin.main,
           pin.sub,
