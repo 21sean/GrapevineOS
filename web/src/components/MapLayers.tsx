@@ -186,7 +186,7 @@ function LayerRow({
   return (
     <label
       className={cn(
-        "flex cursor-pointer items-center justify-between gap-3 rounded-md px-1.5 py-1.5 transition-colors hover:bg-accent/60",
+        "flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-md px-1.5 py-2 transition-colors hover:bg-accent/60",
         !checked && "opacity-60"
       )}
     >
