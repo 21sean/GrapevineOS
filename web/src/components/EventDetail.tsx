@@ -22,6 +22,7 @@ import {
   XIcon,
 } from "lucide-react"
 import { toast } from "sonner"
+import { PanelResizeHandle } from "@/components/PanelResizeHandle"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -737,16 +738,18 @@ export function EventDetail() {
 
         {!isMobile && (
           // drag the left edge to resize the panel
-          <div
+          <PanelResizeHandle
             onPointerDown={startResize}
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize event details"
-            title="Drag to resize"
+            label="Resize event details"
+            value={detailWidth}
+            min={DETAIL_MIN}
+            max={Math.min(DETAIL_MAX, window.innerWidth - 32)}
+            direction={-1}
+            onChange={setDetailWidth}
             className="group/resize absolute inset-y-0 left-0 z-30 flex w-2 cursor-ew-resize touch-none items-center"
           >
             <span className="h-10 w-1 rounded-full bg-border/80 transition-colors group-hover/resize:bg-ring" />
-          </div>
+          </PanelResizeHandle>
         )}
       </SheetContent>
     </Sheet>

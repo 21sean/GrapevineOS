@@ -1,4 +1,5 @@
 import { useRef } from "react"
+import { PanelResizeHandle } from "@/components/PanelResizeHandle"
 import {
   ChevronDownIcon,
   ChevronLeftIcon,
@@ -333,16 +334,22 @@ export function CarouselOverlay() {
       {/* drag the right edge to resize the card (grows from the center);
           pointless under a thumb, so desktop only */}
       {!isMobile && (
-        <div
+        <PanelResizeHandle
           onPointerDown={startResize}
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize panel"
-          title="Drag to resize"
+          label="Resize event tour"
+          value={carouselWidth}
+          min={CAROUSEL_MIN_W}
+          max={Math.min(
+            CAROUSEL_MAX_W,
+            window.innerWidth -
+              Math.min(railWidth, window.innerWidth - 332) -
+              64
+          )}
+          onChange={setCarouselWidth}
           className="group/resize absolute inset-y-0 right-0 z-30 flex w-2 cursor-ew-resize touch-none items-center justify-end"
         >
           <span className="h-8 w-1 rounded-full bg-border/80 transition-colors group-hover/resize:bg-ring" />
-        </div>
+        </PanelResizeHandle>
       )}
     </div>
   )
