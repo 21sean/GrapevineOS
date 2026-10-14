@@ -38,7 +38,6 @@
  * from the panel that shows the distribution.
  */
 import path from "node:path";
-import { env, pipeline } from "@huggingface/transformers";
 import { store } from "../store.js";
 import { recordScan } from "./telemetry.js";
 import type { GuardrailMode, GuardrailSurface } from "../types.js";
@@ -137,13 +136,19 @@ export function classifierReady(): boolean {
 
 function loadClassifier(): Promise<Classifier> {
   if (!clfPromise) {
-    env.cacheDir = path.join(process.cwd(), ".cache", "huggingface");
-    clfPromise = pipeline("text-classification", GUARD_MODEL, {
-      // This port keeps the quantized graph at the repo root, not in onnx/.
-      subfolder: "",
-      model_file_name: "model.quant",
-      dtype: "fp32",
-    }).then((p) => p as unknown as Classifier);
+    // Native ONNX initialization can stall or fail on a local machine. Keep
+    // it out of the API's import graph so event browsing and health checks
+    // can start independently; warmup still reports classifier readiness.
+    clfPromise = import("@huggingface/transformers").then(async ({ env, pipeline }) => {
+      env.cacheDir = path.join(process.cwd(), ".cache", "huggingface");
+      const p = await pipeline("text-classification", GUARD_MODEL, {
+        // This port keeps the quantized graph at the repo root, not in onnx/.
+        subfolder: "",
+        model_file_name: "model.quant",
+        dtype: "fp32",
+      });
+      return p as unknown as Classifier;
+    });
   }
   return clfPromise;
 }

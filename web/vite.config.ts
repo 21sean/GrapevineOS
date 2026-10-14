@@ -4,7 +4,7 @@ import react from "@vitejs/plugin-react"
 import { createLogger, defineConfig, type ProxyOptions } from "vite"
 
 // The API (server/) is a tsx process that loads a heavy dependency graph
-// (transformers, langgraph, jsdom…) before it binds port 8787, and `tsx watch`
+// (langgraph, jsdom…) before it binds port 8787, and Node's watch mode
 // restarts it on every server-file save. Vite serves instantly, so any request
 // proxied to /api or /auth during that boot/restart window hits a closed port
 // and fails with ECONNREFUSED. It's harmless (the next request succeeds once
@@ -17,7 +17,7 @@ logger.error = (msg, opts) => {
   if (code === "ECONNREFUSED" && msg.includes("proxy error")) {
     logger.warnOnce(
       "[vite] api (localhost:8787) isn't up yet — proxied requests fail until " +
-        "it binds. Normal on startup and while `tsx watch` restarts the server."
+        "it binds. Normal on startup and while watch mode restarts the server."
     )
     return
   }

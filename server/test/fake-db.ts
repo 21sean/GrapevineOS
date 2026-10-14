@@ -65,6 +65,16 @@ class FakeQuery implements PromiseLike<{ data: any; count: number | null }> {
     this.filters.push((r) => r[col] < value);
     return this;
   }
+  gt(col: string, value: any) {
+    this.filters.push((r) => r[col] > value);
+    return this;
+  }
+  or(expression: string) {
+    const match = /^ends_at\.gte\.(.+),recurrence\.not\.is\.null$/.exec(expression);
+    if (!match) throw new Error(`Unsupported fake OR filter: ${expression}`);
+    this.filters.push((r) => r.ends_at >= match[1] || r.recurrence != null);
+    return this;
+  }
   in(col: string, values: unknown[]) {
     this.filters.push((r) => values.includes(r[col]));
     return this;

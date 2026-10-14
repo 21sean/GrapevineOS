@@ -95,6 +95,8 @@ npm run dev
 ```
 
 Open **http://localhost:5174**. The API listens on **http://localhost:8787**.
+On Windows, `./scripts/dev-local.ps1` starts both services with a supported
+Node runtime, using Codex's bundled runtime if the Node on your PATH is too old.
 A fresh database starts empty. Paste a newsletter into **Admin → Ingest**, or
 use **Admin → Discover** to review and add verified events.
 
