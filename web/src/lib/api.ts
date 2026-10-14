@@ -49,13 +49,30 @@ async function json<T>(res: Response): Promise<T> {
  */
 async function fetch(input: string, init?: RequestInit): Promise<Response> {
   const token = await accessToken()
-  return globalThis.fetch(input, {
+  const options = {
     ...init,
     headers: {
       ...(init?.headers ?? {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-  })
+  }
+  for (let attempt = 0; ; attempt++) {
+    const response = await globalThis.fetch(input, options)
+    // Vite starts before the API. Retry its explicit boot response so opening
+    // the app immediately does not strand the browser on the error screen.
+    if (
+      (init?.method ?? "GET") !== "GET" ||
+      response.status !== 503 ||
+      attempt >= 8
+    )
+      return response
+    const body = await response
+      .clone()
+      .json()
+      .catch(() => null)
+    if (body?.error !== "api starting") return response
+    await new Promise((resolve) => setTimeout(resolve, 500))
+  }
 }
 
 export const api = {

@@ -12,7 +12,7 @@ import { REACTIONS, type Reaction } from "../types.js";
 export const events = Router();
 
 events.get("/api/events", async (_req, res) => {
-  res.json(await store.events());
+  res.json(await store.events({ upcomingOnly: true }));
 });
 
 events.post("/api/events/:id/rate", requireAdmin, async (req, res) => {

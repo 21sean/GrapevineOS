@@ -255,7 +255,10 @@ export const selectRendered = memoSelector(
     if (!ids?.length && !booked.size) return visible
     const shown = new Set(visible.map((e) => e.id))
     const extras = s.events.filter(
-      (e) => !shown.has(e.id) && (ids?.includes(e.id) || booked.has(e.id))
+      (e) =>
+        !shown.has(e.id) &&
+        !hasEnded(e, s.now, s.settings?.tz) &&
+        (ids?.includes(e.id) || booked.has(e.id))
     )
     return extras.length ? [...visible, ...extras] : visible
   },

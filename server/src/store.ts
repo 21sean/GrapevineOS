@@ -10,7 +10,7 @@ import crypto from "node:crypto";
 import { dayInTz } from "../../shared/time.js";
 import { db } from "./db.js";
 import { backfillPatch, collapseNearDuplicates, nearDuplicate } from "./dedupe.js";
-import { normalizeRRule } from "./recurrence.js";
+import { nextOccurrence, normalizeRRule } from "./recurrence.js";
 import type { Json, Tables, TablesInsert } from "./db-types.js";
 import { DEFAULT_CITY, isGuardrailMode, isLlmProviderId } from "./types.js";
 import type {
@@ -269,13 +269,33 @@ let settingsCache: { at: number; value: Settings } | null = null;
 export const store = {
   // ---------- events ----------
 
-  async events(): Promise<CityEvent[]> {
-    const { data } = await db
-      .from("events")
-      .select("*")
-      .order("starts_at", { ascending: true })
-      .throwOnError();
-    return data.map(rowToEvent);
+  async events(options: { upcomingOnly?: boolean; now?: Date } = {}): Promise<CityEvent[]> {
+    const now = options.now ?? new Date();
+    const rows: Tables<"events">[] = [];
+    let afterId: string | undefined;
+    // PostgREST caps responses at 1,000 rows. Page by the primary key so old
+    // rows cannot silently crowd November/December out of the catalog.
+    for (;;) {
+      let query = db.from("events").select("*").order("id", { ascending: true }).limit(500);
+      if (afterId !== undefined) query = query.gt("id", afterId);
+      if (options.upcomingOnly) {
+        // An old anchor can still have future occurrences. Resolve bounded
+        // series below using the city's timezone, rather than dropping them.
+        query = query.or(`ends_at.gte.${now.toISOString()},recurrence.not.is.null`);
+      }
+      const { data } = await query.throwOnError();
+      rows.push(...data);
+      if (data.length < 500) break;
+      afterId = data[data.length - 1].id;
+    }
+    let events = rows.map(rowToEvent);
+    if (options.upcomingOnly) {
+      const { tz } = await this.settings();
+      events = events.filter((e) => Date.parse(nextOccurrence(e, now, tz).end) >= now.getTime());
+    }
+    return events.sort(
+      (a, b) => Date.parse(a.start) - Date.parse(b.start) || a.id.localeCompare(b.id),
+    );
   },
 
   async eventById(id: string): Promise<CityEvent | undefined> {
