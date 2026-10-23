@@ -3,6 +3,22 @@
 Release notes and earlier development history, newest first. Tagged releases
 are listed on [GitHub](https://github.com/21sean/GrapevineOS/releases).
 
+## v0.7.0: structured output gates and offline evals (2026-10-23)
+
+- Validate extraction, discovery, summaries, agent answers, and tool requests
+  with strict versioned Pydantic contracts before downstream processing.
+- Generate with Ollama's JSON Schema constraint, repair with bounded validation
+  feedback, and fail closed with typed errors. Hosted CLI generation is disabled;
+  agent text is released only after complete-answer validation.
+- Export immutable language-independent JSON Schemas and generated TypeScript
+  validators. Add property tests and a real Node/Python worker integration test.
+- Keep OpenTelemetry, local judges, and reviewed feedback on the local machine.
+  Record first-pass, retry, hard-failure, model, and gating latency metrics.
+- Require schema and quality CI checks: 30 replay cases, 15 pinned live cases,
+  deterministic checks before local DeepEval judges, and Ragas retrieval snapshots.
+- Fingerprint eval artifacts and reject regressions against both committed and
+  PR-base baselines. Document offline setup, sample promotion, and human calibration.
+
 ## v0.6.0: smoother maps and a clearer interface (2026-09-30)
 
 - Render ordinary event annotations in the Mapbox canvas and reserve detailed

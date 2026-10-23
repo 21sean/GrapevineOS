@@ -20,10 +20,10 @@ Requirements:
 - **Node 22.23.3** (`.nvmrc` pins the tested version; `nvm use` reads it). Node 24.15+ and 26+ are also supported by the dependencies.
 - **[Ollama](https://ollama.com)** running locally with at least one chat
   model (`ollama pull qwen3:8b` works fine; pick it in Admin → Models).
-  No GPU? Chat and/or newsletter extraction can instead run through a
-  subscription-authed CLI, Claude Code (`claude -p`), OpenAI Codex, Gemini
-  CLI, or GitHub Copilot CLI, picked per role in **Admin → Providers**; each
-  logs in with its own account, no API keys
+  The structured-output profile requires local Ollama; hosted subscription CLI
+  generation is disabled. See [LLM setup and quality gates](../llm/README.md).
+- **Python 3.12 and uv 0.6.9**: run `uv sync --directory llm --frozen --group eval`
+  before starting the server. The Node gateway launches this local environment.
 - **Supabase**: copy `server/.env.example` to `server/.env` and set
   `SUPABASE_URL` and `SUPABASE_SECRET_KEY` from your project's dashboard
   (Settings → API); copy `web/.env.example` to `web/.env.local` and set

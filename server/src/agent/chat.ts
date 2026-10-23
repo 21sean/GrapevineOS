@@ -125,10 +125,8 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
       return res.end();
     }
 
-    // Every provider goes through the same LangGraph: the rails, the
-    // checkpointer, the persona guard, and the traces are identical whether
-    // the model is local Ollama or a subscription CLI (cli-model.ts). What
-    // differs per provider is only the pre-flight below.
+    // Retain settings compatibility; the graph rejects hosted providers before
+    // generation because this profile requires validated local inference.
     const provider =
       settings.chatProvider && settings.chatProvider !== "ollama" ? settings.chatProvider : null;
 
