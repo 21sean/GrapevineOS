@@ -14,6 +14,7 @@
  * Everything here is best-effort: observability that can fail a chat turn or
  * an eval is worse than none, so failures log once and are swallowed.
  */
+import { localTraceEndpoint } from "./offline.js";
 import { LangfuseClient } from "@langfuse/client";
 import { CallbackHandler } from "@langfuse/langchain";
 import { LangfuseSpanProcessor } from "@langfuse/otel";
@@ -25,7 +26,11 @@ import type { ConversationEval } from "./types.js";
 const log = logger("langfuse");
 
 export function langfuseEnabled(): boolean {
-  return !!(process.env.LANGFUSE_PUBLIC_KEY && process.env.LANGFUSE_SECRET_KEY);
+  return !!(
+    process.env.LANGFUSE_PUBLIC_KEY &&
+    process.env.LANGFUSE_SECRET_KEY &&
+    localTraceEndpoint(process.env.LANGFUSE_BASE_URL)
+  );
 }
 
 let sdk: NodeSDK | null = null;
