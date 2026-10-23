@@ -22,16 +22,10 @@
 import { scanText } from "./agent/guardrails.js";
 import { readPage, webSearch } from "./agent/websearch.js";
 import { startLoop } from "./lifecycle.js";
-import {
-  BUZZ_RUBRIC,
-  BUZZ_WHY_RUBRIC,
-  PROMOTED_RUBRIC,
-  RATIONALE_MAX,
-  extractEvents,
-  slugId,
-} from "./ingest.js";
+import { BUZZ_RUBRIC, BUZZ_WHY_RUBRIC, PROMOTED_RUBRIC, extractEvents, slugId } from "./ingest.js";
 import { type JsonLdCandidate, eventsFromJsonLdBlocks } from "./jsonld.js";
 import { generateJSON } from "./llm.js";
+import type { Output } from "./llm/generated.js";
 import { geocode } from "./mapbox.js";
 import { commitIngest } from "./pipeline.js";
 import { eventKey, store } from "./store.js";
@@ -40,7 +34,6 @@ import {
   CADENCE_MAX_HOURS,
   CADENCE_MIN_HOURS,
   CATEGORIES,
-  type Category,
   type CityEvent,
   type DiscoveryCandidate,
   type DiscoveryRunResult,
@@ -259,6 +252,8 @@ async function verifyAgainstPage(
 ): Promise<Map<number, Verdict>> {
   const today = new Date().toLocaleDateString("en-CA", { timeZone: tz });
   const raw = await generateJSON({
+    task: "verification",
+    context: { candidate_count: candidates.length, evidence: [{ id: "page", text: pageText }] },
     system: VERIFY_SYSTEM(tz, today),
     user: JSON.stringify({
       source_text: pageText,
@@ -273,28 +268,7 @@ async function verifyAgainstPage(
       })),
     }),
   });
-  const out = new Map<number, Verdict>();
-  // Tolerate a bare array; smaller models sometimes skip the wrapper.
-  const list: any[] = Array.isArray(raw) ? raw : Array.isArray(raw?.verdicts) ? raw.verdicts : [];
-  for (const v of list) {
-    const index = Number(v?.index);
-    if (!Number.isInteger(index) || index < 0 || index >= candidates.length) continue;
-    const verdict = ["confirmed", "corrected", "unsupported"].includes(v.verdict)
-      ? v.verdict
-      : "unsupported";
-    const confidence = Number(v.confidence);
-    out.set(index, {
-      index,
-      verdict,
-      confidence: Number.isFinite(confidence) ? Math.min(Math.max(confidence, 0), 1) : 0,
-      evidence: String(v.evidence ?? "").slice(0, 200),
-      start: v.start ?? null,
-      end: v.end ?? null,
-      venue: v.venue ?? null,
-      price: v.price ?? null,
-    });
-  }
-  return out;
+  return new Map(raw.verdicts.map((v) => [v.index, v]));
 }
 
 /** Apply a "corrected" verdict's fixes; the id follows the fixed start. */
@@ -341,9 +315,10 @@ Label every event you are given, once each.`;
 async function enrichCandidates(
   candidates: JsonLdCandidate[],
   city: string,
-): Promise<Map<number, Record<string, unknown>>> {
-  const out = new Map<number, Record<string, unknown>>();
+): Promise<Map<number, Output<"enrichment">["labels"][number]>> {
   const raw = await generateJSON({
+    task: "enrichment",
+    context: { candidate_count: candidates.length },
     system: ENRICH_SYSTEM(city),
     user: JSON.stringify(
       candidates.map((c, index) => ({
@@ -356,12 +331,7 @@ async function enrichCandidates(
       })),
     ),
   });
-  const list: any[] = Array.isArray(raw) ? raw : Array.isArray(raw?.labels) ? raw.labels : [];
-  for (const l of list) {
-    const i = Number(l?.index);
-    if (Number.isInteger(i) && i >= 0 && i < candidates.length) out.set(i, l);
-  }
-  return out;
+  return new Map(raw.labels.map((l) => [l.index, l]));
 }
 
 /**
@@ -373,12 +343,7 @@ async function materializeJsonLd(
   candidates: JsonLdCandidate[],
   settings: { city: string; center: [number, number] },
 ): Promise<CityEvent[]> {
-  let labels = new Map<number, Record<string, unknown>>();
-  try {
-    labels = await enrichCandidates(candidates, settings.city);
-  } catch (err) {
-    log.info(`discovery: enrichment failed, keeping raw markup: ${String(err).slice(0, 120)}`);
-  }
+  const labels = await enrichCandidates(candidates, settings.city);
 
   const out: CityEvent[] = [];
   for (const [i, candidate] of candidates.entries()) {
@@ -394,21 +359,19 @@ async function materializeJsonLd(
       lng = hit.lng;
       lat = hit.lat;
     }
-    const l = labels.get(i) ?? {};
-    const buzz = Number(l.buzz);
+    const l = labels.get(i);
+    if (!l) throw new Error("Missing validated enrichment label");
     out.push({
       ...c,
       id: slugId(c.title, c.start),
       lng: lng as number,
       lat: lat as number,
-      category: CATEGORIES.includes(l.category as Category) ? (l.category as Category) : c.category,
-      tags: Array.isArray(l.tags) ? l.tags.map(String).slice(0, 6) : c.tags,
-      rating: Number.isFinite(buzz) ? Math.min(5, Math.max(1, Math.round(buzz * 10) / 10)) : 3,
-      ...(l.buzzWhy ? { ratingRationale: String(l.buzzWhy).slice(0, RATIONALE_MAX) } : {}),
-      promoted: Boolean(l.promoted),
-      rarity: (["common", "notable", "rare"] as const).includes(l.rarity as any)
-        ? (l.rarity as CityEvent["rarity"])
-        : c.rarity,
+      category: l.category,
+      tags: l.tags,
+      rating: l.buzz,
+      ratingRationale: l.buzzWhy,
+      promoted: l.promoted,
+      rarity: l.rarity,
     });
   }
   return out;
