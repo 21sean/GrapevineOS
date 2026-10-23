@@ -1,0 +1,117 @@
+{
+  "$defs": {
+    "Verdict": {
+      "additionalProperties": false,
+      "properties": {
+        "confidence": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "end": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "End"
+        },
+        "evidence": {
+          "maxLength": 500,
+          "title": "Evidence",
+          "type": "string"
+        },
+        "index": {
+          "maximum": 199,
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "price": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Price"
+        },
+        "start": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Start"
+        },
+        "venue": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Venue"
+        },
+        "verdict": {
+          "enum": [
+            "confirmed",
+            "corrected",
+            "unsupported"
+          ],
+          "title": "Verdict",
+          "type": "string"
+        }
+      },
+      "required": [
+        "index",
+        "verdict",
+        "confidence",
+        "evidence",
+        "start",
+        "end",
+        "venue",
+        "price"
+      ],
+      "title": "Verdict",
+      "type": "object"
+    }
+  },
+  "$id": "urn:grapevine:llm:1.1.0:verification",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "verdicts": {
+      "items": {
+        "$ref": "#/$defs/Verdict"
+      },
+      "maxItems": 200,
+      "title": "Verdicts",
+      "type": "array"
+    }
+  },
+  "required": [
+    "verdicts"
+  ],
+  "title": "Verification",
+  "type": "object"
+}

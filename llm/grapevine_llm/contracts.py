@@ -3,13 +3,13 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Literal, Self, Union
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, create_model, model_validator
+from pydantic import BaseModel, AfterValidator, ConfigDict, Field, ValidationInfo, create_model, model_validator
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 Text = Annotated[str, Field(min_length=1, max_length=2000)]
 Short = Annotated[str, Field(min_length=1, max_length=200)]
 Id = Annotated[str, Field(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9_.:-]+$")]
@@ -19,12 +19,17 @@ Rating = Annotated[float, Field(ge=1, le=5)]
 Score = Annotated[float, Field(ge=0, le=1)]
 Tags = Annotated[list[Short], Field(max_length=6)]
 Ids = Annotated[list[Id], Field(min_length=1, max_length=30)]
-Day = Annotated[str, Field(pattern=r"^\d{4}-\d{2}-\d{2}$")]
+def valid_day(value: str) -> str:
+    date.fromisoformat(value)
+    return value
+
+
+Day = Annotated[str, Field(pattern=r"^\d{4}-\d{2}-\d{2}$"), AfterValidator(valid_day)]
 Coordinate = tuple[Annotated[float, Field(ge=-180, le=180)], Annotated[float, Field(ge=-90, le=90)]] | Annotated[str, Field(pattern=r"^\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*$", max_length=80)]
 
 
 class Contract(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False, validate_default=True)
+    model_config = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False, validate_default=True, serialize_by_alias=True)
 
 
 class RuleError(ValueError):
@@ -203,6 +208,11 @@ class GetEta(Contract):
     def destination(self) -> Self:
         if bool(self.to_event_id) == bool(self.to):
             raise RuleError("provide exactly one of to_event_id or to")
+        for coordinate in (self.to, self.from_):
+            if isinstance(coordinate, str):
+                lng, lat = map(float, coordinate.split(","))
+                if not (-180 <= lng <= 180 and -90 <= lat <= 90):
+                    raise RuleError("coordinates are outside longitude/latitude ranges")
         return self
 
 

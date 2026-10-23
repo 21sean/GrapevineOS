@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .evals import DATA, ROOT, Report, load_cases
 from .export import artifacts
+from .provenance import capture
 
 BASELINE = ROOT / "llm/evals/baseline.json"
 
@@ -74,6 +75,8 @@ def no_regression(current: Report, baseline: Report):
 def quality(path: Path, base_ref: str | None):
     report = Report.model_validate_json(path.read_bytes())
     complete(report)
+    if report.provenance is None or report.provenance != capture(report.provenance.num_ctx, report.provenance.max_attempts):
+        raise ValueError("artifact does not match this source, runtime, model manifest, and dependency lock")
     if report.mode == "live":
         baseline = Report.model_validate_json(BASELINE.read_bytes())
         complete(baseline)

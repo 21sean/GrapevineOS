@@ -44,3 +44,17 @@ def test_timeout_and_duplicate_keys_fail_closed():
     assert result.code == "timeout"
     result = generate(request(), Settings(max_attempts=1), transport=lambda *_: '{"rating":3,"rating":4,"rationale":"x","promoted":false}')
     assert isinstance(result, Failure)
+
+
+def test_eta_alias_survives_complete_wire_envelope():
+    from jsonschema import Draft202012Validator
+    from grapevine_llm.client import ResultEnvelope
+    from grapevine_llm.contracts import Context
+    req = Request(id="eta", task="agent", messages=[Message(role="user", content="Get ETA")],
+                  context=Context(allowed_tools=["get_eta"]))
+    raw = '{"kind":"tools","answer":"","citations":[],"tool_calls":[{"name":"get_eta","args":{"to":"-117,32","from":"-118,33"}}]}'
+    result = generate(req, Settings(), transport=lambda *_: raw)
+    assert isinstance(result, Success)
+    wire = json.loads(result.model_dump_json())
+    assert wire["output"]["tool_calls"][0]["args"]["from"] == "-118,33"
+    Draft202012Validator(ResultEnvelope.model_json_schema()).validate(wire)

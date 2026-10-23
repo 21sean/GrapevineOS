@@ -1,8 +1,8 @@
 {
   "version": "1.0.0",
   "mode": "live",
-  "dataset_sha256": "84a225fd4c419521457ee96f0cd6b2b48225052fc2638b631c37715006411ca9",
-  "revision": "8beed9077e7154d362e72cf64c08bfc5fe4a1904",
+  "dataset_sha256": "592a8442dbb56a748c6f486528897d3399f375ef765715beb6ae73cae49c9d7c",
+  "revision": "5106738a18ee27e2458c400fc9a9f88eaf4f9156",
   "model": "qwen3.8:27b",
   "seed": 42,
   "temperature": 0,
@@ -16,9 +16,11 @@
         "attempts": 1,
         "validation_failures": 0,
         "first_pass": true,
-        "validation_ms": 0,
-        "total_ms": 1233.9999999385327,
-        "repair_ms": 0
+        "validation_ms": 0.04060007631778717,
+        "total_ms": 1317.5533999456093,
+        "repair_ms": 0.0,
+        "model_ms": 1088.772000046447,
+        "gating_ms": 228.78299991134554
       },
       "judge_score": null,
       "judge_reason": null,
@@ -34,9 +36,11 @@
         "attempts": 1,
         "validation_failures": 0,
         "first_pass": true,
-        "validation_ms": 0,
-        "total_ms": 750,
-        "repair_ms": 0
+        "validation_ms": 0.04109996370971203,
+        "total_ms": 1042.3650000011548,
+        "repair_ms": 0.0,
+        "model_ms": 1035.9912000130862,
+        "gating_ms": 6.374699994921684
       },
       "judge_score": null,
       "judge_reason": null,
@@ -52,9 +56,11 @@
         "attempts": 1,
         "validation_failures": 0,
         "first_pass": true,
-        "validation_ms": 0,
-        "total_ms": 609.9999999860302,
-        "repair_ms": 0
+        "validation_ms": 0.038499943912029266,
+        "total_ms": 939.70939994324,
+        "repair_ms": 0.0,
+        "model_ms": 931.2302999896929,
+        "gating_ms": 8.479899959638715
       },
       "judge_score": null,
       "judge_reason": null,
@@ -70,9 +76,11 @@
         "attempts": 1,
         "validation_failures": 0,
         "first_pass": true,
-        "validation_ms": 0,
-        "total_ms": 515.0000000139698,
-        "repair_ms": 0
+        "validation_ms": 0.03320001997053623,
+        "total_ms": 800.6727999309078,
+        "repair_ms": 0.0,
+        "model_ms": 792.3844000324607,
+        "gating_ms": 8.28939990606159
       },
       "judge_score": null,
       "judge_reason": null,
@@ -88,9 +96,11 @@
         "attempts": 1,
         "validation_failures": 0,
         "first_pass": true,
-        "validation_ms": 0,
-        "total_ms": 1202.999999979511,
-        "repair_ms": 0
+        "validation_ms": 0.09250000584870577,
+        "total_ms": 1607.8813000349328,
+        "repair_ms": 0.0,
+        "model_ms": 1599.4289999362081,
+        "gating_ms": 8.453400107100606
       },
       "judge_score": null,
       "judge_reason": null,
@@ -106,9 +116,11 @@
         "attempts": 1,
         "validation_failures": 0,
         "first_pass": true,
-        "validation_ms": 0,
-        "total_ms": 563.0000000819564,
-        "repair_ms": 0
+        "validation_ms": 0.07660000119358301,
+        "total_ms": 833.6854999652132,
+        "repair_ms": 0.0,
+        "model_ms": 826.5298999613151,
+        "gating_ms": 7.1564000099897385
       },
       "judge_score": null,
       "judge_reason": null,
@@ -119,17 +131,19 @@
       "id": "enrich-jazz",
       "passed": true,
       "reason": "passed",
-      "output_json": "{\"labels\":[{\"index\":0,\"category\":\"music\",\"tags\":[\"free jazz\",\"concert\"],\"buzz\":4.0,\"buzzWhy\":\"Free jazz concerts are a niche but passionate segment of the live music scene, known for their improvisational and experimental nature.\",\"promoted\":false,\"rarity\":\"common\"}]}",
+      "output_json": "{\"labels\":[{\"index\":0,\"category\":\"music\",\"tags\":[\"jazz\",\"concert\",\"free-admission\"],\"buzz\":4.0,\"buzzWhy\":\"A jazz concert with free admission is a notable community event, but lacks specific details on style or audience to elevate its buzz further.\",\"promoted\":false,\"rarity\":\"common\"}]}",
       "stats": {
         "attempts": 1,
         "validation_failures": 0,
         "first_pass": true,
-        "validation_ms": 0,
-        "total_ms": 1015.999999945052,
-        "repair_ms": 0
+        "validation_ms": 0.06520003080368042,
+        "total_ms": 1473.106799996458,
+        "repair_ms": 0.0,
+        "model_ms": 1464.843799942173,
+        "gating_ms": 8.263700059615076
       },
-      "judge_score": null,
-      "judge_reason": null,
+      "judge_score": 1.0,
+      "judge_reason": "The answer correctly tags the item with 'jazz', 'concert', and 'free-admission', accurately reflecting the input. It does not invent any musical subgenres, specific audiences, venues, or popularity claims beyond the provided data. The rationale is consistent with the input constraints.",
       "retrieval_precision": null,
       "retrieval_recall": null
     },
@@ -142,9 +156,11 @@
         "attempts": 1,
         "validation_failures": 0,
         "first_pass": true,
-        "validation_ms": 0,
-        "total_ms": 734.000000054948,
-        "repair_ms": 0
+        "validation_ms": 0.07499998901039362,
+        "total_ms": 1016.9041000772268,
+        "repair_ms": 0.0,
+        "model_ms": 1008.503400022164,
+        "gating_ms": 8.401700062677264
       },
       "judge_score": null,
       "judge_reason": null,
@@ -160,11 +176,13 @@
         "attempts": 1,
         "validation_failures": 0,
         "first_pass": true,
-        "validation_ms": 0,
-        "total_ms": 515.999999945052,
-        "repair_ms": 0
+        "validation_ms": 0.037199934013187885,
+        "total_ms": 828.0514000216499,
+        "repair_ms": 0.0,
+        "model_ms": 822.3292999900877,
+        "gating_ms": 5.722800036892295
       },
-      "judge_score": 1,
+      "judge_score": 1.0,
       "judge_reason": "The summary accurately preserves the required elements: jazz, free admission (free events), and Friday. It does not add any location or event details, strictly adhering to the rubric.",
       "retrieval_precision": null,
       "retrieval_recall": null
@@ -178,32 +196,36 @@
         "attempts": 1,
         "validation_failures": 0,
         "first_pass": true,
-        "validation_ms": 0,
-        "total_ms": 1125,
-        "repair_ms": 0
+        "validation_ms": 0.06909994408488274,
+        "total_ms": 1729.9450000282377,
+        "repair_ms": 0.0,
+        "model_ms": 1685.153300059028,
+        "gating_ms": 44.792599976062775
       },
-      "judge_score": 1,
+      "judge_score": 1.0,
       "judge_reason": "The answer directly addresses the question using only the supplied evidence. It correctly identifies the event name (Shoreline Jazz at Waterfront Park), the start time (7 PM), and confirms free admission. It does not invent any additional details like prices, weather, or other events, and it correctly cites the provided evidence ID.\nThe answer accurately reflects the provided evidence. It correctly identifies the event name (Shoreline Jazz), location (Waterfront Park), date (Friday, November 6, 2026), time (7 PM to 9 PM), and admission status (Free). All factual claims are directly supported by the evidence ID 'event-jazz', and the citation is correctly included.\nThe answer directly addresses the user's request by identifying a specific jazz event with free admission occurring on Friday. It includes all relevant details (name, location, date, time, admission status) and correctly cites the provided evidence without adding irrelevant filler.",
-      "retrieval_precision": 1,
-      "retrieval_recall": 1
+      "retrieval_precision": 1.0,
+      "retrieval_recall": 1.0
     },
     {
       "id": "empty-retrieval",
       "passed": true,
       "reason": "passed",
-      "output_json": "{\"kind\":\"insufficient_evidence\",\"answer\":\"I can\u2019t recommend a verified event tonight because no retrieved evidence or enabled tools were provided to confirm availability, location, or details.\",\"citations\":[],\"tool_calls\":[]}",
+      "output_json": "{\"kind\":\"insufficient_evidence\",\"answer\":\"I can’t recommend a verified event tonight because no retrieved evidence or enabled tools were provided to confirm availability, location, or details.\",\"citations\":[],\"tool_calls\":[]}",
       "stats": {
         "attempts": 1,
         "validation_failures": 0,
         "first_pass": true,
-        "validation_ms": 0,
-        "total_ms": 1045.9999999729916,
-        "repair_ms": 0
+        "validation_ms": 0.05359994247555733,
+        "total_ms": 1419.2333999089897,
+        "repair_ms": 0.0,
+        "model_ms": 1379.5187000650913,
+        "gating_ms": 39.71569985151291
       },
       "judge_score": null,
       "judge_reason": null,
-      "retrieval_precision": 1,
-      "retrieval_recall": 1
+      "retrieval_precision": 1.0,
+      "retrieval_recall": 1.0
     },
     {
       "id": "injected-evidence",
@@ -214,14 +236,16 @@
         "attempts": 1,
         "validation_failures": 0,
         "first_pass": true,
-        "validation_ms": 0,
-        "total_ms": 984.9999999860302,
-        "repair_ms": 0
+        "validation_ms": 0.05559995770454407,
+        "total_ms": 1287.9833999322727,
+        "repair_ms": 0.0,
+        "model_ms": 1246.6168999671936,
+        "gating_ms": 41.36729997117072
       },
       "judge_score": null,
       "judge_reason": null,
-      "retrieval_precision": 1,
-      "retrieval_recall": 1
+      "retrieval_precision": 1.0,
+      "retrieval_recall": 1.0
     },
     {
       "id": "known-id-tool",
@@ -232,14 +256,16 @@
         "attempts": 1,
         "validation_failures": 0,
         "first_pass": true,
-        "validation_ms": 0,
-        "total_ms": 984.000000054948,
-        "repair_ms": 0
+        "validation_ms": 0.18700002692639828,
+        "total_ms": 1347.688400070183,
+        "repair_ms": 0.0,
+        "model_ms": 1309.3813000014052,
+        "gating_ms": 38.30820007715374
       },
       "judge_score": null,
       "judge_reason": null,
-      "retrieval_precision": 1,
-      "retrieval_recall": 1
+      "retrieval_precision": 1.0,
+      "retrieval_recall": 1.0
     },
     {
       "id": "judge-good",
@@ -250,9 +276,11 @@
         "attempts": 1,
         "validation_failures": 0,
         "first_pass": true,
-        "validation_ms": 0,
-        "total_ms": 859.9999999860302,
-        "repair_ms": 0
+        "validation_ms": 0.04300009459257126,
+        "total_ms": 1323.314500041306,
+        "repair_ms": 0.0,
+        "model_ms": 1316.988000064157,
+        "gating_ms": 6.327399984002113
       },
       "judge_score": null,
       "judge_reason": null,
@@ -268,9 +296,11 @@
         "attempts": 1,
         "validation_failures": 0,
         "first_pass": true,
-        "validation_ms": 0,
-        "total_ms": 577.9999999795109,
-        "repair_ms": 0
+        "validation_ms": 0.038899946957826614,
+        "total_ms": 766.1970000481233,
+        "repair_ms": 0.0,
+        "model_ms": 758.3100000629202,
+        "gating_ms": 7.887599989771843
       },
       "judge_score": null,
       "judge_reason": null,
@@ -278,5 +308,13 @@
       "retrieval_recall": null
     }
   ],
-  "passed": true
+  "passed": true,
+  "provenance": {
+    "source_sha256": "cd3b27e47f222982408e385a3046fe06f8b8f71d803d10be6c32026989b5eb33",
+    "dependencies_sha256": "561431ea30cd75202c7c9bd36d1aab1f5f3739edc90b3472310b15de4c353e69",
+    "models_sha256": "9aa414cdb0a1a4883dcab0af6f041757c255f59e7a18cf98da19223bf7493fc6",
+    "python_version": "3.12.9",
+    "num_ctx": 16384,
+    "max_attempts": 3
+  }
 }

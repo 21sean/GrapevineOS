@@ -13,6 +13,7 @@ from pydantic import Field, model_validator
 from .client import Failure, Request, Stats, Success, generate
 from .contracts import Contract, Id, Score, Text
 from .settings import Settings
+from .provenance import Provenance, capture
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "llm/evals/golden.jsonl"
@@ -70,6 +71,7 @@ class Report(Contract):
     temperature: Literal[0] = 0
     results: Annotated[list[CaseResult], Field(min_length=1)]
     passed: bool
+    provenance: Provenance | None = None
 
 
 def load_cases(path: Path = DATA) -> list[GoldenCase]:
@@ -123,7 +125,8 @@ def run(mode: Literal["replay", "live"], settings: Settings, path: Path = DATA) 
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     return Report(mode=mode, dataset_sha256=hashlib.sha256(path.read_text(encoding="utf-8").encode()).hexdigest(),
                   revision=revision, model=settings.model, seed=settings.seed, results=results,
-                  passed=all(result.passed for result in results))
+                  passed=all(result.passed for result in results),
+                  provenance=capture(settings.num_ctx, settings.max_attempts))
 
 
 def main():

@@ -1,0 +1,92 @@
+{
+  "$defs": {
+    "Label": {
+      "additionalProperties": false,
+      "properties": {
+        "buzz": {
+          "maximum": 5,
+          "minimum": 1,
+          "title": "Buzz",
+          "type": "number"
+        },
+        "buzzWhy": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Buzzwhy",
+          "type": "string"
+        },
+        "category": {
+          "enum": [
+            "music",
+            "food",
+            "sports",
+            "arts",
+            "market",
+            "festival",
+            "community"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "index": {
+          "maximum": 199,
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "promoted": {
+          "title": "Promoted",
+          "type": "boolean"
+        },
+        "rarity": {
+          "enum": [
+            "common",
+            "notable",
+            "rare"
+          ],
+          "title": "Rarity",
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 6,
+          "title": "Tags",
+          "type": "array"
+        }
+      },
+      "required": [
+        "index",
+        "category",
+        "tags",
+        "buzz",
+        "buzzWhy",
+        "promoted",
+        "rarity"
+      ],
+      "title": "Label",
+      "type": "object"
+    }
+  },
+  "$id": "urn:grapevine:llm:1.1.0:enrichment",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "labels": {
+      "items": {
+        "$ref": "#/$defs/Label"
+      },
+      "maxItems": 200,
+      "title": "Labels",
+      "type": "array"
+    }
+  },
+  "required": [
+    "labels"
+  ],
+  "title": "Enrichment",
+  "type": "object"
+}
