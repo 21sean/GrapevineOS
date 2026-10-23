@@ -27,6 +27,10 @@ class Contract(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False, validate_default=True)
 
 
+class RuleError(ValueError):
+    """Static business-rule text that is safe to return as repair feedback."""
+
+
 class Evidence(Contract):
     id: Id
     text: Annotated[str, Field(max_length=200_000)]
@@ -43,14 +47,14 @@ class Context(Contract):
 def context(info: ValidationInfo) -> Context:
     value = (info.context or {}).get("request")
     if not isinstance(value, Context):
-        raise ValueError("trusted validation context is required")
+        raise RuleError("trusted validation context is required")
     return value
 
 
 def timestamp(value: str) -> datetime:
     parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     if parsed.tzinfo is None:
-        raise ValueError("timestamps require an explicit timezone")
+        raise RuleError("timestamps require an explicit timezone")
     return parsed
 
 
@@ -76,15 +80,15 @@ class Event(Contract):
     @model_validator(mode="after")
     def facts(self) -> Self:
         if timestamp(self.end) <= timestamp(self.start):
-            raise ValueError("end must follow start")
+            raise RuleError("end must follow start")
         if self.free and self.price.casefold() not in {"free", "$0", "$0.00", "0"}:
-            raise ValueError("free and price disagree")
+            raise RuleError("free and price disagree")
         if self.ticketUrl:
             url = urlsplit(self.ticketUrl)
             if url.scheme not in {"https", "http"} or not url.hostname or url.username:
-                raise ValueError("ticket URL must be an absolute http(s) URL without credentials")
+                raise RuleError("ticket URL must be an absolute http(s) URL without credentials")
         if self.recurrence and not re.fullmatch(r"FREQ=(DAILY|WEEKLY|MONTHLY|YEARLY)(;[A-Z]+=[A-Z0-9,+-]+)*", self.recurrence):
-            raise ValueError("invalid recurrence syntax")
+            raise RuleError("invalid recurrence syntax")
         return self
 
 
@@ -114,7 +118,7 @@ class Enrichment(Contract):
     @model_validator(mode="after")
     def complete(self, info: ValidationInfo) -> Self:
         if sorted(x.index for x in self.labels) != list(range(context(info).candidate_count)):
-            raise ValueError("return every candidate index exactly once")
+            raise RuleError("return every candidate index exactly once")
         return self
 
 
@@ -132,15 +136,15 @@ class Verdict(Contract):
     def supported(self, info: ValidationInfo) -> Self:
         source = "\n".join(e.text for e in context(info).evidence)
         if self.verdict != "unsupported" and (not self.evidence.strip() or self.evidence not in source):
-            raise ValueError("supported verdict requires a verbatim source quote")
+            raise RuleError("supported verdict requires a verbatim source quote")
         if self.start:
             timestamp(self.start)
         if self.end:
             timestamp(self.end)
         if self.start and self.end and timestamp(self.end) <= timestamp(self.start):
-            raise ValueError("corrected end must follow start")
+            raise RuleError("corrected end must follow start")
         if self.verdict == "corrected" and not any((self.start, self.end, self.venue, self.price)):
-            raise ValueError("corrected verdict requires a correction")
+            raise RuleError("corrected verdict requires a correction")
         return self
 
 
@@ -150,7 +154,7 @@ class Verification(Contract):
     @model_validator(mode="after")
     def complete(self, info: ValidationInfo) -> Self:
         if sorted(x.index for x in self.verdicts) != list(range(context(info).candidate_count)):
-            raise ValueError("return every candidate index exactly once")
+            raise RuleError("return every candidate index exactly once")
         return self
 
 
@@ -198,7 +202,7 @@ class GetEta(Contract):
     @model_validator(mode="after")
     def destination(self) -> Self:
         if bool(self.to_event_id) == bool(self.to):
-            raise ValueError("provide exactly one of to_event_id or to")
+            raise RuleError("provide exactly one of to_event_id or to")
         return self
 
 
@@ -291,14 +295,14 @@ class ToolCallBase(Contract):
     def arguments_valid(self, info: ValidationInfo) -> Self:
         ctx = context(info)
         if self.name not in ctx.allowed_tools or self.name not in TOOL_ARGS:
-            raise ValueError("tool is not enabled for this request")
+            raise RuleError("tool is not enabled for this request")
         values = self.args.model_dump(exclude_none=True, by_alias=True)
         ids = values.get("event_ids", [])
         ids += [values[k] for k in ("event_id", "to_event_id") if k in values]
         if self.name == "get_event":
             ids.append(values["id"])
         if len(ids) != len(set(ids)) or not set(ids).issubset(ctx.event_ids):
-            raise ValueError("event IDs must be known and unique")
+            raise RuleError("event IDs must be known and unique")
         return self
 
 
@@ -321,14 +325,14 @@ class AgentTurn(Contract):
         ctx = context(info)
         if self.kind == "tools":
             if not self.tool_calls or self.answer or self.citations:
-                raise ValueError("tool turn requires calls and no answer or citations")
+                raise RuleError("tool turn requires calls and no answer or citations")
         elif not self.answer.strip() or self.tool_calls:
-            raise ValueError("answer requires text and no tool calls")
+            raise RuleError("answer requires text and no tool calls")
         known = {e.id for e in ctx.evidence}
         if len(self.citations) != len(set(self.citations)) or not set(self.citations) <= known:
-            raise ValueError("citations must be unique supplied evidence IDs")
+            raise RuleError("citations must be unique supplied evidence IDs")
         if ctx.require_citations and self.kind == "answer" and not self.citations:
-            raise ValueError("answer requires citations; otherwise report insufficient_evidence")
+            raise RuleError("answer requires citations; otherwise report insufficient_evidence")
         return self
 
 
@@ -344,10 +348,10 @@ def validate_output(task: str, raw: str, ctx: Context) -> Contract:
         result: dict[str, object] = {}
         for key, value in items:
             if key in result:
-                raise ValueError("duplicate JSON property")
+                raise RuleError("duplicate JSON property")
             result[key] = value
         return result
     def constant(_: str) -> None:
-        raise ValueError("non-finite JSON number")
+        raise RuleError("non-finite JSON number")
     json.loads(raw, object_pairs_hook=pairs, parse_constant=constant)
     return OUTPUTS[task].model_validate_json(raw, context={"request": ctx})

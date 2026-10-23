@@ -108,8 +108,18 @@ def run_case(case: GoldenCase, mode: str, settings: Settings) -> CaseResult:
 
 
 def run(mode: Literal["replay", "live"], settings: Settings, path: Path = DATA) -> Report:
+    if mode == "live":
+        from .pins import verify
+        pins = verify(settings.base_url)
+        if settings.model != pins.generation.name or settings.seed != pins.seed:
+            raise ValueError("eval settings differ from model manifest")
     cases = [case for case in load_cases(path) if mode == "replay" or case.live]
     results = [run_case(case, mode, settings) for case in cases]
+    if mode == "live":
+        from .retrieval_metrics import score_ids
+        for case, result in zip(cases, results, strict=True):
+            if case.request.task == "agent":
+                result.retrieval_precision, result.retrieval_recall = score_ids(case.retrieved_ids, case.relevant_ids)
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     return Report(mode=mode, dataset_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
                   revision=revision, model=settings.model, seed=settings.seed, results=results,

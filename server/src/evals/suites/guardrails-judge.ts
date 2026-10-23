@@ -24,7 +24,7 @@
  * Judged suites are graded, not pass/fail; see `threshold` below.
  */
 import "../deepeval-env.js";
-import { GEval } from "deepeval/metrics";
+import { GatedMetric as GEval } from "../gated-metric.js";
 import { LLMTestCase, SingleTurnParams } from "deepeval/test-case";
 import { personaGuard } from "../../agent/guardrails.js";
 import { judge, judgeUnavailable, METRIC_DEFAULTS } from "../judge.js";
@@ -93,12 +93,7 @@ function railTrips(text: string): boolean {
   return tripped || guard.tripped;
 }
 
-/**
- * One judge, shared. GEval generates its evaluation steps from the criteria on
- * first use, so a single instance also keeps the rubric identical across every
- * case in the run: two metrics with independently-generated steps would not
- * be comparable to each other.
- */
+/** One shared metric with checked-in criteria and fixed scoring anchors. */
 let metricPromise: Promise<GEval> | null = null;
 
 function personaMetric(): Promise<GEval> {

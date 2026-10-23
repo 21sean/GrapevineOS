@@ -1,0 +1,14 @@
+{
+  "runtime": "ollama",
+  "runtime_version": "0.40.8",
+  "generation": {
+    "name": "qwen3.8:27b",
+    "digest": "4610da9d4ad7afb2acc2beb91fcd0b2235ec149e7be0a83139cb93dfc63d5a80"
+  },
+  "judge": {
+    "name": "qwen3.8:27b",
+    "digest": "4610da9d4ad7afb2acc2beb91fcd0b2235ec149e7be0a83139cb93dfc63d5a80"
+  },
+  "temperature": 0,
+  "seed": 42
+}

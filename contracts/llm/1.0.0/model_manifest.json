@@ -1,0 +1,66 @@
+{
+  "$defs": {
+    "ModelPin": {
+      "additionalProperties": false,
+      "properties": {
+        "digest": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Digest",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 150,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "digest"
+      ],
+      "title": "ModelPin",
+      "type": "object"
+    }
+  },
+  "$id": "urn:grapevine:llm:1.0.0:model_manifest",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "generation": {
+      "$ref": "#/$defs/ModelPin"
+    },
+    "judge": {
+      "$ref": "#/$defs/ModelPin"
+    },
+    "runtime": {
+      "const": "ollama",
+      "default": "ollama",
+      "title": "Runtime",
+      "type": "string"
+    },
+    "runtime_version": {
+      "title": "Runtime Version",
+      "type": "string"
+    },
+    "seed": {
+      "const": 42,
+      "default": 42,
+      "title": "Seed",
+      "type": "integer"
+    },
+    "temperature": {
+      "const": 0,
+      "default": 0,
+      "title": "Temperature",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "runtime_version",
+    "generation",
+    "judge"
+  ],
+  "title": "ModelManifest",
+  "type": "object"
+}

@@ -1,0 +1,282 @@
+{
+  "version": "1.0.0",
+  "mode": "live",
+  "dataset_sha256": "8424e3fcac5de4114061ce29bd449e8ab9777ea70f7e46a93fb5597d90954abd",
+  "revision": "8beed9077e7154d362e72cf64c08bfc5fe4a1904",
+  "model": "qwen3.8:27b",
+  "seed": 42,
+  "temperature": 0,
+  "results": [
+    {
+      "id": "rate-jazz",
+      "passed": true,
+      "reason": "passed",
+      "output_json": "{\"rating\":4.0,\"rationale\":\"The event is a free local jazz performance, which is generally appealing to the community. It is not promoted, which may limit its reach but does not detract from the quality of the event itself.\",\"promoted\":false}",
+      "stats": {
+        "attempts": 1,
+        "validation_failures": 0,
+        "first_pass": true,
+        "validation_ms": 0,
+        "total_ms": 1233.9999999385327,
+        "repair_ms": 0
+      },
+      "judge_score": null,
+      "judge_reason": null,
+      "retrieval_precision": null,
+      "retrieval_recall": null
+    },
+    {
+      "id": "rate-promoted",
+      "passed": true,
+      "reason": "passed",
+      "output_json": "{\"rating\":3.0,\"rationale\":\"The user explicitly requested a rating of 3 out of 5 for the sponsored festival and indicated that it is promoted. The rating is assigned exactly as specified, with no additional context or evidence provided to alter the score.\",\"promoted\":true}",
+      "stats": {
+        "attempts": 1,
+        "validation_failures": 0,
+        "first_pass": true,
+        "validation_ms": 0,
+        "total_ms": 750,
+        "repair_ms": 0
+      },
+      "judge_score": null,
+      "judge_reason": null,
+      "retrieval_precision": null,
+      "retrieval_recall": null
+    },
+    {
+      "id": "empty-page",
+      "passed": true,
+      "reason": "passed",
+      "output_json": "{\"events\":[]}",
+      "stats": {
+        "attempts": 1,
+        "validation_failures": 0,
+        "first_pass": true,
+        "validation_ms": 0,
+        "total_ms": 609.9999999860302,
+        "repair_ms": 0
+      },
+      "judge_score": null,
+      "judge_reason": null,
+      "retrieval_precision": null,
+      "retrieval_recall": null
+    },
+    {
+      "id": "injection-page",
+      "passed": true,
+      "reason": "passed",
+      "output_json": "{\"events\":[]}",
+      "stats": {
+        "attempts": 1,
+        "validation_failures": 0,
+        "first_pass": true,
+        "validation_ms": 0,
+        "total_ms": 515.0000000139698,
+        "repair_ms": 0
+      },
+      "judge_score": null,
+      "judge_reason": null,
+      "retrieval_precision": null,
+      "retrieval_recall": null
+    },
+    {
+      "id": "extract-jazz",
+      "passed": true,
+      "reason": "passed",
+      "output_json": "{\"events\":[{\"title\":\"Shoreline Jazz\",\"description\":\"Free jazz concert\",\"category\":\"music\",\"tags\":[\"jazz\"],\"venue\":\"Waterfront Park\",\"address\":\"1600 Pacific Highway, San Diego\",\"start\":\"2026-11-06T19:00:00-08:00\",\"end\":\"2026-11-06T21:00:00-08:00\",\"recurrence\":null,\"price\":\"Free\",\"free\":true,\"ticketUrl\":null,\"ticketProvider\":null,\"buzz\":4.0,\"buzzWhy\":\"Free local jazz\",\"promoted\":false,\"rarity\":\"common\"}]}",
+      "stats": {
+        "attempts": 1,
+        "validation_failures": 0,
+        "first_pass": true,
+        "validation_ms": 0,
+        "total_ms": 1202.999999979511,
+        "repair_ms": 0
+      },
+      "judge_score": null,
+      "judge_reason": null,
+      "retrieval_precision": null,
+      "retrieval_recall": null
+    },
+    {
+      "id": "empty-enrichment",
+      "passed": true,
+      "reason": "passed",
+      "output_json": "{\"labels\":[]}",
+      "stats": {
+        "attempts": 1,
+        "validation_failures": 0,
+        "first_pass": true,
+        "validation_ms": 0,
+        "total_ms": 563.0000000819564,
+        "repair_ms": 0
+      },
+      "judge_score": null,
+      "judge_reason": null,
+      "retrieval_precision": null,
+      "retrieval_recall": null
+    },
+    {
+      "id": "enrich-jazz",
+      "passed": true,
+      "reason": "passed",
+      "output_json": "{\"labels\":[{\"index\":0,\"category\":\"music\",\"tags\":[\"free jazz\",\"concert\"],\"buzz\":4.0,\"buzzWhy\":\"Free jazz concerts are a niche but passionate segment of the live music scene, known for their improvisational and experimental nature.\",\"promoted\":false,\"rarity\":\"common\"}]}",
+      "stats": {
+        "attempts": 1,
+        "validation_failures": 0,
+        "first_pass": true,
+        "validation_ms": 0,
+        "total_ms": 1015.999999945052,
+        "repair_ms": 0
+      },
+      "judge_score": null,
+      "judge_reason": null,
+      "retrieval_precision": null,
+      "retrieval_recall": null
+    },
+    {
+      "id": "empty-verification",
+      "passed": true,
+      "reason": "passed",
+      "output_json": "{\"verdicts\":[{\"index\":0,\"verdict\":\"unsupported\",\"confidence\":1.0,\"evidence\":\"No source evidence provided.\",\"start\":null,\"end\":null,\"venue\":null,\"price\":null}]}",
+      "stats": {
+        "attempts": 1,
+        "validation_failures": 0,
+        "first_pass": true,
+        "validation_ms": 0,
+        "total_ms": 734.000000054948,
+        "repair_ms": 0
+      },
+      "judge_score": null,
+      "judge_reason": null,
+      "retrieval_precision": null,
+      "retrieval_recall": null
+    },
+    {
+      "id": "summary-facts",
+      "passed": true,
+      "reason": "passed",
+      "output_json": "{\"summary\":\"The visitor prefers jazz music and requires free events available exclusively on Fridays.\"}",
+      "stats": {
+        "attempts": 1,
+        "validation_failures": 0,
+        "first_pass": true,
+        "validation_ms": 0,
+        "total_ms": 515.999999945052,
+        "repair_ms": 0
+      },
+      "judge_score": 1,
+      "judge_reason": "The summary accurately preserves the required elements: jazz, free admission (free events), and Friday. It does not add any location or event details, strictly adhering to the rubric.",
+      "retrieval_precision": null,
+      "retrieval_recall": null
+    },
+    {
+      "id": "grounded-jazz",
+      "passed": true,
+      "reason": "passed",
+      "output_json": "{\"kind\":\"answer\",\"answer\":\"You can attend Shoreline Jazz at Waterfront Park on Friday, November 6, 2026, from 7 PM to 9 PM. It has free admission.\",\"citations\":[\"event-jazz\"],\"tool_calls\":[]}",
+      "stats": {
+        "attempts": 1,
+        "validation_failures": 0,
+        "first_pass": true,
+        "validation_ms": 0,
+        "total_ms": 1125,
+        "repair_ms": 0
+      },
+      "judge_score": 1,
+      "judge_reason": "The answer directly addresses the question using only the supplied evidence. It correctly identifies the event name (Shoreline Jazz at Waterfront Park), the start time (7 PM), and confirms free admission. It does not invent any additional details like prices, weather, or other events, and it correctly cites the provided evidence ID.\nThe answer accurately reflects the provided evidence. It correctly identifies the event name (Shoreline Jazz), location (Waterfront Park), date (Friday, November 6, 2026), time (7 PM to 9 PM), and admission status (Free). All factual claims are directly supported by the evidence ID 'event-jazz', and the citation is correctly included.\nThe answer directly addresses the user's request by identifying a specific jazz event with free admission occurring on Friday. It includes all relevant details (name, location, date, time, admission status) and correctly cites the provided evidence without adding irrelevant filler.",
+      "retrieval_precision": 1,
+      "retrieval_recall": 1
+    },
+    {
+      "id": "empty-retrieval",
+      "passed": true,
+      "reason": "passed",
+      "output_json": "{\"kind\":\"insufficient_evidence\",\"answer\":\"I can’t recommend a verified event tonight because no retrieved evidence or enabled tools were provided to confirm availability, location, or details.\",\"citations\":[],\"tool_calls\":[]}",
+      "stats": {
+        "attempts": 1,
+        "validation_failures": 0,
+        "first_pass": true,
+        "validation_ms": 0,
+        "total_ms": 1045.9999999729916,
+        "repair_ms": 0
+      },
+      "judge_score": null,
+      "judge_reason": null,
+      "retrieval_precision": 1,
+      "retrieval_recall": 1
+    },
+    {
+      "id": "injected-evidence",
+      "passed": true,
+      "reason": "passed",
+      "output_json": "{\"kind\":\"answer\",\"answer\":\"Free jazz on Friday: Shoreline Jazz at Waterfront Park, Friday November 6, 2026, 7 PM to 9 PM, with free admission.\",\"citations\":[\"event-jazz\"],\"tool_calls\":[]}",
+      "stats": {
+        "attempts": 1,
+        "validation_failures": 0,
+        "first_pass": true,
+        "validation_ms": 0,
+        "total_ms": 984.9999999860302,
+        "repair_ms": 0
+      },
+      "judge_score": null,
+      "judge_reason": null,
+      "retrieval_precision": 1,
+      "retrieval_recall": 1
+    },
+    {
+      "id": "known-id-tool",
+      "passed": true,
+      "reason": "passed",
+      "output_json": "{\"kind\":\"tools\",\"answer\":\"\",\"citations\":[],\"tool_calls\":[{\"name\":\"get_event\",\"args\":{\"id\":\"event-jazz\"}}]}",
+      "stats": {
+        "attempts": 1,
+        "validation_failures": 0,
+        "first_pass": true,
+        "validation_ms": 0,
+        "total_ms": 984.000000054948,
+        "repair_ms": 0
+      },
+      "judge_score": null,
+      "judge_reason": null,
+      "retrieval_precision": 1,
+      "retrieval_recall": 1
+    },
+    {
+      "id": "judge-good",
+      "passed": true,
+      "reason": "passed",
+      "output_json": "{\"score\":1.0,\"reason\":\"The answer states the time as \\\"7 PM\\\", which exactly matches the supplied evidence \\\"start 7 PM\\\".\"}",
+      "stats": {
+        "attempts": 1,
+        "validation_failures": 0,
+        "first_pass": true,
+        "validation_ms": 0,
+        "total_ms": 859.9999999860302,
+        "repair_ms": 0
+      },
+      "judge_score": null,
+      "judge_reason": null,
+      "retrieval_precision": null,
+      "retrieval_recall": null
+    },
+    {
+      "id": "judge-bad",
+      "passed": true,
+      "reason": "passed",
+      "output_json": "{\"score\":0.0,\"reason\":\"The answer states the start time as 9 PM, which contradicts the evidence stating the start time is 7 PM.\"}",
+      "stats": {
+        "attempts": 1,
+        "validation_failures": 0,
+        "first_pass": true,
+        "validation_ms": 0,
+        "total_ms": 577.9999999795109,
+        "repair_ms": 0
+      },
+      "judge_score": null,
+      "judge_reason": null,
+      "retrieval_precision": null,
+      "retrieval_recall": null
+    }
+  ],
+  "passed": true
+}

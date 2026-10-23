@@ -1,0 +1,204 @@
+{
+  "$defs": {
+    "CaseResult": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_.:-]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "judge_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Judge Reason"
+        },
+        "judge_score": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Judge Score"
+        },
+        "output_json": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Output Json"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "retrieval_precision": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retrieval Precision"
+        },
+        "retrieval_recall": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retrieval Recall"
+        },
+        "stats": {
+          "$ref": "#/$defs/Stats"
+        }
+      },
+      "required": [
+        "id",
+        "passed",
+        "reason",
+        "output_json",
+        "stats"
+      ],
+      "title": "CaseResult",
+      "type": "object"
+    },
+    "Stats": {
+      "additionalProperties": false,
+      "properties": {
+        "attempts": {
+          "title": "Attempts",
+          "type": "integer"
+        },
+        "first_pass": {
+          "title": "First Pass",
+          "type": "boolean"
+        },
+        "repair_ms": {
+          "title": "Repair Ms",
+          "type": "number"
+        },
+        "total_ms": {
+          "title": "Total Ms",
+          "type": "number"
+        },
+        "validation_failures": {
+          "title": "Validation Failures",
+          "type": "integer"
+        },
+        "validation_ms": {
+          "title": "Validation Ms",
+          "type": "number"
+        }
+      },
+      "required": [
+        "attempts",
+        "validation_failures",
+        "first_pass",
+        "validation_ms",
+        "total_ms",
+        "repair_ms"
+      ],
+      "title": "Stats",
+      "type": "object"
+    }
+  },
+  "$id": "urn:grapevine:llm:1.0.0:eval_report",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "dataset_sha256": {
+      "title": "Dataset Sha256",
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "replay",
+        "live"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "model": {
+      "title": "Model",
+      "type": "string"
+    },
+    "passed": {
+      "title": "Passed",
+      "type": "boolean"
+    },
+    "results": {
+      "items": {
+        "$ref": "#/$defs/CaseResult"
+      },
+      "minItems": 1,
+      "title": "Results",
+      "type": "array"
+    },
+    "revision": {
+      "title": "Revision",
+      "type": "string"
+    },
+    "seed": {
+      "title": "Seed",
+      "type": "integer"
+    },
+    "temperature": {
+      "const": 0,
+      "default": 0,
+      "title": "Temperature",
+      "type": "integer"
+    },
+    "version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "mode",
+    "dataset_sha256",
+    "revision",
+    "model",
+    "seed",
+    "results",
+    "passed"
+  ],
+  "title": "Report",
+  "type": "object"
+}
