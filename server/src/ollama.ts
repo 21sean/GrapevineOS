@@ -1,5 +1,3 @@
-import { llmPolicy } from "./budget.js";
-import { parseLooseJSON } from "./llm-json.js";
 import { store } from "./store.js";
 
 /**
@@ -82,71 +80,4 @@ export async function modelSupportsTools(model: string): Promise<boolean> {
   }
   toolSupport.set(model, ok);
   return ok;
-}
-
-/**
- * Chat with the active model and get parsed JSON back.
- * Uses Ollama's `format: "json"`; retries without `think` if the
- * model doesn't accept the thinking flag.
- *
- * Every request carries a deadline. Without one, a model that wedges (or a
- * connection that dies without an RST) blocks the caller forever, and since
- * the inbox processes rows serially, one such call stops the whole pipeline
- * with no error and no timestamp to show for it. A timeout turns that into an
- * ordinary failed row that retries. Budgets live in budget.ts.
- */
-export async function chatJSON(opts: {
-  system: string;
-  user: string;
-  model?: string;
-}): Promise<any> {
-  const model = opts.model || (await store.settings()).model;
-  if (!model) throw new Error("No Ollama model selected (set one in Admin → Models)");
-  const base = await ollamaBase();
-
-  const payload: Record<string, unknown> = {
-    model,
-    stream: false,
-    format: "json",
-    options: { temperature: 0.1, num_ctx: 16384 },
-    messages: [
-      { role: "system", content: opts.system },
-      { role: "user", content: opts.user },
-    ],
-  };
-
-  const policy = llmPolicy("ollama");
-  const post = (body: unknown) =>
-    fetch(`${base}/api/chat`, {
-      method: "POST",
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(policy.timeoutMs),
-    });
-
-  const attempt = async (): Promise<any> => {
-    let res = await post({ ...payload, think: false });
-    if (!res.ok) {
-      const errText = await res.text();
-      if (thinkFlagRejected(errText)) res = await post(payload);
-      if (!res.ok) throw new Error(`ollama chat failed: ${errText.slice(0, 300)}`);
-    }
-    const body = (await res.json()) as any;
-    // Same salvage parser the CLI providers use: identical model output must
-    // parse identically no matter which engine produced it.
-    return parseLooseJSON(body.message?.content ?? "");
-  };
-
-  let lastErr: unknown;
-  for (let i = 0; i <= policy.retries; i++) {
-    try {
-      return await attempt();
-    } catch (err) {
-      // A timeout or a dropped connection is worth one more try (a cold model
-      // paging into VRAM looks exactly like this). A prompt the model refuses
-      // to answer will fail identically every time, so the cap is low.
-      lastErr = err;
-      if (i < policy.retries) await new Promise((r) => setTimeout(r, policy.retryDelayMs));
-    }
-  }
-  throw lastErr;
 }

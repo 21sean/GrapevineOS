@@ -5,10 +5,8 @@ import { activeProvider, generateJSON } from "./llm.js";
 import { geocode } from "./mapbox.js";
 import { normalizeRRule } from "./recurrence.js";
 import { store } from "./store.js";
-import { CATEGORIES, type Category, type CityEvent, type Rarity } from "./types.js";
-import { logger } from "./log.js";
-
-const log = logger("ingest");
+import { CATEGORIES, type CityEvent } from "./types.js";
+import type { Output } from "./llm/generated.js";
 
 /** One rubric for the buzz fields, shared by extraction and re-rating so the
  * two prompts can't drift apart. */
@@ -94,16 +92,6 @@ export function slugId(title: string, start: string): string {
  * newsletter/web content and later rendered as an <a href> and fetched
  * server-side, so a javascript:/data: URL must never be stored.
  */
-function httpUrl(v: unknown): string | undefined {
-  if (typeof v !== "string" || !v.trim()) return undefined;
-  try {
-    const u = new URL(v.trim());
-    return u.protocol === "http:" || u.protocol === "https:" ? v.trim() : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 /** Run LLM extraction over a raw email or web page, then geocode the venues. */
 export async function extractEvents(opts: {
   text: string;
@@ -128,91 +116,57 @@ export async function extractEvents(opts: {
   // meant the back half of the week simply never existed.
   const budget = charsPerChunk(await activeProvider(opts.model));
   const { chunks, dropped } = chunkDocument(opts.text, budget);
-  if (dropped > 0) {
-    log.info(
-      `extract: ${opts.source} exceeded the ${MAX_CHUNKS}-chunk budget: ` +
-        `${dropped} of ${opts.text.length} chars not read`,
-    );
-  }
-
-  const items: any[] = [];
-  for (const [i, chunk] of chunks.entries()) {
-    // One failing chunk must not discard the events the others found; a
-    // document that fails entirely still throws, so the row stays unprocessed
-    // and retries.
-    try {
-      const raw = await generateJSON({ system, user: chunk, model: opts.model });
-      items.push(...(Array.isArray(raw) ? raw : (raw?.events ?? [])));
-    } catch (err) {
-      if (chunks.length === 1) throw err;
-      log.info(
-        `extract: ${opts.source} chunk ${i + 1}/${chunks.length} failed: ` +
-          `${String(err).slice(0, 160)}`,
-      );
-    }
+  if (dropped > 0) throw new Error(`Document exceeds the ${MAX_CHUNKS}-chunk extraction budget`);
+  const items: Output<"extraction">["events"] = [];
+  for (const chunk of chunks) {
+    const raw = await generateJSON({ task: "extraction", system, user: chunk, model: opts.model });
+    items.push(...raw.events);
   }
 
   const out: ExtractedEvent[] = [];
   const seen = new Set<string>();
 
   for (const it of items) {
-    if (!it?.title || !it?.start) continue;
     // Chunks overlap on purpose, so the same event legitimately arrives more
     // than once. Collapse here, before geocoding, so a duplicate never costs
     // a Mapbox lookup.
-    const id = slugId(String(it.title), String(it.start));
+    const id = slugId(it.title, it.start);
     if (seen.has(id)) continue;
     seen.add(id);
-    const category: Category = CATEGORIES.includes(it.category) ? it.category : "community";
-    const rarity: Rarity = ["common", "notable", "rare"].includes(it.rarity) ? it.rarity : "common";
-
-    let lng = Number(it.lng);
-    let lat = Number(it.lat);
-    if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
-      const q = [it.venue, it.address, settings.city].filter(Boolean).join(", ");
-      // A transient geocode failure (rate limit, outage) propagates and fails
-      // the whole ingest, so the email row keeps processed_at null and the
-      // next kick retries it. A partial batch must not be stamped "done".
-      // Only a genuine no-match (null) skips the event.
-      const hit = await geocode(q, settings.center);
-      if (!hit) continue; // no location, no marker
-      lng = hit.lng;
-      lat = hit.lat;
-    }
+    const hit = await geocode(
+      [it.venue, it.address, settings.city].filter(Boolean).join(", "),
+      settings.center,
+    );
+    if (!hit) throw new Error(`No location found for ${it.venue}`);
+    const { lng, lat } = hit;
 
     out.push({
       id,
-      title: String(it.title),
-      description: String(it.description ?? ""),
-      category,
-      tags: Array.isArray(it.tags) ? it.tags.map(String).slice(0, 6) : [],
-      venue: String(it.venue ?? ""),
-      address: it.address ? String(it.address) : undefined,
+      title: it.title,
+      description: it.description,
+      category: it.category,
+      tags: it.tags,
+      venue: it.venue,
+      address: it.address || undefined,
       lng,
       lat,
-      start: String(it.start),
-      end: String(it.end ?? it.start),
+      start: it.start,
+      end: it.end,
       ...(normalizeRRule(it.recurrence) && { recurrence: normalizeRRule(it.recurrence)! }),
-      price: String(it.price ?? (it.free ? "Free" : "")),
-      free: Boolean(it.free),
-      ticketUrl: httpUrl(it.ticketUrl),
-      ticketProvider: it.ticketProvider || undefined,
+      price: it.price,
+      free: it.free,
+      ticketUrl: it.ticketUrl ?? undefined,
+      ticketProvider: it.ticketProvider ?? undefined,
       source: opts.source,
       sourceKind: opts.sourceKind ?? "newsletter",
       ...(opts.sourceUrl && { sourceUrl: opts.sourceUrl }),
-      rating: clampRating(it.buzz),
-      ratingRationale: it.buzzWhy ? String(it.buzzWhy).slice(0, RATIONALE_MAX) : undefined,
-      promoted: Boolean(it.promoted),
-      rarity,
+      rating: it.buzz,
+      ratingRationale: it.buzzWhy,
+      promoted: it.promoted,
+      rarity: it.rarity,
     });
   }
   return out;
-}
-
-function clampRating(v: unknown): number {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return 3;
-  return Math.min(5, Math.max(1, Math.round(n * 10) / 10));
 }
 
 const RATING_SYSTEM = `
@@ -230,6 +184,7 @@ export async function rateEvent(e: CityEvent): Promise<{
   promoted: boolean;
 }> {
   const raw = await generateJSON({
+    task: "rating",
     system: RATING_SYSTEM,
     user: JSON.stringify({
       title: e.title,
@@ -241,9 +196,5 @@ export async function rateEvent(e: CityEvent): Promise<{
       source: e.source,
     }),
   });
-  return {
-    rating: clampRating(raw.rating),
-    rationale: String(raw.rationale ?? "").slice(0, RATIONALE_MAX),
-    promoted: Boolean(raw.promoted),
-  };
+  return raw;
 }
