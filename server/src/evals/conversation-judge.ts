@@ -12,14 +12,12 @@
  *                  guardrails-judge suite enforces on fixtures)
  *
  * Scored by the same local Ollama judge the graded suites use, so a judged
- * conversation costs GPU time and nothing else. One GEval instance per metric
- * for the life of the process: GEval generates its evaluation steps from the
- * criteria on first use, and a rubric that regenerates per call would make
- * two conversations' scores incomparable.
+ * conversation costs GPU time and nothing else. One gated DeepEval metric per criterion
+ * for the life of the process: Fixed scoring anchors and checked-in criteria keep the rubric stable across runs.
  */
 // Must precede the deepeval import; see the module for why.
 import "./deepeval-env.js";
-import { GEval } from "deepeval/metrics";
+import { GatedMetric as GEval } from "./gated-metric.js";
 import { LLMTestCase, SingleTurnParams } from "deepeval/test-case";
 import type { ChatMessage, ConversationEvalScore, ConversationVerdict } from "../types.js";
 import { judge, METRIC_DEFAULTS } from "./judge.js";
@@ -95,7 +93,7 @@ export async function evaluateConversation(
 
   const { name } = await judge();
   const scores: ConversationEvalScore[] = [];
-  // Serial on purpose: the judge is one local model, and racing three GEval
+  // Serial on purpose: the judge is one local model, and racing three judge
   // calls at it just makes all three slower.
   for (const [metricName, metric] of Object.entries(await metrics())) {
     const score = await metric.measure(testCase);

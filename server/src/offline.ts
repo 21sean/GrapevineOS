@@ -6,6 +6,9 @@ process.env.LANGSMITH_TRACING = "false";
 process.env.OTEL_TRACES_EXPORTER = "none";
 process.env.OTEL_METRICS_EXPORTER = "none";
 process.env.OTEL_LOGS_EXPORTER = "none";
+// Telemetry opt-out alone does not disable authenticated DeepEval uploads.
+delete process.env.CONFIDENT_API_KEY;
+process.env.CONFIDENT_BASE_URL = "http://127.0.0.1:1";
 
 export function localTraceEndpoint(value: string | undefined): boolean {
   if (!value) return false;

@@ -39,14 +39,14 @@ const envelope = z
       .strict(),
   })
   .strict();
-const root = fileURLToPath(new URL("../../../..", import.meta.url));
+const root = fileURLToPath(new URL("../../..", import.meta.url));
 const python =
   process.env.GRAPEVINE_LLM_PYTHON ||
   fileURLToPath(
     new URL(
       process.platform === "win32"
-        ? "../../../../llm/.venv/Scripts/python.exe"
-        : "../../../../llm/.venv/bin/python",
+        ? "../../../llm/.venv/Scripts/python.exe"
+        : "../../../llm/.venv/bin/python",
       import.meta.url,
     ),
   );
