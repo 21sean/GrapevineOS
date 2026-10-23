@@ -1,5 +1,6 @@
 """Authoritative contracts and the local, fail-closed inference boundary."""
 import os
+from . import network as network
 
 # Set policy before importing any optional evaluator or tracing SDK.
 for key, value in {

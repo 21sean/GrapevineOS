@@ -1,0 +1,86 @@
+name: LLM quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: llm-quality-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.9"
+          enable-cache: true
+      - run: uv sync --directory llm --frozen --group eval
+      - name: Immutable versioned schemas
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD' }}
+        run: uv run --directory llm --no-sync python -m grapevine_llm.checks schemas --base-ref "$BASE_REF"
+      - run: uv run --directory llm --no-sync ruff check grapevine_llm tests
+      - run: uv run --directory llm --no-sync pytest -q
+      - run: uv run --directory llm --no-sync python -m grapevine_llm.evals --mode replay --output artifacts/replay.json
+      - run: uv run --directory llm --no-sync python -m grapevine_llm.checks quality --report artifacts/replay.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci --ignore-scripts
+      - name: Real Node to Python boundary
+        run: npx vitest run server/test/gate-worker.test.ts
+        env:
+          GRAPEVINE_LLM_INTEGRATION: "1"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: llm-replay
+          path: llm/artifacts/replay.json
+
+  model-quality:
+    # Runner holds only local public models. Outside contributors require approval.
+    # Never use pull_request_target to execute a contributor's checkout.
+    runs-on: [self-hosted, Windows, X64, grapevine-llm]
+    timeout-minutes: 30
+    env:
+      GRAPEVINE_LLM_BASE_URL: http://127.0.0.1:11435
+      PYTHONUTF8: "1"
+      ONNXRUNTIME_NODE_INSTALL: skip
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install from preloaded offline caches
+        shell: pwsh
+        run: |
+          uv sync --directory llm --frozen --offline --group eval
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm ci --offline --ignore-scripts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node server/scripts/patch-deepeval.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Live model and local judges
+        shell: pwsh
+        run: node --import ./server/scripts/eval-network.mjs --import tsx ./server/scripts/llm-quality.ts --live
+      - name: Thresholds and baseline regression
+        shell: pwsh
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD' }}
+        run: uv run --directory llm --no-sync python -m grapevine_llm.checks quality --report artifacts/live.json --base-ref $env:BASE_REF
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: llm-live
+          path: llm/artifacts/live.json

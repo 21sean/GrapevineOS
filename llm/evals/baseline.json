@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
   "mode": "live",
-  "dataset_sha256": "8424e3fcac5de4114061ce29bd449e8ab9777ea70f7e46a93fb5597d90954abd",
+  "dataset_sha256": "84a225fd4c419521457ee96f0cd6b2b48225052fc2638b631c37715006411ca9",
   "revision": "8beed9077e7154d362e72cf64c08bfc5fe4a1904",
   "model": "qwen3.8:27b",
   "seed": 42,
@@ -191,7 +191,7 @@
       "id": "empty-retrieval",
       "passed": true,
       "reason": "passed",
-      "output_json": "{\"kind\":\"insufficient_evidence\",\"answer\":\"I can’t recommend a verified event tonight because no retrieved evidence or enabled tools were provided to confirm availability, location, or details.\",\"citations\":[],\"tool_calls\":[]}",
+      "output_json": "{\"kind\":\"insufficient_evidence\",\"answer\":\"I can\u2019t recommend a verified event tonight because no retrieved evidence or enabled tools were provided to confirm availability, location, or details.\",\"citations\":[],\"tool_calls\":[]}",
       "stats": {
         "attempts": 1,
         "validation_failures": 0,
