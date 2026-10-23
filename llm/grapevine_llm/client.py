@@ -14,6 +14,7 @@ from pydantic import Field, SerializeAsAny, ValidationError
 
 from .contracts import OUTPUTS, VERSION, Context, Contract, validate_output
 from .settings import Settings, local_endpoint
+from .telemetry import sample, tracer
 
 # Instructor logs exception strings with rejected values. Our observer records
 # bounded error codes instead, without private prompt/output content.
@@ -92,7 +93,7 @@ def ollama_transport(base: str, max_bytes: int) -> Transport:
     return call
 
 
-def generate(request: Request, settings: Settings, *, transport: Transport | None = None,
+def _generate(request: Request, settings: Settings, *, transport: Transport | None = None,
              observer: Observer | None = None) -> Result:
     started = time.monotonic()
     deadline = started + settings.timeout_seconds
@@ -115,7 +116,8 @@ def generate(request: Request, settings: Settings, *, transport: Transport | Non
                      repair_ms=(time.monotonic()-first_end)*1000 if attempts > 1 else 0.0)
 
     def fail(code, message) -> Failure:
-        result = Failure(id=request.id, code=code, message=message, stats=stats())
+        failed_stats = stats().model_copy(update={"first_pass": False})
+        result = Failure(id=request.id, code=code, message=message, stats=failed_stats)
         emit("failure", code=code, **result.stats.model_dump())
         return result
 
@@ -187,3 +189,17 @@ def generate(request: Request, settings: Settings, *, transport: Transport | Non
             if attempt == 0:
                 first_end = time.monotonic()
     return fail("validation_exhausted", "Model output did not satisfy the contract")
+
+
+def generate(request: Request, settings: Settings, *, transport: Transport | None = None,
+             observer: Observer | None = None) -> Result:
+    with tracer.start_as_current_span("llm." + request.task,
+        attributes={"request.id": request.id, "schema.version": VERSION}) as span:
+        def observe(event: str, attrs: dict) -> None:
+            span.add_event(event, attributes=attrs)
+            if observer:
+                observer(event, attrs)
+        result = _generate(request, settings, transport=transport, observer=observe)
+        span.set_attribute("gate.ok", result.ok)
+        sample(request, result)
+        return result
