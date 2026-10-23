@@ -222,7 +222,7 @@ class Calendar(EventIds):
 
 class Schedule(Contract):
     query: Annotated[str, Field(min_length=3, max_length=200)]
-    cadence_hours: Annotated[float, Field(ge=1, le=168)] | None = None
+    cadence_hours: Annotated[float, Field(ge=1, le=336)] | None = None
 
 
 class Watch(Schedule):
@@ -232,7 +232,7 @@ class Watch(Schedule):
 class UpdateSchedule(Contract):
     id: Id
     active: bool | None = None
-    cadence_hours: Annotated[float, Field(ge=1, le=168)] | None = None
+    cadence_hours: Annotated[float, Field(ge=1, le=336)] | None = None
 
 
 class UnSchedule(Contract):
@@ -241,6 +241,7 @@ class UnSchedule(Contract):
 
 
 class Interests(Contract):
+    reason: Short | None = None
     add_loves: Tags | None = None
     add_avoids: Tags | None = None
     remove_loves: Tags | None = None

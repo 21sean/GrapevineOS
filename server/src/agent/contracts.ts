@@ -21,15 +21,8 @@
  * database or the graph.
  */
 import { z } from "zod";
-import {
-  CADENCE_DEFAULT_HOURS,
-  CADENCE_MAX_HOURS,
-  CADENCE_MIN_HOURS,
-  CATEGORIES,
-  INTEREST_TOPICS,
-  RARITIES,
-  type Category,
-} from "../types.js";
+import { toolSchemas } from "../llm/generated.js";
+import { INTEREST_TOPICS } from "../types.js";
 
 /** Where a tool is exposed. A tool can be on several surfaces at once. */
 export type Surface = "graph" | "mcp" | "rest";
@@ -80,25 +73,7 @@ export const lngLat = z
   .union([z.tuple([z.number(), z.number()]), z.string().regex(LNG_LAT_STRING)])
   .describe('[lng, lat], or the same pair as a "lng,lat" string');
 
-const category = z.enum(CATEGORIES as [Category, ...Category[]]);
-
-const eventIds = z.array(z.string()).describe("Event ids from the digest or search results");
-
 const TOPICS = INTEREST_TOPICS.join(", ");
-
-const interestPatch = {
-  add_loves: z.array(z.string()).optional(),
-  add_avoids: z.array(z.string()).optional(),
-  remove_loves: z.array(z.string()).optional(),
-  remove_avoids: z.array(z.string()).optional(),
-};
-
-const query = z
-  .string()
-  .trim()
-  .min(3)
-  .max(200)
-  .describe('What to look for, e.g. "live jazz this weekend"; the city is appended automatically');
 
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 const clip = (v: unknown, n: number) => String(v ?? "").slice(0, n);
@@ -112,26 +87,7 @@ export const CONTRACTS = {
     name: "search_events",
     description:
       "Search the live event set: upcoming local events, one row per event at its next occurrence. All filters are optional; omit them for the top upcoming events. Dates are city-local YYYY-MM-DD. Returns id, title, venue, time, price and buzz rating; use the ids with the other tools.",
-    schema: z.object({
-      query: z
-        .string()
-        .describe("Free text matched against title, description, venue and tags")
-        .optional(),
-      categories: z.array(category).optional(),
-      tags: z.array(z.string()).describe("Substring-matched against event tags").optional(),
-      date_from: z.string().describe("YYYY-MM-DD inclusive, city-local").optional(),
-      date_to: z.string().describe("YYYY-MM-DD inclusive, city-local").optional(),
-      free_only: z.boolean().optional(),
-      min_rating: z.number().describe("1-5 local-buzz floor").optional(),
-      exclude_promoted: z.boolean().describe("Default true: drop paid placements").optional(),
-      near: z
-        .string()
-        .describe('A venue or neighborhood name, "lng,lat", or "user" for the user\'s location')
-        .optional(),
-      max_km: z.number().describe("Straight-line radius, only with near").optional(),
-      sort: z.enum(["time", "buzz", "distance"]).optional(),
-      limit: z.number().describe("Max results, up to 20 (default 8)").optional(),
-    }),
+    schema: toolSchemas.search_events,
     surfaces: ["graph", "mcp", "rest"],
     effect: "read",
     label: (a) => {
@@ -145,7 +101,7 @@ export const CONTRACTS = {
     name: "get_event",
     description:
       "Full detail for one event: description, address, ticket link, buzz rationale and coordinates.",
-    schema: z.object({ id: z.string() }),
+    schema: toolSchemas.get_event,
     surfaces: ["graph", "mcp", "rest"],
     effect: "read",
     label: () => "Reading details",
@@ -155,11 +111,7 @@ export const CONTRACTS = {
     name: "get_eta",
     description:
       "Traffic-aware driving ETA. Give to_event_id (preferred) or to coordinates; from defaults to the user's location when known, else the city center.",
-    schema: z.object({
-      to_event_id: z.string().optional(),
-      to: lngLat.optional(),
-      from: lngLat.optional(),
-    }),
+    schema: toolSchemas.get_eta,
     surfaces: ["graph", "mcp", "rest"],
     effect: "read",
     label: () => "Checking traffic",
@@ -170,10 +122,7 @@ export const CONTRACTS = {
     name: "search_web",
     description:
       "Search the live web (keyless local metasearch: SearXNG or DuckDuckGo). Use for anything the event catalog cannot answer: artist background, venue details or hours, weather, news. Returns titles, urls and snippets.",
-    schema: z.object({
-      query: z.string().describe("A focused search query"),
-      limit: z.number().describe("Max results, up to 8 (default 5)").optional(),
-    }),
+    schema: toolSchemas.search_web,
     surfaces: ["graph"],
     effect: "read",
     openWorld: true,
@@ -185,9 +134,7 @@ export const CONTRACTS = {
     name: "read_page",
     description:
       "Fetch one web page and return its readable text (reader-mode extraction, truncated). Use on the most promising search_web result when snippets are not enough.",
-    schema: z.object({
-      url: z.string().describe("A full http(s) url, usually from search_web results"),
-    }),
+    schema: toolSchemas.read_page,
     surfaces: ["graph"],
     effect: "read",
     openWorld: true,
@@ -206,15 +153,7 @@ export const CONTRACTS = {
     name: "discover_events",
     description:
       "Search the open web for local events and add verified ones to the catalog (the user's list and map). Every candidate is verified against the page it came from (dates, venue, a supporting quote) before anything is written; unverified candidates come back with the rejection reason. Slow: several pages are read and cross-checked. Defaults to a dry run that reports what it found; call again with dry_run:false once the user asks for the events to be added.",
-    schema: z.object({
-      query,
-      dry_run: z
-        .boolean()
-        .describe(
-          "Default true: verify and report, write nothing. false commits the verified events.",
-        )
-        .optional(),
-    }),
+    schema: toolSchemas.discover_events,
     surfaces: ["graph", "mcp", "rest"],
     effect: "write",
     openWorld: true,
@@ -234,7 +173,7 @@ export const CONTRACTS = {
     name: "show_on_map",
     description:
       "Highlight events on the user's map and fly the camera to them. Call after choosing which events to recommend.",
-    schema: z.object({ event_ids: eventIds }),
+    schema: toolSchemas.show_on_map,
     surfaces: ["graph"],
     effect: "ui",
     label: () => "Pinning the map",
@@ -245,30 +184,7 @@ export const CONTRACTS = {
     name: "set_filters",
     description:
       'Change the filters on the user\'s live map ("free stuff this weekend", "only music", "hide farmers markets"). Only pass the knobs the user asked about; the rest keep their values. reset:true clears everything back to defaults first.',
-    schema: z.object({
-      reset: z.boolean().describe("Clear all filters to defaults before applying").optional(),
-      categories: z.array(category).describe("Show only these categories; [] shows all").optional(),
-      live_only: z.boolean().optional(),
-      rare_only: z.boolean().describe("Only rare one-offs (parades, festivals)").optional(),
-      free_only: z.boolean().optional(),
-      farmers: z.enum(["any", "only", "hide"]).describe("Farmers-market volume control").optional(),
-      hide_promoted: z.boolean().optional(),
-      min_buzz: z.number().describe("1-5 local-buzz floor; 0 clears it").optional(),
-      date_from: z
-        .string()
-        .nullable()
-        .describe("YYYY-MM-DD inclusive: only events on or after; null clears")
-        .optional(),
-      date_to: z
-        .string()
-        .nullable()
-        .describe("YYYY-MM-DD inclusive: only events on or before; null clears")
-        .optional(),
-      note: z
-        .string()
-        .describe('Short label shown to the user, e.g. "Free this weekend"')
-        .optional(),
-    }),
+    schema: toolSchemas.set_filters,
     surfaces: ["graph"],
     effect: "ui",
     label: (a) => (a.note ? `Filtering: ${clip(a.note, 50)}` : "Updating map filters"),
@@ -279,10 +195,7 @@ export const CONTRACTS = {
     name: "propose_calendar",
     description:
       "Show the user a save-to-calendar card for the given events. The user confirms; never claim anything is saved.",
-    schema: z.object({
-      event_ids: eventIds,
-      note: z.string().describe('Short label for the plan, e.g. "Saturday night"').optional(),
-    }),
+    schema: toolSchemas.propose_calendar,
     surfaces: ["graph"],
     effect: "propose",
     label: () => "Drafting a calendar save",
@@ -292,16 +205,7 @@ export const CONTRACTS = {
     name: "propose_watch",
     description:
       'Offer to keep watching the web for a topic on the user\'s behalf: a card the user confirms schedules a recurring discovery search (daily by default) whose verified finds land on the map automatically. Use when the user wants to be kept posted ("watch for jazz shows", "keep looking for pop-ups"), not for a one-off question. The user confirms; never claim a watch is set.',
-    schema: z.object({
-      query,
-      cadence_hours: z
-        .number()
-        .min(CADENCE_MIN_HOURS)
-        .max(CADENCE_MAX_HOURS)
-        .describe(`Hours between runs (default ${CADENCE_DEFAULT_HOURS}; 168 = weekly)`)
-        .optional(),
-      note: z.string().describe('Short label for the card, e.g. "Jazz watch"').optional(),
-    }),
+    schema: toolSchemas.propose_watch,
     surfaces: ["graph"],
     effect: "propose",
     label: (a) => (a.query ? `Offering a watch: ${clip(a.query, 50)}` : "Offering a watch"),
@@ -311,7 +215,7 @@ export const CONTRACTS = {
     name: "save_calendar",
     description:
       "Save events to the user's calendar right now (Google Calendar too when connected). Only after the user clearly asked to save; otherwise use propose_calendar and let them confirm.",
-    schema: z.object({ event_ids: eventIds }),
+    schema: toolSchemas.save_calendar,
     surfaces: ["graph"],
     effect: "write",
     label: () => "Saving to your calendar",
@@ -321,7 +225,7 @@ export const CONTRACTS = {
   list_saved_events: contract({
     name: "list_saved_events",
     description: "Events on the linked Grapevine account's calendar.",
-    schema: z.object({}),
+    schema: toolSchemas.list_saved_events,
     surfaces: ["mcp", "rest"],
     effect: "read",
     label: () => "Reading your calendar",
@@ -331,7 +235,7 @@ export const CONTRACTS = {
     name: "save_event",
     description:
       "Save one event to the linked account's calendar (syncs to Google Calendar when connected). Confirm with the user first.",
-    schema: z.object({ event_id: z.string() }),
+    schema: toolSchemas.save_event,
     surfaces: ["mcp", "rest"],
     effect: "write",
     label: () => "Saving to your calendar",
@@ -341,7 +245,7 @@ export const CONTRACTS = {
     name: "unsave_event",
     description:
       "Remove one event from the linked account's calendar. Confirm with the user first.",
-    schema: z.object({ event_id: z.string() }),
+    schema: toolSchemas.unsave_event,
     surfaces: ["mcp", "rest"],
     effect: "write",
     label: () => "Removing from your calendar",
@@ -351,10 +255,7 @@ export const CONTRACTS = {
     name: "set_rarity",
     description:
       "Correct an event's rarity in the database (applies immediately, no confirmation). rare = one-off or annual specials (parades, fireworks, races, big festivals); notable = uncommon but repeats; common = weekly or regular. Rarity drives the app's Rare finds filter, so fix events that are clearly mislabeled and leave the rest alone.",
-    schema: z.object({
-      event_id: z.string(),
-      rarity: z.enum(RARITIES),
-    }),
+    schema: toolSchemas.set_rarity,
     surfaces: ["graph", "mcp", "rest"],
     effect: "write",
     label: (a) => (a.rarity ? `Marking as ${String(a.rarity)}` : "Updating rarity"),
@@ -365,10 +266,7 @@ export const CONTRACTS = {
   update_interests: contract({
     name: "update_interests",
     description: `Propose durable taste changes for the user to confirm. Use only for lasting preferences the user states, never for one-off queries. Topics must come from this list: ${TOPICS}. Nothing is written by this tool: in the app the user confirms a card; elsewhere, show the returned proposal and call apply_interests with confirmed:true once they agree.`,
-    schema: z.object({
-      ...interestPatch,
-      reason: z.string().describe("One short sentence shown to the user").optional(),
-    }),
+    schema: toolSchemas.update_interests,
     surfaces: ["graph", "mcp", "rest"],
     effect: "propose",
     label: () => "Noting your taste",
@@ -377,12 +275,7 @@ export const CONTRACTS = {
   apply_interests: contract({
     name: "apply_interests",
     description: `Write a taste change the user has already confirmed. Same arguments as update_interests plus confirmed:true, which is required: a call without it is refused. Topics: ${TOPICS}.`,
-    schema: z.object({
-      ...interestPatch,
-      confirmed: z
-        .literal(true)
-        .describe("Must be true: the user has seen the proposal from update_interests and agreed"),
-    }),
+    schema: toolSchemas.apply_interests,
     surfaces: ["mcp", "rest"],
     effect: "write",
     label: () => "Updating your taste",
@@ -392,7 +285,7 @@ export const CONTRACTS = {
     name: "list_scheduled_searches",
     description:
       "Saved web-discovery searches the server re-runs automatically, with cadence, last run time and last result summary. In the app this lists the signed-in user's own watches.",
-    schema: z.object({}),
+    schema: toolSchemas.list_scheduled_searches,
     surfaces: ["graph", "mcp", "rest"],
     effect: "read",
     label: () => "Listing your watches",
@@ -403,17 +296,7 @@ export const CONTRACTS = {
     name: "schedule_search",
     description:
       "Save a web-discovery search the server re-runs on a schedule; verified events land on the map automatically. Re-saving an existing query updates its cadence. Confirm with the user first.",
-    schema: z.object({
-      query,
-      cadence_hours: z
-        .number()
-        .min(CADENCE_MIN_HOURS)
-        .max(CADENCE_MAX_HOURS)
-        .describe(
-          `Hours between runs, ${CADENCE_MIN_HOURS}-${CADENCE_MAX_HOURS} (default ${CADENCE_DEFAULT_HOURS}; 168 = weekly)`,
-        )
-        .optional(),
-    }),
+    schema: toolSchemas.schedule_search,
     surfaces: ["mcp", "rest"],
     effect: "write",
     label: () => "Scheduling a search",
@@ -423,11 +306,7 @@ export const CONTRACTS = {
     name: "update_scheduled_search",
     description:
       "Pause, resume or re-pace one scheduled search by id: active:false pauses it, cadence_hours changes how often it runs.",
-    schema: z.object({
-      id: z.string().describe("From list_scheduled_searches"),
-      active: z.boolean().optional(),
-      cadence_hours: z.number().min(CADENCE_MIN_HOURS).max(CADENCE_MAX_HOURS).optional(),
-    }),
+    schema: toolSchemas.update_scheduled_search,
     surfaces: ["mcp", "rest"],
     effect: "write",
     label: () => "Updating a scheduled search",
@@ -437,7 +316,7 @@ export const CONTRACTS = {
     name: "run_scheduled_search",
     description:
       "Run one scheduled search immediately (commits verified events, and stamps its last-run time and status).",
-    schema: z.object({ id: z.string().describe("From list_scheduled_searches") }),
+    schema: toolSchemas.run_scheduled_search,
     surfaces: ["mcp", "rest"],
     effect: "write",
     label: () => "Running a scheduled search",
@@ -447,13 +326,7 @@ export const CONTRACTS = {
     name: "unschedule_search",
     description:
       "Delete a scheduled web-discovery search by id (from list_scheduled_searches) or by its exact query text. Confirm with the user first.",
-    schema: z.object({
-      id: z.string().optional(),
-      query: z
-        .string()
-        .optional()
-        .describe("Alternative to id: the exact query text, case-insensitive"),
-    }),
+    schema: toolSchemas.unschedule_search,
     surfaces: ["mcp", "rest"],
     effect: "write",
     label: () => "Removing a scheduled search",
@@ -461,7 +334,18 @@ export const CONTRACTS = {
 };
 
 export type ToolName = keyof typeof CONTRACTS;
-export type ToolArgs<N extends ToolName> = z.infer<(typeof CONTRACTS)[N]["schema"]>;
+type Present<T> = {
+  [K in keyof T]: K extends "date_from" | "date_to" ? T[K] : Exclude<T[K], null>;
+};
+export type ToolArgs<N extends ToolName> = Present<z.infer<(typeof CONTRACTS)[N]["schema"]>>;
+export function presentArgs(value: unknown): unknown {
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      ([key, v]) => v !== null || key === "date_from" || key === "date_to",
+    ),
+  );
+}
 
 /** The names exposed on one surface, as a type. */
 export type ToolsOn<S extends Surface> = {
@@ -513,7 +397,7 @@ export function parseArgs<N extends ToolName>(
   raw: unknown,
 ): { ok: true; args: ToolArgs<N> } | { ok: false; error: string } {
   const result = CONTRACTS[name].schema.safeParse(raw ?? {});
-  if (result.success) return { ok: true, args: result.data as ToolArgs<N> };
+  if (result.success) return { ok: true, args: presentArgs(result.data) as ToolArgs<N> };
   const error = result.error.issues
     .map((i) => `${i.path.join(".") || "body"}: ${i.message}`)
     .join("; ");

@@ -20,6 +20,8 @@ def zod(s: dict, defs: dict) -> str:
     if "enum" in s:
         return f"z.enum({json.dumps(s['enum'])})"
     alternatives = s.get("anyOf", s.get("oneOf"))
+    if alternatives and len(alternatives) == 2 and alternatives[-1].get("type") == "null":
+        return zod(alternatives[0], defs) + ".nullable()"
     if alternatives:
         return "z.union([" + ",".join(zod(a, defs) for a in alternatives) + "])"
     kind = s.get("type")

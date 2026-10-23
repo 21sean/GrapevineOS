@@ -6,7 +6,7 @@
     "cadence_hours": {
       "anyOf": [
         {
-          "maximum": 168,
+          "maximum": 336,
           "minimum": 1,
           "type": "number"
         },

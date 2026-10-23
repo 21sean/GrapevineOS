@@ -67,18 +67,18 @@ GET /api/ext/v1/events?query=...&categories=music,food&date_from=YYYY-MM-DD
 
 | argument | type | | meaning |
 |---|---|---|---|
-| `query` | string | optional | Free text matched against title, description, venue and tags |
+| `query` | string | optional |  |
 | `categories` | list from music, food, sports, arts, market, festival, community | optional |  |
-| `tags` | list of string | optional | Substring-matched against event tags |
-| `date_from` | string | optional | YYYY-MM-DD inclusive, city-local |
-| `date_to` | string | optional | YYYY-MM-DD inclusive, city-local |
+| `tags` | list of string | optional |  |
+| `date_from` | string | optional |  |
+| `date_to` | string | optional |  |
 | `free_only` | boolean | optional |  |
-| `min_rating` | number | optional | 1-5 local-buzz floor |
-| `exclude_promoted` | boolean | optional | Default true: drop paid placements |
-| `near` | string | optional | A venue or neighborhood name, "lng,lat", or "user" for the user's location |
-| `max_km` | number | optional | Straight-line radius, only with near |
+| `min_rating` | number | optional |  |
+| `exclude_promoted` | boolean | optional |  |
+| `near` | string | optional |  |
+| `max_km` | number | optional |  |
 | `sort` | one of time, buzz, distance | optional |  |
-| `limit` | number | optional | Max results, up to 20 (default 8) |
+| `limit` | number | optional |  |
 
 Read-only.
 
@@ -109,8 +109,8 @@ GET /api/ext/v1/eta?to_event_id=<id>  or  ?to=lng,lat[&from=lng,lat]
 | argument | type | | meaning |
 |---|---|---|---|
 | `to_event_id` | string | optional |  |
-| `to` | [number, number] or string | optional | [lng, lat], or the same pair as a "lng,lat" string |
-| `from` | [number, number] or string | optional | [lng, lat], or the same pair as a "lng,lat" string |
+| `to` | [number, number] or string or value | optional |  |
+| `from` | [number, number] or string or value | optional |  |
 
 Read-only.
 
@@ -190,8 +190,8 @@ POST /api/ext/v1/discovery/run  {"query": "...", "dry_run": true}
 
 | argument | type | | meaning |
 |---|---|---|---|
-| `query` | string | required | What to look for, e.g. "live jazz this weekend"; the city is appended automatically |
-| `dry_run` | boolean | optional | Default true: verify and report, write nothing. false commits the verified events. |
+| `query` | string | required |  |
+| `dry_run` | boolean | optional |  |
 
 Writes to the linked account: confirm with the user first.
 
@@ -221,8 +221,8 @@ POST /api/ext/v1/discovery/searches  {"query": "...", "cadence_hours": 24}
 
 | argument | type | | meaning |
 |---|---|---|---|
-| `query` | string | required | What to look for, e.g. "live jazz this weekend"; the city is appended automatically |
-| `cadence_hours` | number | optional | Hours between runs, 1-336 (default 24; 168 = weekly) |
+| `query` | string | required |  |
+| `cadence_hours` | number | optional |  |
 
 Writes to the linked account: confirm with the user first.
 
@@ -237,7 +237,7 @@ PATCH /api/ext/v1/discovery/searches/:id  {"active": false}
 
 | argument | type | | meaning |
 |---|---|---|---|
-| `id` | string | required | From list_scheduled_searches |
+| `id` | string | required |  |
 | `active` | boolean | optional |  |
 | `cadence_hours` | number | optional |  |
 
@@ -254,7 +254,7 @@ POST /api/ext/v1/discovery/searches/:id/run
 
 | argument | type | | meaning |
 |---|---|---|---|
-| `id` | string | required | From list_scheduled_searches |
+| `id` | string | required |  |
 
 Writes to the linked account: confirm with the user first.
 
@@ -270,7 +270,7 @@ DELETE /api/ext/v1/discovery/searches/:id
 | argument | type | | meaning |
 |---|---|---|---|
 | `id` | string | optional |  |
-| `query` | string | optional | Alternative to id: the exact query text, case-insensitive |
+| `query` | string | optional |  |
 
 Writes to the linked account: confirm with the user first.
 
@@ -291,11 +291,11 @@ POST /api/ext/v1/interests  {"add_loves": ["jazz"]}
 
 | argument | type | | meaning |
 |---|---|---|---|
+| `reason` | string | optional |  |
 | `add_loves` | list of string | optional |  |
 | `add_avoids` | list of string | optional |  |
 | `remove_loves` | list of string | optional |  |
 | `remove_avoids` | list of string | optional |  |
-| `reason` | string | optional | One short sentence shown to the user |
 
 Proposes only; writes nothing.
 
@@ -314,11 +314,12 @@ POST /api/ext/v1/interests  {"add_loves": ["jazz"], "confirmed": true}
 
 | argument | type | | meaning |
 |---|---|---|---|
+| `reason` | string | optional |  |
 | `add_loves` | list of string | optional |  |
 | `add_avoids` | list of string | optional |  |
 | `remove_loves` | list of string | optional |  |
 | `remove_avoids` | list of string | optional |  |
-| `confirmed` | the literal true | required | Must be true: the user has seen the proposal from update_interests and agreed |
+| `confirmed` | the literal true | required |  |
 
 Writes to the linked account: confirm with the user first.
 

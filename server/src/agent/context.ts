@@ -135,8 +135,8 @@ export interface SearchParams {
   query?: string;
   categories?: string[];
   tags?: string[];
-  date_from?: string;
-  date_to?: string;
+  date_from?: string | null;
+  date_to?: string | null;
   free_only?: boolean;
   min_rating?: number;
   exclude_promoted?: boolean;
