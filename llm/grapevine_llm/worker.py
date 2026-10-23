@@ -14,7 +14,7 @@ def main() -> None:
         try:
             request = Request.model_validate_json(line)
         except ValueError:
-            result = Failure(id="invalid", code="invalid_request", message="Invalid gate request",
+            result = Failure(ok=False, id="invalid", code="invalid_request", message="Invalid gate request",
                 stats=Stats(attempts=0, validation_failures=0, first_pass=False,
                             validation_ms=0, total_ms=0, repair_ms=0))
         else:

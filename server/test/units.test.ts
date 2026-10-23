@@ -6,7 +6,6 @@ import { llmPolicy } from "../src/budget.js";
 import { safeSvg } from "../src/catalog.js";
 import { eventsFromJsonLdBlocks, inZone } from "../src/jsonld.js";
 import { startLoop } from "../src/lifecycle.js";
-import { parseLooseJSON } from "../src/llm-json.js";
 import { nextOccurrence, normalizeRRule } from "../src/recurrence.js";
 import { rateLimit, singleFlight } from "../src/rate-limit.js";
 import { errorHandler } from "../src/request-id.js";
@@ -173,16 +172,6 @@ describe("the SSRF guard", () => {
       <script type='application/ld+json'>  {"@type":"Place"}  </script><script>var x = 1</script></head></html>`;
     expect(jsonLdBlocks(html)).toEqual(['{"@type":"Event"}', '{"@type":"Place"}']);
     expect(jsonLdBlocks("<p>no markup</p>")).toEqual([]);
-  });
-});
-
-describe("loose JSON", () => {
-  it("salvages JSON from think tags, fences and prose", () => {
-    expect(parseLooseJSON('<think>hmm</think>```json\n{"a":1}\n```')).toEqual({ a: 1 });
-    expect(parseLooseJSON('Sure! Here it is: {"a":{"b":2}} hope that helps')).toEqual({
-      a: { b: 2 },
-    });
-    expect(() => parseLooseJSON("nothing here")).toThrow(/unparseable/);
   });
 });
 

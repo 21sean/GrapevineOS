@@ -1,0 +1,30 @@
+{
+  "$id": "urn:grapevine:llm:1.1.0:tool_discover_events",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "dry_run": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Dry Run"
+    },
+    "query": {
+      "maxLength": 200,
+      "minLength": 3,
+      "title": "Query",
+      "type": "string"
+    }
+  },
+  "required": [
+    "query"
+  ],
+  "title": "Discover",
+  "type": "object"
+}

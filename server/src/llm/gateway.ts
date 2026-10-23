@@ -1,10 +1,11 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { z } from "zod";
 import {
   CONTRACT_VERSION,
   outputSchemas,
+  requestSchema,
+  result_envelopeSchema,
   type Output,
   type Task,
   type ValidationContext,
@@ -19,26 +20,7 @@ export class LlmGateError extends Error {
     this.name = "LlmGateError";
   }
 }
-const envelope = z
-  .object({
-    id: z.string(),
-    version: z.literal(CONTRACT_VERSION),
-    ok: z.boolean(),
-    output: z.unknown().optional(),
-    code: z.string().optional(),
-    message: z.string().optional(),
-    stats: z
-      .object({
-        attempts: z.number().int().nonnegative(),
-        validation_failures: z.number().int().nonnegative(),
-        first_pass: z.boolean(),
-        validation_ms: z.number().nonnegative(),
-        total_ms: z.number().nonnegative(),
-        repair_ms: z.number().nonnegative(),
-      })
-      .strict(),
-  })
-  .strict();
+const envelope = result_envelopeSchema;
 const root = fileURLToPath(new URL("../../..", import.meta.url));
 const python =
   process.env.GRAPEVINE_LLM_PYTHON ||
@@ -132,15 +114,17 @@ export async function generateTyped<T extends Task>(opts: {
   if (pending.size >= 16) throw new LlmGateError("busy", "LLM gate queue is full");
   const id = randomUUID();
   const line =
-    JSON.stringify({
-      id,
-      version: CONTRACT_VERSION,
-      task: opts.task,
-      messages: opts.messages,
-      context: opts.context ?? {},
-      model: opts.model,
-      base_url: opts.baseUrl,
-    }) + "\n";
+    JSON.stringify(
+      requestSchema.parse({
+        id,
+        version: CONTRACT_VERSION,
+        task: opts.task,
+        messages: opts.messages,
+        context: opts.context ?? {},
+        model: opts.model,
+        base_url: opts.baseUrl,
+      }),
+    ) + "\n";
   if (Buffer.byteLength(line) > 1_000_000)
     throw new LlmGateError("input", "LLM input exceeds byte limit");
   const child = start();

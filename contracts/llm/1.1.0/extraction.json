@@ -1,0 +1,177 @@
+{
+  "$defs": {
+    "Event": {
+      "additionalProperties": false,
+      "properties": {
+        "address": {
+          "maxLength": 500,
+          "title": "Address",
+          "type": "string"
+        },
+        "buzz": {
+          "maximum": 5,
+          "minimum": 1,
+          "title": "Buzz",
+          "type": "number"
+        },
+        "buzzWhy": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Buzzwhy",
+          "type": "string"
+        },
+        "category": {
+          "enum": [
+            "music",
+            "food",
+            "sports",
+            "arts",
+            "market",
+            "festival",
+            "community"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 4000,
+          "title": "Description",
+          "type": "string"
+        },
+        "end": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "End",
+          "type": "string"
+        },
+        "free": {
+          "title": "Free",
+          "type": "boolean"
+        },
+        "price": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Price",
+          "type": "string"
+        },
+        "promoted": {
+          "title": "Promoted",
+          "type": "boolean"
+        },
+        "rarity": {
+          "enum": [
+            "common",
+            "notable",
+            "rare"
+          ],
+          "title": "Rarity",
+          "type": "string"
+        },
+        "recurrence": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Recurrence"
+        },
+        "start": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Start",
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 6,
+          "title": "Tags",
+          "type": "array"
+        },
+        "ticketProvider": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Ticketprovider"
+        },
+        "ticketUrl": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Ticketurl"
+        },
+        "title": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "venue": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Venue",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "description",
+        "category",
+        "tags",
+        "venue",
+        "address",
+        "start",
+        "end",
+        "recurrence",
+        "price",
+        "free",
+        "ticketUrl",
+        "ticketProvider",
+        "buzz",
+        "buzzWhy",
+        "promoted",
+        "rarity"
+      ],
+      "title": "Event",
+      "type": "object"
+    }
+  },
+  "$id": "urn:grapevine:llm:1.1.0:extraction",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "events": {
+      "items": {
+        "$ref": "#/$defs/Event"
+      },
+      "maxItems": 200,
+      "title": "Events",
+      "type": "array"
+    }
+  },
+  "required": [
+    "events"
+  ],
+  "title": "Extraction",
+  "type": "object"
+}
