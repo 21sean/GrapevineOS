@@ -121,7 +121,7 @@ def run(mode: Literal["replay", "live"], settings: Settings, path: Path = DATA) 
             if case.request.task == "agent":
                 result.retrieval_precision, result.retrieval_recall = score_ids(case.retrieved_ids, case.relevant_ids)
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
-    return Report(mode=mode, dataset_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+    return Report(mode=mode, dataset_sha256=hashlib.sha256(path.read_text(encoding="utf-8").encode()).hexdigest(),
                   revision=revision, model=settings.model, seed=settings.seed, results=results,
                   passed=all(result.passed for result in results))
 
