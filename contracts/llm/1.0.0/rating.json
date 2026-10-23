@@ -1,0 +1,30 @@
+{
+  "$id": "urn:grapevine:llm:1.0.0:rating",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "promoted": {
+      "title": "Promoted",
+      "type": "boolean"
+    },
+    "rating": {
+      "maximum": 5,
+      "minimum": 1,
+      "title": "Rating",
+      "type": "number"
+    },
+    "rationale": {
+      "maxLength": 2000,
+      "minLength": 1,
+      "title": "Rationale",
+      "type": "string"
+    }
+  },
+  "required": [
+    "rating",
+    "rationale",
+    "promoted"
+  ],
+  "title": "EventRating",
+  "type": "object"
+}

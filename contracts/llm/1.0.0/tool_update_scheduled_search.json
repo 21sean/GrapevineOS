@@ -1,0 +1,45 @@
+{
+  "$id": "urn:grapevine:llm:1.0.0:tool_update_scheduled_search",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "active": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Active"
+    },
+    "cadence_hours": {
+      "anyOf": [
+        {
+          "maximum": 168,
+          "minimum": 1,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cadence Hours"
+    },
+    "id": {
+      "maxLength": 200,
+      "minLength": 1,
+      "pattern": "^[a-zA-Z0-9_.:-]+$",
+      "title": "Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "title": "UpdateSchedule",
+  "type": "object"
+}

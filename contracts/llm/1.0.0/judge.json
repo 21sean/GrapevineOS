@@ -1,0 +1,25 @@
+{
+  "$id": "urn:grapevine:llm:1.0.0:judge",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "reason": {
+      "maxLength": 2000,
+      "minLength": 1,
+      "title": "Reason",
+      "type": "string"
+    },
+    "score": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Score",
+      "type": "number"
+    }
+  },
+  "required": [
+    "score",
+    "reason"
+  ],
+  "title": "JudgeScore",
+  "type": "object"
+}

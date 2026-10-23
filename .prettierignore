@@ -13,3 +13,8 @@ server/redteam/.venv/
 server/scripts/langfuse/managed-templates.json
 server/scripts/seed-data/
 supabase/
+llm/.venv/
+llm/artifacts/
+llm/uv.lock
+contracts/llm/
+server/src/llm/generated.ts
