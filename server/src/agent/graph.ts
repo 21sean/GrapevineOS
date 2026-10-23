@@ -1,3 +1,4 @@
+import { generateTyped, LlmGateError } from "../llm/gateway.js";
 /**
  * The concierge as a LangGraph StateGraph, with the guardrails inside it:
  *
@@ -95,7 +96,6 @@
  */
 import {
   AIMessage,
-  AIMessageChunk,
   HumanMessage,
   isAIMessage,
   SystemMessage,
@@ -104,9 +104,6 @@ import {
 } from "@langchain/core/messages";
 import type { ToolCall } from "@langchain/core/messages/tool";
 import { dispatchCustomEvent } from "@langchain/core/callbacks/dispatch";
-import type { BaseLanguageModelInput } from "@langchain/core/language_models/base";
-import type { Runnable } from "@langchain/core/runnables";
-import { concat } from "@langchain/core/utils/stream";
 import {
   Command,
   END,
@@ -118,18 +115,14 @@ import {
   StateGraph,
   StateSchema,
   type LangGraphRunnableConfig,
-  type RetryPolicy,
 } from "@langchain/langgraph";
-import { ChatOllama } from "@langchain/ollama";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import { z } from "zod";
 import { llmPolicy } from "../budget.js";
 import { SupabaseSaver } from "../checkpointer.js";
-import { thinkFlagRejected } from "../ollama.js";
 import type { ChatEffort, CliProviderId } from "../types.js";
-import { CliChatModel } from "./cli-model.js";
 import { buildSystemPrompt, type AgentCtx, type ChatContext } from "./context.js";
-import { toolDetail, toolLabel } from "./contracts.js";
+import { toolDetail, toolLabel, toolsFor, presentArgs } from "./contracts.js";
 import {
   inputRefusalMessage,
   personaGuard,
@@ -156,12 +149,6 @@ const SUMMARY_TIMEOUT_MS = 25_000;
  * browser. Mid-stream errors must not match; see the header comment. How
  * many attempts comes from the one LLM policy in budget.ts.
  */
-const modelRetry: RetryPolicy = {
-  maxAttempts: 1 + llmPolicy("ollama").retries,
-  initialInterval: llmPolicy("ollama").retryDelayMs,
-  retryOn: (err) => /fetch failed|ECONNREFUSED|EAI_AGAIN/i.test(String(err)),
-};
-
 /**
  * Strips <think>…</think> spans from streamed text, holding back partial tags
  * that split across chunk boundaries. Some models emit these even with the
@@ -438,123 +425,71 @@ export function buildAgentGraph(deps: GraphDeps) {
   const { ctx, chat, baseUrl, model, toolsOk, city, telemetry } = deps;
   const system = new SystemMessage(buildSystemPrompt(ctx, chat, toolsOk));
 
-  // A CLI provider replaces the model, not the graph: rails, memory, and
-  // traces stay identical. Its in-CLI tool calls surface as frames via
-  // `frames`, pointed at the current run's writer inside invokeModel.
-  const cli = deps.provider
-    ? new CliChatModel({ provider: deps.provider, model: deps.cliModel, effort: deps.cliEffort })
-    : null;
-
-  // Built only for Ollama turns. A CLI turn never binds these tools (the CLI
-  // brings its own through MCP) and never calls ChatOllama, so constructing
-  // twelve LangChain tools and two model clients for it was pure overhead.
-  const tools = cli ? [] : makeTools(ctx, chat);
+  if (deps.provider)
+    throw new LlmGateError("unsupported_provider", "Chat requires the validated local provider");
+  const tools = makeTools(ctx, chat);
   const toolsByName = new Map<string, StructuredToolInterface>(
     tools.map((t) => [t.name, t as StructuredToolInterface]),
   );
-  const opts = { baseUrl, model, temperature: 0.3, numCtx: 16384 };
-  // Same dance as ollama.ts chatJSON: ask for no thinking, but fall back for
-  // models that reject the flag outright (thinkFlagRejected is the one test).
-  const llm = cli ? null : new ChatOllama({ ...opts, think: false });
-  const llmNoFlag = cli ? null : new ChatOllama(opts);
-  const agentLlm = llm && toolsOk ? llm.bindTools(tools) : llm;
-  const agentLlmNoFlag = llmNoFlag && toolsOk ? llmNoFlag.bindTools(tools) : llmNoFlag;
 
-  type Model = Runnable<BaseLanguageModelInput, AIMessageChunk>;
-  const modelName = deps.provider ?? model;
-
-  /**
-   * One model call, streamed through the output rail. Tokens reach the
-   * browser (and the transcript) only after the persona guard has cleared
-   * them; a trip aborts the model mid-stream, tells the client with a
-   * guardrail frame, a notice and a replace, and hands back the refusal as the
-   * message the graph records. The think-flag fallback lives here too: the
-   * flag is rejected before any token streams, so the retry cannot duplicate
-   * output, and nothing after the first token is ever retried.
-   */
   async function invokeModel(
     messages: BaseMessage[],
     config: LangGraphRunnableConfig,
     withTools: boolean,
   ): Promise<{ message: AIMessage; tripped: boolean }> {
-    let primary: Model;
-    let fallback: Model | null;
-    if (cli) {
-      cli.frames = (frame) => emit(config, frame);
-      primary = cli;
-      fallback = null;
-    } else {
-      primary = (withTools ? agentLlm : llm) as Model;
-      fallback = (withTools ? agentLlmNoFlag : llmNoFlag) as Model;
-    }
-    const guard = personaGuard({ modelName, telemetry });
-    const strip = thinkStripper();
-    const ac = new AbortController();
-    const signal = config.signal ? AbortSignal.any([config.signal, ac.signal]) : ac.signal;
-
-    let text = "";
-    let final: AIMessageChunk | null = null;
-    /** Stream one runnable through the guard; returns the accumulated chunk. */
-    const consume = async (runnable: Model): Promise<AIMessageChunk | null> => {
-      let acc: AIMessageChunk | null = null;
-      const stream = await runnable.stream(messages, { ...config, signal });
-      for await (const chunk of stream) {
-        acc = acc ? concat(acc, chunk) : chunk;
-        const raw = typeof chunk.content === "string" ? chunk.content : "";
-        if (!raw) continue;
-        const safe = guard.push(strip(raw));
-        if (guard.tripped) {
-          ac.abort(); // stop the local GPU: the rest of this answer is never shown
-          return acc;
-        }
-        if (safe) {
-          text += safe;
-          emit(config, { type: "delta", text: safe });
-        }
-      }
-      return acc;
-    };
-    try {
-      final = await consume(primary);
-    } catch (err) {
-      if (guard.tripped) {
-        // The abort above surfaces here as an error; the trip is the answer.
-      } else if (fallback && !text && thinkFlagRejected(err)) {
-        final = await consume(fallback);
-      } else {
-        throw err;
+    const evidence = ctx.upcoming
+      .slice(0, 120)
+      .map(({ e, occ }) => ({ id: e.id, text: JSON.stringify({ ...e, ...occ }) }));
+    for (const m of messages) {
+      if (m.getType() === "tool" && typeof m.content === "string") {
+        evidence.push({ id: `tool-${evidence.length}`, text: m.content.slice(0, 20_000) });
       }
     }
-    if (!guard.tripped) {
-      const held = guard.push(strip.flush());
-      const rest = guard.tripped ? "" : held + guard.flush();
-      if (rest && !guard.tripped) {
-        text += rest;
-        emit(config, { type: "delta", text: rest });
-      }
-    }
+    const allowed = withTools && toolsOk ? toolsFor("graph") : [];
+    const result = await generateTyped({
+      task: "agent",
+      model,
+      baseUrl,
+      signal: config.signal,
+      context: {
+        event_ids: [...ctx.byId.keys()],
+        evidence,
+        allowed_tools: allowed.map((t) => t.name),
+        require_citations: true,
+      },
+      messages: [
+        {
+          role: "system",
+          content: `Enabled tools: ${JSON.stringify(allowed.map((t) => ({ name: t.name, description: t.description })))}. Use kind tools to request calls, answer for supported answers with citations, or insufficient_evidence when no evidence supports an answer. Evidence: ${JSON.stringify(evidence)}`,
+        },
+        ...messages.map((m) => ({
+          role: (m.getType() === "system"
+            ? "system"
+            : m.getType() === "ai"
+              ? "assistant"
+              : "user") as "system" | "assistant" | "user",
+          content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+        })),
+      ],
+    });
+    const guard = personaGuard({ modelName: model, telemetry });
+    const text = guard.push(result.answer) + guard.flush();
     if (guard.tripped) {
-      emit(config, {
-        type: "guardrail",
-        rail: "output",
-        blocked: true,
-        ...(guard.pattern && { pattern: guard.pattern }),
-      });
-      emit(config, {
-        type: "notice",
-        code: "guardrails",
-        message:
-          "The reply broke character (model identity leak) and was replaced by the persona rail.",
-      });
       const refusal = personaRefusalMessage(city);
+      emit(config, { type: "guardrail", rail: "output", blocked: true });
       emit(config, { type: "replace", text: refusal });
       return { message: new AIMessage(refusal), tripped: true };
     }
+    if (text) emit(config, { type: "delta", text });
     return {
       message: new AIMessage({
         content: text,
-        tool_calls: final?.tool_calls ?? [],
-        ...(final?.id && { id: final.id }),
+        tool_calls: result.tool_calls.map((c, i) => ({
+          name: c.name,
+          args: presentArgs(c.args) as Record<string, unknown>,
+          id: `call-${Date.now()}-${i}`,
+          type: "tool_call" as const,
+        })),
       }),
       tripped: false,
     };
@@ -633,7 +568,6 @@ export function buildAgentGraph(deps: GraphDeps) {
    * not.
    */
   async function recallNode(state: State, config: LangGraphRunnableConfig) {
-    if (!llm) return {};
     const overflow = recallOverflow(state.messages.length, state.summarized);
     if (overflow === null) return {};
     const fold = state.messages
@@ -648,19 +582,21 @@ export function buildAgentGraph(deps: GraphDeps) {
     try {
       const signals = [AbortSignal.timeout(SUMMARY_TIMEOUT_MS)];
       if (config.signal) signals.push(config.signal);
-      const res = await llm.invoke(
-        [
-          new SystemMessage(
-            "You maintain the running memory of a long conversation between a visitor and Grapevine, a local events concierge. Fold the new exchanges below into the existing summary. Keep every durable fact: names of events, venues, dates, times, prices, the visitor's stated tastes, constraints, and decisions. Drop pleasantries and wording. Answer with the updated summary only, 200 words or fewer.",
-          ),
-          new HumanMessage(
-            `Existing summary:\n${state.summary || "(none yet)"}\n\nNew exchanges to fold in:\n${fold}`,
-          ),
+      const res = await generateTyped({
+        task: "summary",
+        model,
+        baseUrl,
+        signal: AbortSignal.any(signals),
+        messages: [
+          {
+            role: "system",
+            content:
+              "Summarize durable facts and decisions from this conversation in at most 200 words. Return the summary field.",
+          },
+          { role: "user", content: `Existing summary: ${state.summary}\nNew exchanges: ${fold}` },
         ],
-        { signal: AbortSignal.any(signals) },
-      );
-      const summary = typeof res.content === "string" ? res.content.trim() : "";
-      if (!summary) return {};
+      });
+      const summary = res.summary;
       return { summary: summary.slice(0, 2_000), summarized: overflow };
     } catch {
       return {}; // next turn's overflow will be bigger; it retries naturally
@@ -819,9 +755,7 @@ export function buildAgentGraph(deps: GraphDeps) {
   // (their tool phases stream nothing) and no retry (a re-run spends real
   // subscription tokens on a duplicate turn).
   const policy = llmPolicy(deps.provider ?? "ollama");
-  const modelNodePolicy = cli
-    ? { timeout: { idleTimeout: policy.idleTimeoutMs } }
-    : { retryPolicy: modelRetry, timeout: { idleTimeout: policy.idleTimeoutMs } };
+  const modelNodePolicy = { timeout: { idleTimeout: policy.idleTimeoutMs } };
 
   return (
     new StateGraph(AgentState)

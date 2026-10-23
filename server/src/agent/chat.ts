@@ -32,13 +32,12 @@ import { langfuseHandler } from "../langfuse.js";
 import { trackChat } from "../lifecycle.js";
 import { logger } from "../log.js";
 import { modelSupportsTools, ollamaBase } from "../ollama.js";
-import { cliSupportsTools, detectProviders, providerInfo } from "../providers.js";
 import { rateLimit, singleFlight } from "../rate-limit.js";
 import { currentRequestId } from "../request-id.js";
 import { store } from "../store.js";
-import { isChatEffort, type AgentFrame } from "../types.js";
+import { type AgentFrame } from "../types.js";
 import { buildCtx, coercePos, type ChatContext } from "./context.js";
-import { buildAgentGraph, forgetThread, hasCheckpoint, turnInput } from "./graph.js";
+import { buildAgentGraph, forgetThread, turnInput } from "./graph.js";
 
 const log = logger("chat");
 
@@ -136,37 +135,11 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
     let baseUrl = "http://localhost:11434";
     let toolsOk = false;
     if (provider) {
-      const info = providerInfo(provider);
-      const status = (await detectProviders()).find((p) => p.id === provider);
-      if (!status?.installed) {
-        send({
-          type: "notice",
-          code: "cli-missing",
-          message: `${info.name} isn't installed on the server machine (${info.installHint}). Pick another provider in Admin → Providers.`,
-        });
-        return done();
-      }
-      if (!status.authed) {
-        send({
-          type: "notice",
-          code: "cli-auth",
-          message: `${info.name} isn't signed in. Run: ${info.loginHint}. Sign in with your ${info.loginNote}.`,
-        });
-        return done();
-      }
-      toolsOk = cliSupportsTools(provider);
-      // Once per conversation, not once per turn: repeated on every reply it
-      // was just noise stacked above the answer.
-      if (!(await hasCheckpoint(threadId))) {
-        send({
-          type: "notice",
-          code: "cli-mode",
-          message: toolsOk
-            ? `${info.name} answers with Grapevine's own MCP tools (event search, details, ETAs, web discovery, calendar saves on the linked account); live map pinning still needs the local Ollama agent.`
-            : `${info.name} answers from the event digest only; map pinning, ETAs, and calendar saves need the local Ollama agent.`,
-        });
-      }
-      send({ type: "status", label: `Asking ${info.name}…` });
+      send({
+        type: "error",
+        message: "Structured chat requires local Ollama. Select Ollama in Admin Providers.",
+      });
+      return done();
     } else {
       if (!settings.model) {
         send({
@@ -211,9 +184,6 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
       toolsOk,
       city: settings.city,
       userText: message.slice(0, MAX_MESSAGE_CHARS),
-      ...(provider && { provider }),
-      ...(provider === "claude" && typeof body.model === "string" && { cliModel: body.model }),
-      ...(provider === "claude" && isChatEffort(body.effort) && { cliEffort: body.effort }),
       // Stamped onto every rail decision this turn records, so the panel can
       // slice the distribution by surface and by provider.
       telemetry: {

@@ -1,3 +1,4 @@
+import { presentArgs } from "./contracts.js";
 /**
  * The agent's toolbox as LangChain structured tools: every "graph" contract
  * from contracts.ts bound to its executor, built per request so each tool
@@ -296,10 +297,14 @@ export function makeTools(ctx: AgentCtx, chat: ChatContext) {
     (input: unknown, config?: LangGraphRunnableConfig) => Promise<string>
   >;
   return toolsFor("graph").map((c) =>
-    tool(async (input: unknown, config?: LangGraphRunnableConfig) => run[c.name](input, config), {
-      name: c.name,
-      description: c.description,
-      schema: c.schema,
-    }),
+    tool(
+      async (input: unknown, config?: LangGraphRunnableConfig) =>
+        run[c.name](presentArgs(input), config),
+      {
+        name: c.name,
+        description: c.description,
+        schema: c.schema,
+      },
+    ),
   );
 }

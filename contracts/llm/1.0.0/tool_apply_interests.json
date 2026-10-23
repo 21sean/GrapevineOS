@@ -44,6 +44,20 @@
       "title": "Confirmed",
       "type": "boolean"
     },
+    "reason": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
     "remove_avoids": {
       "anyOf": [
         {
