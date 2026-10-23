@@ -63,10 +63,8 @@ import { generateTyped, LlmGateError } from "../llm/gateway.js";
  *   failure skips the fold and the turn proceeds.
  * - `agent` calls the model with the toolbox bound; the system prompt is
  *   rebuilt every request so the event digest and clock stay fresh, and is
- *   never persisted into thread state. The model is ChatOllama, or (when a
- *   CLI provider is selected) CliChatModel, which shells out to Claude Code /
- *   Codex / Gemini / Copilot but streams through the same graph, so every
- *   provider gets the same rails, memory, and traces.
+ *   never persisted into thread state. Local Ollama responses pass through
+ *   the Python contract gate before text or tool calls leave this node.
  * - `tools` executes the model's tool calls, streaming start/done frames to
  *   the browser via the custom-stream writer (UI tools additionally emit
  *   "action" frames from inside the tool, see tools.ts).

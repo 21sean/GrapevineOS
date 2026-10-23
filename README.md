@@ -27,7 +27,7 @@ _Downtown San Diego, zoomed in to show the high rises. Captured from the running
 - **Ask for help.** The concierge searches the event catalog, suggests day plans,
   and proposes calendar saves, watches, and interest changes for you to confirm.
 
-Run the agent with local Ollama models or a supported subscription CLI.
+Run the agent with local Ollama models through strict, validated output contracts.
 Supabase stores events and account data, and Mapbox supplies the map and location
 services. Optional integrations add newsletter delivery, Google Calendar sync,
 push reminders, and tracing.
@@ -47,7 +47,7 @@ _Browse community concerts, then open an event for ratings, reactions, and direc
 ## Quick start
 
 You need **Node 22.23.3** (pinned in [.nvmrc](.nvmrc)), a **Supabase project**,
-a **Mapbox account**, and an **Ollama model or supported subscription CLI**.
+a **Mapbox account**, **Python 3.12 + uv**, and a **local Ollama model**.
 See [setup and operations](docs/setup.md) for supported Node versions and the
 full configuration walkthrough.
 
@@ -56,7 +56,8 @@ full configuration walkthrough.
 ```bash
 git clone https://github.com/21sean/GrapevineOS.git
 cd GrapevineOS
-npm install --workspaces --include-workspace-root
+npm ci
+uv sync --directory llm --frozen --group eval
 ```
 
 ### 2. Configure
@@ -83,9 +84,10 @@ supabase link --project-ref <your-project-ref>
 supabase db push
 ```
 
-For a local model, install Ollama and run `ollama pull qwen3:8b`.
-Alternatively, choose Claude Code, Codex, Gemini, or Copilot in
-**Admin → Providers** after startup. Each CLI uses its existing sign-in.
+Install Ollama and select a local model for both chat and extraction.
+The quality baseline pins `qwen3.8:27b` and Ollama 0.40.8. Follow the
+[structured inference guide](llm/README.md) for setup and offline operation.
+Hosted subscription CLI generation is disabled in this profile.
 
 ### 3. Run and add events
 
@@ -160,6 +162,7 @@ See the [product guide](docs/product-guide.md) and
 
 | Guide                                                | Covers                                                                           |
 | ---------------------------------------------------- | -------------------------------------------------------------------------------- |
+| [Structured inference and evals](llm/README.md)      | Strict contracts, offline model calls, quality gates, and baselines              |
 | [Setup and operations](docs/setup.md)                | Accounts, configuration, deployment, auth, email delivery, and optional services |
 | [Product and technical guide](docs/product-guide.md) | App tour, event ingestion, discovery, ranking, guardrails, MCP, and REST         |
 | [Agent architecture](docs/agent-architecture.md)     | LangGraph state, tool contracts, streaming, and durable memory                   |
@@ -181,9 +184,10 @@ npm run format:check
 npm run contracts:check
 ```
 
-CI also runs five offline evaluation suites. Model evaluations and the red team
-run on the optional GPU workflow. See [contributing](.github/CONTRIBUTING.md)
-for the full validation commands.
+CI also requires schema/version checks, 30 deterministic golden cases, and
+15 pinned local model cases with local judges. See the
+[structured inference guide](llm/README.md) for adding schemas, eval cases,
+and reviewed baselines. Existing offline and red-team suites remain available.
 
 | Directory               | Purpose                                                          |
 | ----------------------- | ---------------------------------------------------------------- |

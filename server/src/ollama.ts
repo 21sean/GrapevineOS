@@ -1,11 +1,6 @@
 import { store } from "./store.js";
 
-/**
- * Ollama rejects the `think` flag on models without a thinking mode, and the
- * rejection arrives before any token does. One test for that, shared by
- * chatJSON below and the graph's ChatOllama pair, so both fall back the same
- * way and neither can retry after output has started.
- */
+/** Compatibility helper for detecting unsupported thinking options. */
 export function thinkFlagRejected(err: unknown): boolean {
   return /think/i.test(String((err as Error)?.message ?? err));
 }
