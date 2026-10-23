@@ -1,0 +1,1512 @@
+{
+  "$defs": {
+    "ApplyInterests": {
+      "additionalProperties": false,
+      "properties": {
+        "add_avoids": {
+          "anyOf": [
+            {
+              "items": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 6,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Add Avoids"
+        },
+        "add_loves": {
+          "anyOf": [
+            {
+              "items": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 6,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Add Loves"
+        },
+        "confirmed": {
+          "const": true,
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "remove_avoids": {
+          "anyOf": [
+            {
+              "items": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 6,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Remove Avoids"
+        },
+        "remove_loves": {
+          "anyOf": [
+            {
+              "items": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 6,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Remove Loves"
+        }
+      },
+      "required": [
+        "confirmed"
+      ],
+      "title": "ApplyInterests",
+      "type": "object"
+    },
+    "Calendar": {
+      "additionalProperties": false,
+      "properties": {
+        "event_ids": {
+          "items": {
+            "maxLength": 200,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9_.:-]+$",
+            "type": "string"
+          },
+          "maxItems": 30,
+          "minItems": 1,
+          "title": "Event Ids",
+          "type": "array"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "required": [
+        "event_ids"
+      ],
+      "title": "Calendar",
+      "type": "object"
+    },
+    "Contract": {
+      "additionalProperties": false,
+      "properties": {},
+      "title": "Contract",
+      "type": "object"
+    },
+    "Discover": {
+      "additionalProperties": false,
+      "properties": {
+        "dry_run": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dry Run"
+        },
+        "query": {
+          "maxLength": 200,
+          "minLength": 3,
+          "title": "Query",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "title": "Discover",
+      "type": "object"
+    },
+    "EventId": {
+      "additionalProperties": false,
+      "properties": {
+        "event_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_.:-]+$",
+          "title": "Event Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id"
+      ],
+      "title": "EventId",
+      "type": "object"
+    },
+    "EventIds": {
+      "additionalProperties": false,
+      "properties": {
+        "event_ids": {
+          "items": {
+            "maxLength": 200,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9_.:-]+$",
+            "type": "string"
+          },
+          "maxItems": 30,
+          "minItems": 1,
+          "title": "Event Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "event_ids"
+      ],
+      "title": "EventIds",
+      "type": "object"
+    },
+    "GetEta": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "maximum": 180,
+                  "minimum": -180,
+                  "type": "number"
+                },
+                {
+                  "maximum": 90,
+                  "minimum": -90,
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "maxLength": 80,
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*,\\s*-?\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "From"
+        },
+        "to": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "maximum": 180,
+                  "minimum": -180,
+                  "type": "number"
+                },
+                {
+                  "maximum": 90,
+                  "minimum": -90,
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "maxLength": 80,
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*,\\s*-?\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "To"
+        },
+        "to_event_id": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "^[a-zA-Z0-9_.:-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "To Event Id"
+        }
+      },
+      "title": "GetEta",
+      "type": "object"
+    },
+    "GetEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_.:-]+$",
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "GetEvent",
+      "type": "object"
+    },
+    "Interests": {
+      "additionalProperties": false,
+      "properties": {
+        "add_avoids": {
+          "anyOf": [
+            {
+              "items": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 6,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Add Avoids"
+        },
+        "add_loves": {
+          "anyOf": [
+            {
+              "items": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 6,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Add Loves"
+        },
+        "remove_avoids": {
+          "anyOf": [
+            {
+              "items": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 6,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Remove Avoids"
+        },
+        "remove_loves": {
+          "anyOf": [
+            {
+              "items": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 6,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Remove Loves"
+        }
+      },
+      "title": "Interests",
+      "type": "object"
+    },
+    "ReadPage": {
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "maxLength": 2000,
+          "pattern": "^https?://[^\\s]+$",
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "title": "ReadPage",
+      "type": "object"
+    },
+    "Schedule": {
+      "additionalProperties": false,
+      "properties": {
+        "cadence_hours": {
+          "anyOf": [
+            {
+              "maximum": 168,
+              "minimum": 1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cadence Hours"
+        },
+        "query": {
+          "maxLength": 200,
+          "minLength": 3,
+          "title": "Query",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "title": "Schedule",
+      "type": "object"
+    },
+    "SearchEvents": {
+      "additionalProperties": false,
+      "properties": {
+        "categories": {
+          "anyOf": [
+            {
+              "items": {
+                "enum": [
+                  "music",
+                  "food",
+                  "sports",
+                  "arts",
+                  "market",
+                  "festival",
+                  "community"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Categories"
+        },
+        "date_from": {
+          "anyOf": [
+            {
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Date From"
+        },
+        "date_to": {
+          "anyOf": [
+            {
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Date To"
+        },
+        "exclude_promoted": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exclude Promoted"
+        },
+        "free_only": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Free Only"
+        },
+        "limit": {
+          "anyOf": [
+            {
+              "maximum": 50,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Limit"
+        },
+        "max_km": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 500,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Km"
+        },
+        "min_rating": {
+          "anyOf": [
+            {
+              "maximum": 5,
+              "minimum": 1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Rating"
+        },
+        "near": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Near"
+        },
+        "query": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query"
+        },
+        "sort": {
+          "anyOf": [
+            {
+              "enum": [
+                "time",
+                "buzz",
+                "distance"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sort"
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "items": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 6,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tags"
+        }
+      },
+      "title": "SearchEvents",
+      "type": "object"
+    },
+    "SearchWeb": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "anyOf": [
+            {
+              "maximum": 8,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Limit"
+        },
+        "query": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Query",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "title": "SearchWeb",
+      "type": "object"
+    },
+    "SetFilters": {
+      "additionalProperties": false,
+      "properties": {
+        "categories": {
+          "anyOf": [
+            {
+              "items": {
+                "enum": [
+                  "music",
+                  "food",
+                  "sports",
+                  "arts",
+                  "market",
+                  "festival",
+                  "community"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Categories"
+        },
+        "date_from": {
+          "anyOf": [
+            {
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Date From"
+        },
+        "date_to": {
+          "anyOf": [
+            {
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Date To"
+        },
+        "farmers": {
+          "anyOf": [
+            {
+              "enum": [
+                "any",
+                "only",
+                "hide"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Farmers"
+        },
+        "free_only": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Free Only"
+        },
+        "hide_promoted": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hide Promoted"
+        },
+        "live_only": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Live Only"
+        },
+        "min_buzz": {
+          "anyOf": [
+            {
+              "maximum": 5,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Buzz"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "rare_only": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rare Only"
+        },
+        "reset": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reset"
+        }
+      },
+      "title": "SetFilters",
+      "type": "object"
+    },
+    "SetRarity": {
+      "additionalProperties": false,
+      "properties": {
+        "event_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_.:-]+$",
+          "title": "Event Id",
+          "type": "string"
+        },
+        "rarity": {
+          "enum": [
+            "common",
+            "notable",
+            "rare"
+          ],
+          "title": "Rarity",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "rarity"
+      ],
+      "title": "SetRarity",
+      "type": "object"
+    },
+    "UnSchedule": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "^[a-zA-Z0-9_.:-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "query": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query"
+        }
+      },
+      "title": "UnSchedule",
+      "type": "object"
+    },
+    "UpdateSchedule": {
+      "additionalProperties": false,
+      "properties": {
+        "active": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Active"
+        },
+        "cadence_hours": {
+          "anyOf": [
+            {
+              "maximum": 168,
+              "minimum": 1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cadence Hours"
+        },
+        "id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_.:-]+$",
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "UpdateSchedule",
+      "type": "object"
+    },
+    "Watch": {
+      "additionalProperties": false,
+      "properties": {
+        "cadence_hours": {
+          "anyOf": [
+            {
+              "maximum": 168,
+              "minimum": 1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cadence Hours"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "query": {
+          "maxLength": 200,
+          "minLength": 3,
+          "title": "Query",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "title": "Watch",
+      "type": "object"
+    },
+    "apply_interests_call": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "$ref": "#/$defs/ApplyInterests"
+        },
+        "name": {
+          "const": "apply_interests",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "args"
+      ],
+      "title": "apply_interests_call",
+      "type": "object"
+    },
+    "discover_events_call": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "$ref": "#/$defs/Discover"
+        },
+        "name": {
+          "const": "discover_events",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "args"
+      ],
+      "title": "discover_events_call",
+      "type": "object"
+    },
+    "get_eta_call": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "$ref": "#/$defs/GetEta"
+        },
+        "name": {
+          "const": "get_eta",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "args"
+      ],
+      "title": "get_eta_call",
+      "type": "object"
+    },
+    "get_event_call": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "$ref": "#/$defs/GetEvent"
+        },
+        "name": {
+          "const": "get_event",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "args"
+      ],
+      "title": "get_event_call",
+      "type": "object"
+    },
+    "list_saved_events_call": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "$ref": "#/$defs/Contract"
+        },
+        "name": {
+          "const": "list_saved_events",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "args"
+      ],
+      "title": "list_saved_events_call",
+      "type": "object"
+    },
+    "list_scheduled_searches_call": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "$ref": "#/$defs/Contract"
+        },
+        "name": {
+          "const": "list_scheduled_searches",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "args"
+      ],
+      "title": "list_scheduled_searches_call",
+      "type": "object"
+    },
+    "propose_calendar_call": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "$ref": "#/$defs/Calendar"
+        },
+        "name": {
+          "const": "propose_calendar",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "args"
+      ],
+      "title": "propose_calendar_call",
+      "type": "object"
+    },
+    "propose_watch_call": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "$ref": "#/$defs/Watch"
+        },
+        "name": {
+          "const": "propose_watch",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "args"
+      ],
+      "title": "propose_watch_call",
+      "type": "object"
+    },
+    "read_page_call": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "$ref": "#/$defs/ReadPage"
+        },
+        "name": {
+          "const": "read_page",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "args"
+      ],
+      "title": "read_page_call",
+      "type": "object"
+    },
+    "run_scheduled_search_call": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "$ref": "#/$defs/GetEvent"
+        },
+        "name": {
+          "const": "run_scheduled_search",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "args"
+      ],
+      "title": "run_scheduled_search_call",
+      "type": "object"
+    },
+    "save_calendar_call": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "$ref": "#/$defs/EventIds"
+        },
+        "name": {
+          "const": "save_calendar",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "args"
+      ],
+      "title": "save_calendar_call",
+      "type": "object"
+    },
+    "save_event_call": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "$ref": "#/$defs/EventId"
+        },
+        "name": {
+          "const": "save_event",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "args"
+      ],
+      "title": "save_event_call",
+      "type": "object"
+    },
+    "schedule_search_call": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "$ref": "#/$defs/Schedule"
+        },
+        "name": {
+          "const": "schedule_search",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "args"
+      ],
+      "title": "schedule_search_call",
+      "type": "object"
+    },
+    "search_events_call": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "$ref": "#/$defs/SearchEvents"
+        },
+        "name": {
+          "const": "search_events",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "args"
+      ],
+      "title": "search_events_call",
+      "type": "object"
+    },
+    "search_web_call": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "$ref": "#/$defs/SearchWeb"
+        },
+        "name": {
+          "const": "search_web",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "args"
+      ],
+      "title": "search_web_call",
+      "type": "object"
+    },
+    "set_filters_call": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "$ref": "#/$defs/SetFilters"
+        },
+        "name": {
+          "const": "set_filters",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "args"
+      ],
+      "title": "set_filters_call",
+      "type": "object"
+    },
+    "set_rarity_call": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "$ref": "#/$defs/SetRarity"
+        },
+        "name": {
+          "const": "set_rarity",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "args"
+      ],
+      "title": "set_rarity_call",
+      "type": "object"
+    },
+    "show_on_map_call": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "$ref": "#/$defs/EventIds"
+        },
+        "name": {
+          "const": "show_on_map",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "args"
+      ],
+      "title": "show_on_map_call",
+      "type": "object"
+    },
+    "unsave_event_call": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "$ref": "#/$defs/EventId"
+        },
+        "name": {
+          "const": "unsave_event",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "args"
+      ],
+      "title": "unsave_event_call",
+      "type": "object"
+    },
+    "unschedule_search_call": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "$ref": "#/$defs/UnSchedule"
+        },
+        "name": {
+          "const": "unschedule_search",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "args"
+      ],
+      "title": "unschedule_search_call",
+      "type": "object"
+    },
+    "update_interests_call": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "$ref": "#/$defs/Interests"
+        },
+        "name": {
+          "const": "update_interests",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "args"
+      ],
+      "title": "update_interests_call",
+      "type": "object"
+    },
+    "update_scheduled_search_call": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "$ref": "#/$defs/UpdateSchedule"
+        },
+        "name": {
+          "const": "update_scheduled_search",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "args"
+      ],
+      "title": "update_scheduled_search_call",
+      "type": "object"
+    }
+  },
+  "$id": "urn:grapevine:llm:1.0.0:agent",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "answer": {
+      "maxLength": 8000,
+      "title": "Answer",
+      "type": "string"
+    },
+    "citations": {
+      "items": {
+        "maxLength": 200,
+        "minLength": 1,
+        "pattern": "^[a-zA-Z0-9_.:-]+$",
+        "type": "string"
+      },
+      "maxItems": 50,
+      "title": "Citations",
+      "type": "array"
+    },
+    "kind": {
+      "enum": [
+        "answer",
+        "tools",
+        "insufficient_evidence"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "tool_calls": {
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "apply_interests": "#/$defs/apply_interests_call",
+            "discover_events": "#/$defs/discover_events_call",
+            "get_eta": "#/$defs/get_eta_call",
+            "get_event": "#/$defs/get_event_call",
+            "list_saved_events": "#/$defs/list_saved_events_call",
+            "list_scheduled_searches": "#/$defs/list_scheduled_searches_call",
+            "propose_calendar": "#/$defs/propose_calendar_call",
+            "propose_watch": "#/$defs/propose_watch_call",
+            "read_page": "#/$defs/read_page_call",
+            "run_scheduled_search": "#/$defs/run_scheduled_search_call",
+            "save_calendar": "#/$defs/save_calendar_call",
+            "save_event": "#/$defs/save_event_call",
+            "schedule_search": "#/$defs/schedule_search_call",
+            "search_events": "#/$defs/search_events_call",
+            "search_web": "#/$defs/search_web_call",
+            "set_filters": "#/$defs/set_filters_call",
+            "set_rarity": "#/$defs/set_rarity_call",
+            "show_on_map": "#/$defs/show_on_map_call",
+            "unsave_event": "#/$defs/unsave_event_call",
+            "unschedule_search": "#/$defs/unschedule_search_call",
+            "update_interests": "#/$defs/update_interests_call",
+            "update_scheduled_search": "#/$defs/update_scheduled_search_call"
+          },
+          "propertyName": "name"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/search_events_call"
+          },
+          {
+            "$ref": "#/$defs/get_event_call"
+          },
+          {
+            "$ref": "#/$defs/get_eta_call"
+          },
+          {
+            "$ref": "#/$defs/search_web_call"
+          },
+          {
+            "$ref": "#/$defs/read_page_call"
+          },
+          {
+            "$ref": "#/$defs/discover_events_call"
+          },
+          {
+            "$ref": "#/$defs/show_on_map_call"
+          },
+          {
+            "$ref": "#/$defs/set_filters_call"
+          },
+          {
+            "$ref": "#/$defs/propose_calendar_call"
+          },
+          {
+            "$ref": "#/$defs/propose_watch_call"
+          },
+          {
+            "$ref": "#/$defs/save_calendar_call"
+          },
+          {
+            "$ref": "#/$defs/list_saved_events_call"
+          },
+          {
+            "$ref": "#/$defs/save_event_call"
+          },
+          {
+            "$ref": "#/$defs/unsave_event_call"
+          },
+          {
+            "$ref": "#/$defs/set_rarity_call"
+          },
+          {
+            "$ref": "#/$defs/update_interests_call"
+          },
+          {
+            "$ref": "#/$defs/apply_interests_call"
+          },
+          {
+            "$ref": "#/$defs/list_scheduled_searches_call"
+          },
+          {
+            "$ref": "#/$defs/schedule_search_call"
+          },
+          {
+            "$ref": "#/$defs/update_scheduled_search_call"
+          },
+          {
+            "$ref": "#/$defs/run_scheduled_search_call"
+          },
+          {
+            "$ref": "#/$defs/unschedule_search_call"
+          }
+        ]
+      },
+      "maxItems": 8,
+      "title": "Tool Calls",
+      "type": "array"
+    }
+  },
+  "required": [
+    "kind",
+    "answer",
+    "citations",
+    "tool_calls"
+  ],
+  "title": "AgentTurn",
+  "type": "object"
+}

@@ -1,0 +1,81 @@
+{
+  "$id": "urn:grapevine:llm:1.0.0:tool_update_interests",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "add_avoids": {
+      "anyOf": [
+        {
+          "items": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 6,
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Add Avoids"
+    },
+    "add_loves": {
+      "anyOf": [
+        {
+          "items": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 6,
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Add Loves"
+    },
+    "remove_avoids": {
+      "anyOf": [
+        {
+          "items": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 6,
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Remove Avoids"
+    },
+    "remove_loves": {
+      "anyOf": [
+        {
+          "items": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 6,
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Remove Loves"
+    }
+  },
+  "title": "Interests",
+  "type": "object"
+}

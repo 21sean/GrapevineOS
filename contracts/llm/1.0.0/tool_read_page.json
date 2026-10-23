@@ -1,0 +1,18 @@
+{
+  "$id": "urn:grapevine:llm:1.0.0:tool_read_page",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "url": {
+      "maxLength": 2000,
+      "pattern": "^https?://[^\\s]+$",
+      "title": "Url",
+      "type": "string"
+    }
+  },
+  "required": [
+    "url"
+  ],
+  "title": "ReadPage",
+  "type": "object"
+}

@@ -1,0 +1,86 @@
+{
+  "$id": "urn:grapevine:llm:1.0.0:tool_get_eta",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "from": {
+      "anyOf": [
+        {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "maximum": 180,
+              "minimum": -180,
+              "type": "number"
+            },
+            {
+              "maximum": 90,
+              "minimum": -90,
+              "type": "number"
+            }
+          ],
+          "type": "array"
+        },
+        {
+          "maxLength": 80,
+          "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*,\\s*-?\\d+(\\.\\d+)?\\s*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "From"
+    },
+    "to": {
+      "anyOf": [
+        {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "maximum": 180,
+              "minimum": -180,
+              "type": "number"
+            },
+            {
+              "maximum": 90,
+              "minimum": -90,
+              "type": "number"
+            }
+          ],
+          "type": "array"
+        },
+        {
+          "maxLength": 80,
+          "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*,\\s*-?\\d+(\\.\\d+)?\\s*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "To"
+    },
+    "to_event_id": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_.:-]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "To Event Id"
+    }
+  },
+  "title": "GetEta",
+  "type": "object"
+}

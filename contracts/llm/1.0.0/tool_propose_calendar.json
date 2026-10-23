@@ -1,0 +1,38 @@
+{
+  "$id": "urn:grapevine:llm:1.0.0:tool_propose_calendar",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "event_ids": {
+      "items": {
+        "maxLength": 200,
+        "minLength": 1,
+        "pattern": "^[a-zA-Z0-9_.:-]+$",
+        "type": "string"
+      },
+      "maxItems": 30,
+      "minItems": 1,
+      "title": "Event Ids",
+      "type": "array"
+    },
+    "note": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Note"
+    }
+  },
+  "required": [
+    "event_ids"
+  ],
+  "title": "Calendar",
+  "type": "object"
+}

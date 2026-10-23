@@ -1,0 +1,78 @@
+{
+  "$defs": {
+    "Evidence": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_.:-]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 200000,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text"
+      ],
+      "title": "Evidence",
+      "type": "object"
+    }
+  },
+  "$id": "urn:grapevine:llm:1.0.0:context",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "allowed_tools": {
+      "default": [],
+      "items": {
+        "maxLength": 200,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 30,
+      "title": "Allowed Tools",
+      "type": "array"
+    },
+    "candidate_count": {
+      "default": 0,
+      "maximum": 200,
+      "minimum": 0,
+      "title": "Candidate Count",
+      "type": "integer"
+    },
+    "event_ids": {
+      "default": [],
+      "items": {
+        "maxLength": 200,
+        "minLength": 1,
+        "pattern": "^[a-zA-Z0-9_.:-]+$",
+        "type": "string"
+      },
+      "maxItems": 20000,
+      "title": "Event Ids",
+      "type": "array"
+    },
+    "evidence": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Evidence"
+      },
+      "maxItems": 200,
+      "title": "Evidence",
+      "type": "array"
+    },
+    "require_citations": {
+      "default": false,
+      "title": "Require Citations",
+      "type": "boolean"
+    }
+  },
+  "title": "Context",
+  "type": "object"
+}

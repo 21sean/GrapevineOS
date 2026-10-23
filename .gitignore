@@ -26,4 +26,9 @@ server/.evals/
 server/redteam/.venv/
 __pycache__/
 *.pyc
+llm/.venv/
+.pytest_cache/
+.hypothesis/
+.ruff_cache/
+llm/artifacts/
 !web/public/og-image.png

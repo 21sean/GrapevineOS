@@ -1,0 +1,19 @@
+{
+  "$id": "urn:grapevine:llm:1.0.0:tool_unsave_event",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "maxLength": 200,
+      "minLength": 1,
+      "pattern": "^[a-zA-Z0-9_.:-]+$",
+      "title": "Event Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "event_id"
+  ],
+  "title": "EventId",
+  "type": "object"
+}

@@ -1,0 +1,32 @@
+{
+  "$id": "urn:grapevine:llm:1.0.0:tool_schedule_search",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "cadence_hours": {
+      "anyOf": [
+        {
+          "maximum": 168,
+          "minimum": 1,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cadence Hours"
+    },
+    "query": {
+      "maxLength": 200,
+      "minLength": 3,
+      "title": "Query",
+      "type": "string"
+    }
+  },
+  "required": [
+    "query"
+  ],
+  "title": "Schedule",
+  "type": "object"
+}
