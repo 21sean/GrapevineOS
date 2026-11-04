@@ -37,10 +37,11 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           MAPBOX_SECRET_TOKEN: ci-placeholder
+          REDTEAM_MODEL: qwen3.8-redteam:27b
         run: >
           npm run evals -- --json
           --suite guardrails --suite guardrails-calibration
-          --suite guardrails-judge --suite guardrails-redteam
+          --suite guardrails-injection --suite guardrails-judge --suite guardrails-redteam
           > nightly.json
       - uses: actions/upload-artifact@v7
         if: always()
