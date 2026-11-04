@@ -10,7 +10,7 @@ import { Router } from "express";
 import { toolsFor } from "../agent/contracts.js";
 import { classifierReady, guardConfig } from "../agent/guardrails.js";
 import { MCP_ENDPOINT, mcpAuthMode } from "../mcp.js";
-import { modelSupportsTools } from "../ollama.js";
+import { llmModel, runtimeSupportsTools } from "../llm/runtime.js";
 import { cliSupportsTools } from "../providers.js";
 import { store } from "../store.js";
 import type { AgentCapabilities } from "../types.js";
@@ -21,17 +21,18 @@ export const capabilities = Router();
 capabilities.get("/api/agent/capabilities", async (_req, res) => {
   const [settings, guard] = await Promise.all([store.settings(), guardConfig()]);
   const provider = settings.chatProvider;
+  const model = llmModel(settings.model);
   // A CLI brings its own toolbox, this server's MCP surface, when it can.
   const tools =
     provider === "ollama"
-      ? settings.model
-        ? await modelSupportsTools(settings.model).catch(() => false)
+      ? model
+        ? await runtimeSupportsTools(model).catch(() => false)
         : false
       : cliSupportsTools(provider);
   const surface: "graph" | "mcp" | null = !tools ? null : provider === "ollama" ? "graph" : "mcp";
   const body: AgentCapabilities = {
     provider,
-    model: provider === "ollama" ? settings.model : "",
+    model: provider === "ollama" ? model : "",
     tools,
     toolbox: surface
       ? toolsFor(surface).map((c) => ({
