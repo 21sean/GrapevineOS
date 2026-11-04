@@ -157,6 +157,16 @@ if (serverEnv && isSet(serverEnv.SUPABASE_URL) && isSet(serverEnv.SUPABASE_SECRE
 }
 
 // --- Ollama, or a CLI provider ---------------------------------------------
+if ((serverEnv?.GRAPEVINE_LLM_RUNTIME || process.env.GRAPEVINE_LLM_RUNTIME) === "vllm") {
+  const vllmUrl = (serverEnv?.GRAPEVINE_LLM_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+  try {
+    const res = await get(`${vllmUrl}/v1/models`);
+    const body = await res.json();
+    ok(`vLLM at ${vllmUrl} serving ${(body.data ?? []).map((m) => m.id).join(", ") || "nothing"}`);
+  } catch {
+    warn(`vLLM not reachable at ${vllmUrl}`, "start it; see llm/README.md");
+  }
+}
 const ollamaUrl = (serverEnv?.OLLAMA_URL || "http://localhost:11434").replace(/\/$/, "");
 const clis = ["claude", "codex", "gemini", "copilot"].filter(onPath);
 try {

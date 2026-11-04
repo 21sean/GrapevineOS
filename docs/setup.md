@@ -20,8 +20,12 @@ Requirements:
 - **Node 22.23.3** (`.nvmrc` pins the tested version; `nvm use` reads it). Node 24.15+ and 26+ are also supported by the dependencies.
 - **[Ollama](https://ollama.com)** running locally with at least one chat
   model (`ollama pull qwen3:8b` works fine; pick it in Admin → Models).
-  The structured-output profile requires local Ollama; hosted subscription CLI
+  The structured-output profile requires a local runtime; hosted subscription CLI
   generation is disabled. See [LLM setup and quality gates](../llm/README.md).
+- **vLLM, optional**: set `GRAPEVINE_LLM_RUNTIME=vllm` in `server/.env` to serve chat
+  and extraction from vLLM 0.33.0 instead of Ollama. It needs Linux or WSL2 and about
+  25 GB of free VRAM, and it holds that memory while it runs. See
+  [the vLLM runtime guide](../llm/README.md#vllm-runtime).
 - **Python 3.12 and uv 0.6.9**: run `uv sync --directory llm --frozen --group eval`
   before starting the server. The Node gateway launches this local environment.
 - **Supabase**: copy `server/.env.example` to `server/.env` and set

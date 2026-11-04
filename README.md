@@ -22,31 +22,32 @@ _San Diego's waterfront in dark mode, with 3D buildings and the Star of India in
 Extra map labels, walking paths, transit, and traffic are off. Real application capture._
 
 **Stack:** React / TypeScript / Mapbox · Node / LangGraph · Python / Pydantic /
-Instructor · Ollama · Supabase · DeepEval / Ragas / OpenTelemetry.
+Instructor · Ollama or vLLM · Supabase · DeepEval / Ragas / OpenTelemetry.
 
 ## AI/ML engineering checklist
 
 Each checkmark means the capability is implemented in this repository. The evidence
 column links to the code, tests, or workflow that a reviewer can inspect.
 
-| Status | Capability                                    | Implementation and evidence                                                                                                                                                                                                                                                  |
-| ------ | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ✓      | Schema-gated responses                        | Ollama generates against JSON Schema; strict Pydantic and Instructor validation precedes application use, with generated Zod checks at the Node boundary. [Contracts](llm/grapevine_llm/contracts.py) · [Gateway](server/src/llm/gateway.ts)                                 |
-| ✓      | Bounded repair and typed failures             | Three attempts and one 120-second deadline by default; invalid or exhausted output returns a typed failure without partial results. [Generation boundary](llm/grapevine_llm/client.py) · [Tests](llm/tests/)                                                                 |
-| ✓      | Business-rule and evidence validation         | Validates dates, coordinates, known event IDs, supplied citation IDs, and verification excerpts. Answers can explicitly report insufficient evidence. [Validators](llm/grapevine_llm/contracts.py)                                                                           |
-| ✓      | Agent orchestration and tool contracts        | LangGraph routes input checks, recall, model calls, tools, content checks, and finalization. Tool names and arguments are validated against the allowed set. [Graph](server/src/agent/graph.ts) · [Tool registry](server/src/agent/contracts.ts)                             |
-| ✓      | Human confirmation for proposed actions       | Calendar, watch, and interest proposals have confirmation flows; applying an interest change requires `confirmed: true`. [Action contracts](server/src/agent/contracts.ts)                                                                                                   |
-| ✓      | Retrieval-grounded answers                    | Upcoming event context and tool results supply evidence to the agent; supported answers must cite supplied IDs. [Context](server/src/agent/context.ts) · [Agent boundary](server/src/agent/graph.ts)                                                                         |
-| ✓      | Durable conversation memory                   | Thread checkpoints and bounded running summaries preserve context across turns. [Checkpointer](server/src/checkpointer.ts) · [Recall node](server/src/agent/graph.ts)                                                                                                        |
-| ✓      | Prompt and response regression evaluation     | 30 synthetic golden cases cover normal, edge, adversarial, and repair behavior; 15 also run against the pinned local model. [Dataset](llm/evals/golden.jsonl) · [Harness](llm/grapevine_llm/evals.py)                                                                        |
-| ✓      | Local LLM-as-judge evaluation                 | DeepEval scores explicit rubrics after deterministic checks; agent cases add groundedness and relevance criteria. [Quality runner](server/scripts/llm-quality.ts)                                                                                                            |
-| ✓      | Retrieval precision and recall                | Ragas ID-based metrics score versioned retrieval snapshots with explicit empty-set behavior. [Metrics](llm/grapevine_llm/retrieval_metrics.py)                                                                                                                               |
-| ✓      | Reproducible model evaluations                | Runtime and model digests, seed, dependency locks, dataset hashes, and source fingerprints accompany quality artifacts. [Model pins](llm/evals/models.json) · [Provenance](llm/grapevine_llm/provenance.py)                                                                  |
-| ✓      | CI quality and regression gates               | Requires complete cases, first-pass schema success ≥95%, required judge scores ≥0.75, and no per-case regression against the checked-in and PR-base baselines. [Gates](llm/grapevine_llm/checks.py) · [CI](.github/workflows/llm-quality.yml)                                |
-| ✓      | Prompt-injection defenses and red-team suites | Local input/content classification, an output persona filter, adversarial fixtures, and a separate red-team suite. Classifier failure behavior is documented below. [Guardrails](server/src/agent/guardrails.ts) · [Red team](server/src/evals/suites/guardrails-redteam.ts) |
-| ✓      | Local inference and offline evaluation        | Loopback-only model endpoints, network-denial guards, local datasets/judges, and disabled evaluator uploads. [Offline guide](llm/README.md#offline-operation-tracing-and-ci) · [Network tests](llm/tests/)                                                                   |
-| ✓      | Observability and feedback into evaluations   | Local OpenTelemetry traces record attempts, failures, model time, validation time, and repair time. A sampled review queue supports reviewed promotion into golden cases. [Telemetry](llm/grapevine_llm/telemetry.py) · [Maintenance](llm/grapevine_llm/maintenance.py)      |
-| ✓      | Personalized ranking                          | Event reactions update tag-affinity weights shared by the UI and server ranking surfaces. This is a deterministic scoring system. [Affinity logic](shared/affinity.ts)                                                                                                       |
+| Status | Capability                                    | Implementation and evidence                                                                                                                                                                                                                                                             |
+| ------ | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ✓      | Schema-gated responses                        | Ollama or vLLM generates against JSON Schema; strict Pydantic and Instructor validation precedes application use, with generated Zod checks at the Node boundary. [Contracts](llm/grapevine_llm/contracts.py) · [Gateway](server/src/llm/gateway.ts)                                    |
+| ✓      | Swappable local serving runtime               | Ollama by default, vLLM through its OpenAI-compatible endpoint with its own pinned record. Serving numbers measured against MLPerf's interactive latency limits. [Runtime](server/src/llm/runtime.ts) · [Record](llm/evals/models.vllm.json) · [Numbers](llm/README.md#serving-numbers) |
+| ✓      | Bounded repair and typed failures             | Three attempts and one 120-second deadline by default; invalid or exhausted output returns a typed failure without partial results. [Generation boundary](llm/grapevine_llm/client.py) · [Tests](llm/tests/)                                                                            |
+| ✓      | Business-rule and evidence validation         | Validates dates, coordinates, known event IDs, supplied citation IDs, and verification excerpts. Answers can explicitly report insufficient evidence. [Validators](llm/grapevine_llm/contracts.py)                                                                                      |
+| ✓      | Agent orchestration and tool contracts        | LangGraph routes input checks, recall, model calls, tools, content checks, and finalization. Tool names and arguments are validated against the allowed set. [Graph](server/src/agent/graph.ts) · [Tool registry](server/src/agent/contracts.ts)                                        |
+| ✓      | Human confirmation for proposed actions       | Calendar, watch, and interest proposals have confirmation flows; applying an interest change requires `confirmed: true`. [Action contracts](server/src/agent/contracts.ts)                                                                                                              |
+| ✓      | Retrieval-grounded answers                    | Upcoming event context and tool results supply evidence to the agent; supported answers must cite supplied IDs. [Context](server/src/agent/context.ts) · [Agent boundary](server/src/agent/graph.ts)                                                                                    |
+| ✓      | Durable conversation memory                   | Thread checkpoints and bounded running summaries preserve context across turns. [Checkpointer](server/src/checkpointer.ts) · [Recall node](server/src/agent/graph.ts)                                                                                                                   |
+| ✓      | Prompt and response regression evaluation     | 30 synthetic golden cases cover normal, edge, adversarial, and repair behavior; 15 also run against the pinned local model. [Dataset](llm/evals/golden.jsonl) · [Harness](llm/grapevine_llm/evals.py)                                                                                   |
+| ✓      | Local LLM-as-judge evaluation                 | DeepEval scores explicit rubrics after deterministic checks; agent cases add groundedness and relevance criteria. [Quality runner](server/scripts/llm-quality.ts)                                                                                                                       |
+| ✓      | Retrieval precision and recall                | Ragas ID-based metrics score versioned retrieval snapshots with explicit empty-set behavior. [Metrics](llm/grapevine_llm/retrieval_metrics.py)                                                                                                                                          |
+| ✓      | Reproducible model evaluations                | Runtime and model digests, seed, dependency locks, dataset hashes, and source fingerprints accompany quality artifacts. [Model pins](llm/evals/models.json) · [Provenance](llm/grapevine_llm/provenance.py)                                                                             |
+| ✓      | CI quality and regression gates               | Requires complete cases, first-pass schema success ≥95%, required judge scores ≥0.75, and no per-case regression against the checked-in and PR-base baselines. [Gates](llm/grapevine_llm/checks.py) · [CI](.github/workflows/llm-quality.yml)                                           |
+| ✓      | Prompt-injection defenses and red-team suites | Local input/content classification, an output persona filter, adversarial fixtures, and a separate red-team suite. Classifier failure behavior is documented below. [Guardrails](server/src/agent/guardrails.ts) · [Red team](server/src/evals/suites/guardrails-redteam.ts)            |
+| ✓      | Local inference and offline evaluation        | Loopback-only model endpoints, network-denial guards, local datasets/judges, and disabled evaluator uploads. [Offline guide](llm/README.md#offline-operation-tracing-and-ci) · [Network tests](llm/tests/)                                                                              |
+| ✓      | Observability and feedback into evaluations   | Local OpenTelemetry traces record attempts, failures, model time, validation time, and repair time. A sampled review queue supports reviewed promotion into golden cases. [Telemetry](llm/grapevine_llm/telemetry.py) · [Maintenance](llm/grapevine_llm/maintenance.py)                 |
+| ✓      | Personalized ranking                          | Event reactions update tag-affinity weights shared by the UI and server ranking surfaces. This is a deterministic scoring system. [Affinity logic](shared/affinity.ts)                                                                                                                  |
 
 ### What the checks establish
 
@@ -76,7 +77,7 @@ See the [quality guide](llm/README.md) for reproducing the gates and the
 - **Ask for help.** The concierge searches the event catalog, suggests day plans,
   and proposes calendar saves, watches, and interest changes for you to confirm.
 
-Run the agent with local Ollama models through strict, validated output contracts.
+Run the agent on local Ollama or vLLM models through strict, validated output contracts.
 Supabase stores events and account data, and Mapbox supplies the map and location
 services. Optional integrations add newsletter delivery, Google Calendar sync,
 push reminders, and tracing.
@@ -136,8 +137,9 @@ supabase db push
 ```
 
 Install Ollama and select a local model for both chat and extraction.
-The quality baseline pins `qwen3.8:27b` and Ollama 0.40.8. Follow the
-[structured inference guide](llm/README.md) for setup and offline operation.
+The quality baseline pins `qwen3.8:27b` and Ollama 0.40.8. vLLM 0.33.0 is an optional
+runtime beside it. Follow the [structured inference guide](llm/README.md) for setup,
+the vLLM option, and offline operation.
 Hosted subscription CLI generation is disabled in this profile.
 
 ### 3. Run and add events

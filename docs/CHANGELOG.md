@@ -3,6 +3,18 @@
 Release notes and earlier development history, newest first. Tagged releases
 are listed on [GitHub](https://github.com/21sean/GrapevineOS/releases).
 
+## Unreleased
+
+- Add vLLM 0.33.0 as a runtime option beside Ollama, selected with
+  `GRAPEVINE_LLM_RUNTIME=vllm`. Ollama stays the default, and its manifest and
+  baseline are unchanged.
+- Generate through vLLM's OpenAI-compatible endpoint with JSON Schema constrained
+  decoding and the same contract gates. Chat, health, capabilities, the judge, and
+  `npm run doctor` follow the active runtime.
+- Pin the runtime, repository, revision, and weight hash in `llm/evals/models.vllm.json`.
+- Record serving numbers measured against MLPerf's interactive latency limits in
+  `llm/README.md`.
+
 ## v0.7.0: structured output gates and offline evals (2026-10-23)
 
 - Validate extraction, discovery, summaries, agent answers, and tool requests

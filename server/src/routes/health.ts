@@ -7,7 +7,7 @@ import { Router } from "express";
 import { classifierReady, guardConfig } from "../agent/guardrails.js";
 import { db } from "../db.js";
 import { shuttingDown } from "../lifecycle.js";
-import { ollamaBase } from "../ollama.js";
+import { llmBase, llmRuntime, runtimeVersion } from "../llm/runtime.js";
 import { store } from "../store.js";
 import { VERSION } from "../version.js";
 
@@ -52,7 +52,7 @@ health.get("/healthz", (_req, res) => {
  * says so), and Ollama is informational: a CLI provider serves chat without it.
  */
 health.get("/readyz", async (_req, res) => {
-  const [database, checkpointer, ollama, guard] = await Promise.all([
+  const [database, checkpointer, local, guard] = await Promise.all([
     probe(async () => {
       const s = await store.settings();
       return { city: s.city };
@@ -62,10 +62,9 @@ health.get("/readyz", async (_req, res) => {
       return "answering";
     }, 3_000),
     probe(async () => {
-      const base = await ollamaBase();
-      const r = await fetch(`${base}/api/version`, { signal: AbortSignal.timeout(2_000) });
-      if (!r.ok) throw new Error(`http ${r.status}`);
-      return ((await r.json()) as { version?: string }).version ?? "unknown";
+      const version = await runtimeVersion(await llmBase(), 2_000);
+      if (version === null) throw new Error("no answer");
+      return version;
     }, 2_500),
     guardConfig(),
   ]);
@@ -76,7 +75,7 @@ health.get("/readyz", async (_req, res) => {
     database,
     checkpointer,
     classifier: { state: classifier, mode: guard.mode, threshold: guard.threshold },
-    ollama: { ...ollama, informational: true },
+    [llmRuntime()]: { ...local, informational: true },
   });
 });
 
