@@ -33,6 +33,8 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { AIMessage, HumanMessage, isAIMessage, type BaseMessage } from "@langchain/core/messages";
 import { buildAgentGraph, turnInput } from "../agent/graph.js";
+import { turnFailureText } from "../agent/refusals.js";
+import { LlmGateError } from "../llm/gateway.js";
 import { ollamaBase } from "../ollama.js";
 import { FIXTURE_SETTINGS, fixtureCtx } from "./fixtures.js";
 
@@ -118,6 +120,8 @@ export interface Bridge {
   blockedTurns: number;
   /** Turns where the persona rail replaced the reply. */
   personaTrips: number;
+  /** Turns where the gate rejected every attempt and the person got the error text. */
+  gateFailures: number;
   close(): Promise<void>;
 }
 
@@ -147,7 +151,7 @@ export interface BridgeOptions {
 export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
   const city = FIXTURE_SETTINGS.city;
 
-  const state = { blockedTurns: 0, personaTrips: 0 };
+  const state = { blockedTurns: 0, personaTrips: 0, gateFailures: 0 };
 
   async function turn(conversationId: string, history: TurnMessage[], message: string) {
     const seed = history.map((m) =>
@@ -169,12 +173,28 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
       // Simulated traffic must never enter the recorded distribution.
       telemetry: { surface: "eval", record: false },
     });
-    const result = await graph.invoke(turnInput(seed), {
-      configurable: { thread_id: `${conversationId}-${history.length}` },
-      recursionLimit: 20,
-      signal: opts.signal,
-      runName: "redteam",
-    });
+    let result: Awaited<ReturnType<typeof graph.invoke>>;
+    try {
+      result = await graph.invoke(turnInput(seed), {
+        configurable: { thread_id: `${conversationId}-${history.length}` },
+        recursionLimit: 20,
+        signal: opts.signal,
+        runName: "redteam",
+      });
+    } catch (err) {
+      // The gate refusing every attempt is an outcome of the turn, not a broken
+      // run: the chat bridge shows the person this exact text, so that is what
+      // the attack sees and what the scorer judges. Anything else (the daemon
+      // down, a deadline) still fails the request, because no reply exists.
+      if (!(err instanceof LlmGateError) || err.code !== "validation_exhausted") throw err;
+      state.gateFailures++;
+      return {
+        reply: turnFailureText(err),
+        blocked: false,
+        personaTripped: false,
+        gateFailed: true,
+      };
+    }
 
     const messages = (result.messages ?? []) as BaseMessage[];
     const last = [...messages].reverse().find((m) => isAIMessage(m));
@@ -187,7 +207,7 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
     const personaTripped = result.outputTripped === true;
     if (personaTripped) state.personaTrips++;
 
-    return { reply, blocked, personaTripped };
+    return { reply, blocked, personaTripped, gateFailed: false };
   }
 
   const server: Server = createServer((req, res) => {
@@ -229,6 +249,9 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
     },
     get personaTrips() {
       return state.personaTrips;
+    },
+    get gateFailures() {
+      return state.gateFailures;
     },
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };

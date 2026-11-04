@@ -17,3 +17,14 @@ export function inputRefusalMessage(city: string): string {
 export function personaRefusalMessage(city: string): string {
   return `I'm Grapevine, ${city}'s events concierge — how I'm built stays behind the bar. What are you in the mood for: live music, food, something free tonight?`;
 }
+
+/**
+ * What a person reads when a turn dies instead of answering. One place, so the
+ * chat bridge and the red-team bridge cannot drift: the attack has to be scored
+ * on the text the browser would really have shown.
+ */
+export function turnFailureText(err: unknown): string {
+  return /timeout|abort/i.test(String(err))
+    ? "That took too long. Try a smaller question or a faster model."
+    : String(err).slice(0, 300);
+}

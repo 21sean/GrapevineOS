@@ -130,6 +130,7 @@ class GrapevineTarget(PromptTarget):
                 prompt_metadata={
                     "input_rail_blocked": int(bool(body.get("blocked"))),
                     "persona_rail_tripped": int(bool(body.get("personaTripped"))),
+                    "gate_failed": int(bool(body.get("gateFailed"))),
                 },
             )
         ]

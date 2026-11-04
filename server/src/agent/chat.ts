@@ -45,6 +45,7 @@ import { store } from "../store.js";
 import { type AgentFrame } from "../types.js";
 import { buildCtx, coercePos, type ChatContext } from "./context.js";
 import { buildAgentGraph, forgetThread, turnInput } from "./graph.js";
+import { turnFailureText } from "./refusals.js";
 
 const log = logger("chat");
 
@@ -254,14 +255,8 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
       }
       return;
     }
-    const timedOut = /timeout|abort/i.test(String(err));
     log.warn({ requestId, threadId, err: String(err).slice(0, 300) }, "chat turn failed");
-    send({
-      type: "error",
-      message: timedOut
-        ? "That took too long. Try a smaller question or a faster model."
-        : String(err).slice(0, 300),
-    });
+    send({ type: "error", message: turnFailureText(err) });
     res.end();
   } finally {
     untrack();
