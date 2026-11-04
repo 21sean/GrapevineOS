@@ -59,6 +59,8 @@ from pyrit.score import (
 )
 from pyrit.setup import IN_MEMORY, initialize_pyrit_async
 
+from pairing import pair_results, unfinished
+
 
 class GrapevineTarget(PromptTarget):
     """
@@ -264,7 +266,7 @@ async def _run(cfg: dict[str, Any]) -> dict[str, Any]:
                 return_partial_on_failure=True,
             )
 
-            for spec, result in zip(batch, executed.completed_results):
+            for spec, result in pair_results(batch, executed):
                 score = result.last_score
                 results.append(
                     {
@@ -287,20 +289,7 @@ async def _run(cfg: dict[str, Any]) -> dict[str, Any]:
                     }
                 )
 
-            for index in executed.incomplete_objectives:
-                spec = batch[index] if index < len(batch) else {"id": f"{strategy}-{index}"}
-                results.append(
-                    {
-                        "id": spec.get("id"),
-                        "strategy": strategy,
-                        "objective": spec.get("objective"),
-                        "outcome": "error",
-                        "outcome_reason": "the attack did not finish",
-                        "executed_turns": 0,
-                        "turns": [],
-                        "error": "incomplete",
-                    }
-                )
+            results.extend(unfinished(batch, executed))
     finally:
         await target.cleanup_target_async()
 
