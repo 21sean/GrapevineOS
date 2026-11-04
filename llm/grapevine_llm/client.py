@@ -104,6 +104,18 @@ Observer = Callable[[str, dict], None]
 FrameSink = Callable[[StreamFrame], None]
 
 
+_http: httpx.Client | None = None
+
+
+def _shared_client() -> httpx.Client:
+    """Building an httpx client loads the CA bundle, about 150 ms on Windows, and that
+    used to happen before every generation. Endpoints are loopback http only."""
+    global _http
+    if _http is None:
+        _http = httpx.Client(trust_env=False, follow_redirects=False)
+    return _http
+
+
 def ollama_transport(base: str, max_bytes: int,
                      log: Callable[[], GenerationLog] = GenerationLog) -> Transport:
     base = local_endpoint(base)
@@ -113,29 +125,30 @@ def ollama_transport(base: str, max_bytes: int,
         generation = log()
         parts: list[str] = []
         size = 0
-        with httpx.Client(trust_env=False, follow_redirects=False, timeout=remaining) as client:
-            generation.mark_sent()
-            with client.stream("POST", f"{base}/api/chat", json={**payload, "stream": True}) as response:
-                response.raise_for_status()
-                for line in response.iter_lines():
-                    if time.perf_counter() >= deadline:
-                        raise TimeoutError("generation deadline")
-                    if not line.strip():
-                        continue
-                    size += len(line)
-                    if size > max_bytes:
-                        raise ValueError("model response exceeded byte limit")
-                    data = json.loads(line)
-                    message = data.get("message") or {}
-                    generation.reasoning(message.get("thinking") or "")
-                    content = message.get("content")
-                    if content is not None and not isinstance(content, str):
-                        raise ValueError("model content must be text")
-                    if content:
-                        parts.append(content)
-                        generation.token(content)
-                    if data.get("done"):
-                        generation.final = data
+        client = _shared_client()
+        generation.mark_sent()
+        with client.stream("POST", f"{base}/api/chat", json={**payload, "stream": True},
+                           timeout=remaining) as response:
+            response.raise_for_status()
+            for line in response.iter_lines():
+                if time.perf_counter() >= deadline:
+                    raise TimeoutError("generation deadline")
+                if not line.strip():
+                    continue
+                size += len(line)
+                if size > max_bytes:
+                    raise ValueError("model response exceeded byte limit")
+                data = json.loads(line)
+                message = data.get("message") or {}
+                generation.reasoning(message.get("thinking") or "")
+                content = message.get("content")
+                if content is not None and not isinstance(content, str):
+                    raise ValueError("model content must be text")
+                if content:
+                    parts.append(content)
+                    generation.token(content)
+                if data.get("done"):
+                    generation.final = data
         if generation.final.get("done_reason") == "length":
             raise ValueError("truncated model output")
         return "".join(parts)
