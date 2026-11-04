@@ -1,8 +1,13 @@
 from ipaddress import ip_address
+from typing import Literal
 from urllib.parse import urlsplit
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+VLLM_BASE_URL = "http://127.0.0.1:8000"
+VLLM_MODEL = "qwen3.8-27b-int4"
 
 
 def local_endpoint(value: str) -> str:
@@ -19,6 +24,7 @@ def local_endpoint(value: str) -> str:
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="GRAPEVINE_LLM_", extra="forbid")
+    runtime: Literal["ollama", "vllm"] = "ollama"
     base_url: str = "http://127.0.0.1:11434"
     model: str = "qwen3.8:27b"
     max_attempts: int = Field(default=3, ge=1, le=5)
@@ -29,6 +35,12 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def offline(self):
+        if self.runtime == "vllm":
+            # Ollama's defaults mean nothing to vLLM; an explicit value still wins.
+            if "base_url" not in self.model_fields_set:
+                self.base_url = VLLM_BASE_URL
+            if "model" not in self.model_fields_set:
+                self.model = VLLM_MODEL
         local_endpoint(self.base_url)
         if "cloud" in self.model.lower() or "/" in self.model:
             raise ValueError("cloud models are disabled")
