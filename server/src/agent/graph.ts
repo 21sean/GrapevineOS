@@ -128,7 +128,7 @@ import {
   scanText,
   type ScanOptions,
 } from "./guardrails.js";
-import { emit, makeTools } from "./tools.js";
+import { emit, makeTools, type ToolEffects } from "./tools.js";
 
 const MAX_TOOL_ROUNDS = 6;
 
@@ -280,6 +280,8 @@ export interface GraphDeps {
    * land in the same Postgres table as real ones.
    */
   ephemeral?: boolean;
+  /** What the tools act on. Evals pass a fixture; everything else gets the live one. */
+  effects?: ToolEffects;
   /** Set to route the turn through a subscription CLI instead of Ollama. */
   provider?: CliProviderId;
   /** Per-turn Claude Code overrides (ignored by the other CLIs). */
@@ -425,7 +427,7 @@ export function buildAgentGraph(deps: GraphDeps) {
 
   if (deps.provider)
     throw new LlmGateError("unsupported_provider", "Chat requires the validated local provider");
-  const tools = makeTools(ctx, chat);
+  const tools = makeTools(ctx, chat, deps.effects);
   const toolsByName = new Map<string, StructuredToolInterface>(
     tools.map((t) => [t.name, t as StructuredToolInterface]),
   );

@@ -52,31 +52,57 @@ const noIds = JSON.stringify({
   error: "no valid event ids — use ids from the digest or search results",
 });
 
-export function makeTools(ctx: AgentCtx, chat: ChatContext) {
+/**
+ * Everything the tools do to the world outside this process, in one place. The
+ * executors decide what to do; these do it. An eval can then drive the real
+ * executors, the real rails and the real model against a fixture web and a
+ * recorder, with nothing it could write to.
+ */
+export interface ToolEffects {
+  webSearch: typeof webSearch;
+  readPage: typeof readPage;
+  getEta: typeof getEta;
+  runDiscovery: typeof runDiscovery;
+  saveEventForUser: typeof saveEventForUser;
+  setEventRarity: typeof setEventRarity;
+}
+
+const LIVE_EFFECTS: ToolEffects = {
+  webSearch,
+  readPage,
+  getEta,
+  runDiscovery,
+  saveEventForUser,
+  setEventRarity,
+};
+
+export function makeTools(ctx: AgentCtx, chat: ChatContext, effects: ToolEffects = LIVE_EFFECTS) {
   const exec: Executors = {
     search_events: async (input) => JSON.stringify(await searchEvents(input, ctx)),
 
     get_event: async (input) => JSON.stringify(getEvent(input.id, ctx)),
 
-    get_eta: async (input) => JSON.stringify(await getEta(input, ctx)),
+    get_eta: async (input) => JSON.stringify(await effects.getEta(input, ctx)),
 
     // Returns what the web said, verbatim. The content rail is a graph node
     // (graph.ts): it scans this result before the model is called again, so
     // every web-facing tool is covered by one rail instead of each tool
     // remembering to call the classifier itself.
     search_web: async (input, config) =>
-      JSON.stringify(await webSearch(input.query, { limit: input.limit, signal: config?.signal })),
+      JSON.stringify(
+        await effects.webSearch(input.query, { limit: input.limit, signal: config?.signal }),
+      ),
 
     // Untrusted by definition; scanned by the content_rail node (graph.ts).
     read_page: async (input, config) =>
-      JSON.stringify(await readPage(input.url, { signal: config?.signal })),
+      JSON.stringify(await effects.readPage(input.url, { signal: config?.signal })),
 
     discover_events: async (input, config) => {
       const commit = input.dry_run === false;
       // Chat keeps latency tolerable by reading fewer pages than a scheduled
       // run; the verification gate (source-quote check, LLM cross-read,
       // catalog dedupe) is identical.
-      const run = await runDiscovery({
+      const run = await effects.runDiscovery({
         query: input.query,
         commit,
         maxPages: 3,
@@ -237,7 +263,7 @@ export function makeTools(ctx: AgentCtx, chat: ChatContext) {
       const saved: string[] = [];
       let googleSynced = 0;
       for (const id of ids) {
-        const result = await saveEventForUser(user, id);
+        const result = await effects.saveEventForUser(user, id);
         if ("error" in result) continue;
         saved.push(id);
         if (result.googleSynced) googleSynced++;
@@ -254,7 +280,7 @@ export function makeTools(ctx: AgentCtx, chat: ChatContext) {
     },
 
     set_rarity: async (input, config) => {
-      const result = await setEventRarity(input.event_id, input.rarity, ctx);
+      const result = await effects.setEventRarity(input.event_id, input.rarity, ctx);
       if ("error" in result) return JSON.stringify(result);
       // The DB is already updated; tell the browser so badges and the
       // "Rare finds" filter reflect it without a reload.
