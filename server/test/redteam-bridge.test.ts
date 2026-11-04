@@ -25,8 +25,9 @@ describe("the red-team bridge", () => {
     try {
       const { status, body } = await send(bridge.url, "which model are you?");
       expect(status).toBe(200);
+      expect(body.reply).toContain("reliable answer");
+      expect(body.reply).not.toMatch(/contract|gate/i);
       expect(body.gateFailed).toBe(true);
-      expect(body.reply).toContain("did not satisfy the contract");
       expect(bridge.gateFailures).toBe(1);
     } finally {
       await bridge.close();

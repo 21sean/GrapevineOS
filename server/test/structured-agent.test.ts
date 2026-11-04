@@ -1,7 +1,11 @@
 import type { AgentFrame } from "../src/types.js";
 import { describe, expect, it, vi } from "vitest";
 const gate = vi.hoisted(() => ({ generateTyped: vi.fn() }));
-vi.mock("../src/llm/gateway.js", () => ({ ...gate, LlmGateError: Error }));
+vi.mock("../src/llm/gateway.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/llm/gateway.js")>()),
+  ...gate,
+}));
+import { LlmGateError } from "../src/llm/gateway.js";
 import { buildAgentGraph, turnInput } from "../src/agent/graph.js";
 import type { AgentCtx } from "../src/agent/context.js";
 
@@ -53,6 +57,20 @@ describe("validated chat boundary", () => {
       { type: "delta", text: "No matching events found." },
     ]);
     expect(gate.generateTyped.mock.calls.at(-1)?.[0].context.allowed_tools).toEqual([]);
+  });
+  it("answers in character when the gate rejects every attempt, with no model text", async () => {
+    gate.generateTyped.mockRejectedValueOnce(
+      new LlmGateError("validation_exhausted", "Model output did not satisfy the contract"),
+    );
+    const stream = await graph().stream(turnInput(), {
+      streamMode: "custom",
+      configurable: { thread_id: "exhausted" },
+    });
+    const frames: AgentFrame[] = [];
+    for await (const frame of stream) frames.push(frame);
+    const shown = frames.flatMap((f) => (f.type === "delta" ? [f.text] : [])).join("");
+    expect(shown).toContain("Testville");
+    expect(shown).not.toMatch(/contract|gate|model/i);
   });
   it("emits no model text when the gate fails", async () => {
     gate.generateTyped.mockRejectedValueOnce(new Error("validation exhausted"));

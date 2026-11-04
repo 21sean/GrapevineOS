@@ -33,8 +33,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { AIMessage, HumanMessage, isAIMessage, type BaseMessage } from "@langchain/core/messages";
 import { buildAgentGraph, turnInput } from "../agent/graph.js";
-import { turnFailureText } from "../agent/refusals.js";
-import { LlmGateError } from "../llm/gateway.js";
+import { gateFallbackMessage } from "../agent/refusals.js";
 import { ollamaBase } from "../ollama.js";
 import { FIXTURE_SETTINGS, fixtureCtx } from "./fixtures.js";
 
@@ -173,28 +172,14 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
       // Simulated traffic must never enter the recorded distribution.
       telemetry: { surface: "eval", record: false },
     });
-    let result: Awaited<ReturnType<typeof graph.invoke>>;
-    try {
-      result = await graph.invoke(turnInput(seed), {
-        configurable: { thread_id: `${conversationId}-${history.length}` },
-        recursionLimit: 20,
-        signal: opts.signal,
-        runName: "redteam",
-      });
-    } catch (err) {
-      // The gate refusing every attempt is an outcome of the turn, not a broken
-      // run: the chat bridge shows the person this exact text, so that is what
-      // the attack sees and what the scorer judges. Anything else (the daemon
-      // down, a deadline) still fails the request, because no reply exists.
-      if (!(err instanceof LlmGateError) || err.code !== "validation_exhausted") throw err;
-      state.gateFailures++;
-      return {
-        reply: turnFailureText(err),
-        blocked: false,
-        personaTripped: false,
-        gateFailed: true,
-      };
-    }
+    // A daemon that is down or a deadline throws out of here and fails the request,
+    // because no reply exists to score.
+    const result = await graph.invoke(turnInput(seed), {
+      configurable: { thread_id: `${conversationId}-${history.length}` },
+      recursionLimit: 20,
+      signal: opts.signal,
+      runName: "redteam",
+    });
 
     const messages = (result.messages ?? []) as BaseMessage[];
     const last = [...messages].reverse().find((m) => isAIMessage(m));
@@ -207,7 +192,12 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
     const personaTripped = result.outputTripped === true;
     if (personaTripped) state.personaTrips++;
 
-    return { reply, blocked, personaTripped, gateFailed: false };
+    // The gate refusing every attempt is an outcome of the turn: the fallback is what
+    // a person would have read, so it is what the attack sees and the scorer judges.
+    const gateFailed = reply === gateFallbackMessage(city);
+    if (gateFailed) state.gateFailures++;
+
+    return { reply, blocked, personaTripped, gateFailed };
   }
 
   const server: Server = createServer((req, res) => {

@@ -30,9 +30,8 @@
 import { randomUUID } from "node:crypto";
 import { isAIMessage, type BaseMessage } from "@langchain/core/messages";
 import { buildAgentGraph, turnInput } from "../agent/graph.js";
-import { turnFailureText } from "../agent/refusals.js";
+import { gateFallbackMessage } from "../agent/refusals.js";
 import type { ToolEffects } from "../agent/tools.js";
-import { LlmGateError } from "../llm/gateway.js";
 import type { CityEvent, DiscoveryRunResult, User } from "../types.js";
 import { FIXTURE_EVENTS, FIXTURE_SETTINGS, fixtureCtx } from "./fixtures.js";
 
@@ -365,17 +364,13 @@ export async function runInjectionCase(
     messages = (result.messages ?? []) as BaseMessage[];
     answer = lastAnswer(messages);
     personaTripped = result.outputTripped === true;
+    gateFailed = answer === gateFallbackMessage(FIXTURE_SETTINGS.city);
   } catch (err) {
     // Whatever ran before the failure is in the checkpoint, and it counts: a
-    // write in round one is not undone by the gate failing in round two.
+    // write in round one is not undone by the daemon dying in round two.
     const saved = await graph.getState(config).catch(() => null);
     messages = (saved?.values?.messages ?? []) as BaseMessage[];
-    if (err instanceof LlmGateError && err.code === "validation_exhausted") {
-      gateFailed = true;
-      answer = turnFailureText(err);
-    } else {
-      error = String(err).slice(0, 300);
-    }
+    error = String(err).slice(0, 300);
   }
 
   const calls = callsIn(messages);

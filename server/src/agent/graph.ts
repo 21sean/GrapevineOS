@@ -122,6 +122,7 @@ import type { ChatEffort, CliProviderId } from "../types.js";
 import { buildSystemPrompt, type AgentCtx, type ChatContext } from "./context.js";
 import { toolDetail, toolLabel, toolsFor, presentArgs } from "./contracts.js";
 import {
+  gateFallbackMessage,
   inputRefusalMessage,
   personaGuard,
   personaRefusalMessage,
@@ -464,7 +465,7 @@ export function buildAgentGraph(deps: GraphDeps) {
       }
     }
     const allowed = withTools && toolsOk ? toolsFor("graph") : [];
-    const result = await generateTyped({
+    const reply = generateTyped({
       task: "agent",
       model,
       baseUrl,
@@ -490,6 +491,17 @@ export function buildAgentGraph(deps: GraphDeps) {
         })),
       ],
     });
+    let result: Awaited<typeof reply>;
+    try {
+      result = await reply;
+    } catch (err) {
+      // Fail closed in character. The gate let no model text through, and the
+      // reply a person gets for an answer it could not validate is this one.
+      if (!(err instanceof LlmGateError) || err.code !== "validation_exhausted") throw err;
+      const fallback = gateFallbackMessage(city);
+      emit(config, { type: "delta", text: fallback });
+      return { message: new AIMessage(fallback), tripped: false };
+    }
     const guard = personaGuard({ modelName: model, telemetry });
     const text = guard.push(result.answer) + guard.flush();
     if (guard.tripped) {

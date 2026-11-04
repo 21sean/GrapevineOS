@@ -120,6 +120,7 @@ describe("one conversation", () => {
       { name: "save_calendar", args: { event_ids: ["casbah-moonchild"] } },
     ]);
     expect(row.gateFailed).toBe(true);
+    expect(row.answer).toContain("reliable answer");
     expect(row.error).toBeNull();
   });
 

@@ -462,4 +462,4 @@ export function personaGuard(opts: PersonaGuardOptions = {}): StreamGuard {
 // The canned replies live in refusals.ts (import-free) so scripts can take
 // the words without loading the classifier; re-exported here for the callers
 // that think of them as part of the rails.
-export { inputRefusalMessage, personaRefusalMessage } from "./refusals.js";
+export { gateFallbackMessage, inputRefusalMessage, personaRefusalMessage } from "./refusals.js";
