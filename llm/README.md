@@ -2,8 +2,8 @@
 
 Pydantic v2 is the contract source for model inputs, outputs, tool arguments,
 wire envelopes, and eval artifacts. The Node application calls one bounded Python
-worker through `server/src/llm/gateway.ts`. Ollama generates with the exported JSON
-Schema; Instructor and Pydantic validate the complete response before it reaches
+worker through `server/src/llm/gateway.ts`. Ollama, or vLLM when selected, generates
+with the exported JSON Schema; Instructor and Pydantic validate the complete response before it reaches
 application code. Generated Zod schemas check the Node boundary again.
 
 Defaults are three total attempts, one 120-second deadline, temperature 0, seed
@@ -39,6 +39,110 @@ subscription CLI generation fails closed. `GRAPEVINE_LLM_PYTHON` can override th
 worker interpreter; otherwise it uses `llm/.venv`. Pydantic Settings also accepts
 `GRAPEVINE_LLM_MAX_ATTEMPTS` (1–5), `GRAPEVINE_LLM_TIMEOUT_SECONDS` (up to 300), and
 `GRAPEVINE_LLM_NUM_CTX`; the Node call deadline remains 125 seconds.
+
+## vLLM runtime
+
+Ollama stays the default. `GRAPEVINE_LLM_RUNTIME=vllm` sends structured inference
+and chat to vLLM's OpenAI-compatible endpoint instead, with the same JSON Schema,
+repair loop, and Pydantic and Zod gates. Thinking stays off through
+`chat_template_kwargs`. [evals/models.vllm.json](evals/models.vllm.json) pins vLLM
+0.33.0 and `RedHatAI/Qwen3.8-27B-INT4` by revision and hash.
+
+That is the same base model as `qwen3.8:27b`, with different weights: W4A16 GPTQ
+safetensors and an FP8 KV cache, against Ollama's Q4_K_M GGUF. vLLM 0.33.0 cannot
+load the GGUF, because `vllm-gguf-plugin` 0.0.5 has no mapping for the model's
+linear attention tensors. Start the server with:
+
+```sh
+vllm serve /path/to/RedHatAI/Qwen3.8-27B-INT4 \
+  --served-model-name qwen3.8-27b-int4 --host 127.0.0.1 --port 8000 \
+  --reasoning-parser qwen3 --enable-auto-tool-choice --tool-call-parser qwen3_xml \
+  --structured-outputs-config '{"backend":"guidance"}' \
+  --max-model-len 65536 --gpu-memory-utilization 0.78 --max-num-seqs 16
+```
+
+Then set `GRAPEVINE_LLM_RUNTIME=vllm` in `server/.env`, where the URL and model
+default to the pinned record. For the live gates, set the same variable in the shell:
+
+```sh
+node --import ./server/scripts/eval-network.mjs --import tsx ./server/scripts/llm-quality.ts --live
+uv run --directory llm --no-sync python -m grapevine_llm.checks quality --report artifacts/live.json --base-ref origin/main
+```
+
+The gate compares a vLLM run against Ollama's checked-in baseline. The judge is the
+served vLLM model, because vLLM holds the GPU while it runs.
+
+Known limits:
+
+- The `guidance` backend is required. The agent schema combines `pattern` with
+  length limits, which xgrammar refuses, and vLLM allows one backend per engine.
+  Under `guidance`, `tool_choice: "required"` and a named `tool_choice` return HTTP 400.
+  Grapevine sends neither: tool requests travel inside the agent's JSON Schema.
+- vLLM reports no weight digest. The pin check compares the version, served name,
+  source path, and context length. Check the weights by hand with `sha256sum`.
+- The Node gate runs one worker that handles one request at a time, so the app
+  does not use vLLM's concurrency yet.
+- The required `model-quality` job stays on Ollama. Unit and worker tests cover the
+  vLLM transport in CI, and the live vLLM run is manual.
+- Under WSL mirrored networking use `127.0.0.1`. Windows gets no answer on `::1`, so
+  Python clients wait about 21 s per new connection when given `localhost`.
+
+### Serving numbers
+
+Measured against MLPerf's interactive latency limits: p99 TTFT at or under 500 ms and
+p99 TPOT at or under 30 ms, the limits of its Llama 3.1 8B interactive scenario. These
+are local measurements on one RTX 5090 (32 GB, WSL2 for vLLM, Windows for Ollama),
+not an MLPerf submission. The tool is `vllm bench serve` with temperature 0, thinking
+off, 128 output tokens, warm, and unique prompts of 61 or about 3,990 tokens.
+
+- vLLM 0.33.0: INT4 weights, 65,536 max length, 16 sequences, no speculative decoding,
+  40 to 80 requests per row.
+- Ollama 0.40.13: Q4_K_M weights, `num_ctx` 100000, `OLLAMA_NUM_PARALLEL=1`, MTP drafts
+  on (`draft_num_predict` 4), 30 to 48 requests per row. It serves streams in turn.
+
+| Runtime | Prompt | Streams | TTFT p50/p95/p99 ms | TPOT p50/p95/p99 ms | End-to-end p50/p95/p99 ms | tok/s per stream | tok/s total |
+| ------- | ------ | ------- | ------------------- | ------------------- | ------------------------- | ---------------- | ----------- |
+| vLLM    | short  | 1       | 54/58/60            | 11.8/12.6/12.6      | 1556/1658/1658            | 85               | 81          |
+| vLLM    | short  | 4       | 110/118/118         | 13.0/13.1/13.1      | 1764/1773/1774            | 77               | 290         |
+| vLLM    | short  | 8       | 169/190/190         | 13.0/13.4/13.5      | 1822/1848/1849            | 77               | 566         |
+| vLLM    | short  | 16      | 293/322/322         | 14.4/15.3/15.6      | 2120/2219/2220            | 69               | 954         |
+| vLLM    | long   | 1       | 1041/1067/1117      | 12.5/12.7/12.7      | 2628/2682/2735            | 80               | 50          |
+| vLLM    | long   | 4       | 1569/1889/3094      | 34.4/38.1/38.8      | 5990/6425/7876            | 29               | 87          |
+| vLLM    | long   | 8       | 1583/5270/7097      | 62.2/66.0/66.8      | 9441/13329/15169          | 16               | 108         |
+| vLLM    | long   | 16      | 2429/11371/14860    | 118.1/122.4/123.3   | 17772/25911/29568         | 8                | 115         |
+| Ollama  | short  | 1       | 199/218/220         | 9.1/9.7/10.2        | 1351/1442/1519            | 110              | 96          |
+| Ollama  | short  | 4       | 3982/4312/4343      | 8.8/10.1/10.4       | 5084/5472/5502            | 113              | 99          |
+| Ollama  | short  | 8       | 9153/9586/9624      | 8.8/10.2/10.5       | 10330/10732/10856         | 113              | 98          |
+| Ollama  | short  | 16      | 20243/20952/21038   | 9.4/10.7/10.9       | 21484/22106/22217         | 107              | 95          |
+| Ollama  | long   | 1       | 1379/1460/1478      | 8.8/10.2/10.6       | 2500/2704/2750            | 114              | 52          |
+| Ollama  | long   | 4       | 8834/8998/9061      | 9.0/10.6/11.0       | 9972/10229/10305          | 112              | 52          |
+| Ollama  | long   | 8       | 19203/19860/19913   | 9.1/10.3/10.9       | 20355/21086/21164         | 110              | 51          |
+| Ollama  | long   | 16      | 39933/40475/40600   | 9.4/10.5/11.0       | 41078/41671/41839         | 106              | 50          |
+
+Highest stream count within both limits, short prompt: vLLM 16 (the most tested),
+Ollama 1. Neither runtime meets the TTFT limit on a 4,000-token prompt without a cache
+hit; their best are 1117 ms (vLLM) and 1478 ms (Ollama) at one stream.
+
+Long prompt first answer token, one stream, p50, with the share of prompt tokens read
+from the prefix cache:
+
+| Runtime | Miss    | Same prompt repeated | Same document, new question |
+| ------- | ------- | -------------------- | --------------------------- |
+| vLLM    | 1059 ms | 231 ms, 80%          | 232 ms, 80%                 |
+| Ollama  | 1505 ms | 105 ms, 99.9%        | 296 ms, 87.8%               |
+
+vLLM caches this hybrid model in 800-token blocks, so a repeat still evaluates the
+last partial block.
+
+### Live gates
+
+| Runtime         | Live cases | First pass | Judge scores  | Median model time | `checks quality`                     |
+| --------------- | ---------- | ---------- | ------------- | ----------------- | ------------------------------------ |
+| Ollama baseline | 15/15      | 15/15      | 1.0, 1.0, 1.0 | 1252 ms           | pass                                 |
+| vLLM            | 15/15      | 14/15      | 1.0, 1.0, 1.0 | 1419 ms           | fail: first-pass rate 93%, needs 95% |
+
+On vLLM, `empty-retrieval` needed three attempts where Ollama's baseline needed one, so
+vLLM does not pass this gate yet. The gate is unchanged, and Ollama's baseline still applies.
 
 ## Add or change a schema
 
@@ -127,7 +231,7 @@ to synthetic `GoldenCase` JSON, then use `maintenance promote candidate.json --r
 and refresh the live baseline. Traces and review queues are never CI uploads.
 
 Library choices: Instructor supplies typed parsing; Ollama's native schema mode
-supplies constrained decoding, so no separate Outlines/xgrammar runtime is needed.
+supplies constrained decoding, and vLLM uses its `guidance` backend when selected.
 The existing DeepEval harness is retained with Ragas ID metrics. Hosted strict
 APIs are deliberately unsupported by this air-gapped profile. uv/package locks
 pin dependencies, including the compatible Ragas/LangChain pair and the existing
