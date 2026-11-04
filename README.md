@@ -34,6 +34,7 @@ column links to the code, tests, or workflow that a reviewer can inspect.
 | ✓      | Schema-gated responses                        | Ollama or vLLM generates against JSON Schema; strict Pydantic and Instructor validation precedes application use, with generated Zod checks at the Node boundary. [Contracts](llm/grapevine_llm/contracts.py) · [Gateway](server/src/llm/gateway.ts)                                    |
 | ✓      | Swappable local serving runtime               | Ollama by default, vLLM through its OpenAI-compatible endpoint with its own pinned record. Serving numbers measured against MLPerf's interactive latency limits. [Runtime](server/src/llm/runtime.ts) · [Record](llm/evals/models.vllm.json) · [Numbers](llm/README.md#serving-numbers) |
 | ✓      | Bounded repair and typed failures             | Three attempts and one 120-second deadline by default; invalid or exhausted output returns a typed failure without partial results. [Generation boundary](llm/grapevine_llm/client.py) · [Tests](llm/tests/)                                                                            |
+| ✓      | Streaming with retraction                     | Agent answers stream through the persona filter as they generate and validate as a whole at the end. A failed answer is taken back and replaced by a fallback; tool calls and actions never stream. [Graph](server/src/agent/graph.ts) · [Tests](server/test/streaming-answer.test.ts)  |
 | ✓      | Business-rule and evidence validation         | Validates dates, coordinates, known event IDs, supplied citation IDs, and verification excerpts. Answers can explicitly report insufficient evidence. [Validators](llm/grapevine_llm/contracts.py)                                                                                      |
 | ✓      | Agent orchestration and tool contracts        | LangGraph routes input checks, recall, model calls, tools, content checks, and finalization. Tool names and arguments are validated against the allowed set. [Graph](server/src/agent/graph.ts) · [Tool registry](server/src/agent/contracts.ts)                                        |
 | ✓      | Human confirmation for proposed actions       | Calendar, watch, and interest proposals have confirmation flows; applying an interest change requires `confirmed: true`. [Action contracts](server/src/agent/contracts.ts)                                                                                                              |
@@ -52,8 +53,12 @@ column links to the code, tests, or workflow that a reviewer can inspect.
 ### What the checks establish
 
 - **Schema validity and factual correctness are separate.** Citation IDs and excerpt
-  checks constrain outputs; they do not prove every claim is true. Complete agent
-  answers validate before display, trading token-by-token rendering for a strict boundary.
+  checks constrain outputs; they do not prove every claim is true.
+- **A streamed answer is provisional until it validates.** Agent answers appear as
+  they generate, through the persona filter, and validate whole at the end. A person
+  can read text that is then retracted and replaced by a fallback. Extraction,
+  discovery, tool requests and actions validate before anything acts on them, so
+  retraction only ever concerns words on the screen.
 - **The evaluation set is a regression suite, not a general accuracy benchmark.**
   Retrieval metrics use stored snapshots, not the live database retriever. The
   starter judge uses the same model as generation; [human calibration](llm/calibration.md)
@@ -61,7 +66,7 @@ column links to the code, tests, or workflow that a reviewer can inspect.
 - **Offline scope is inference and evaluation.** The live product still uses
   Supabase, Mapbox, and optional web integrations. The prompt-injection classifier
   can run in blocking, observe, or off mode and fails open if unavailable; the
-  structured-output boundary fails closed.
+  structured-output boundary fails closed for everything that can act on the world.
 
 See the [quality guide](llm/README.md) for reproducing the gates and the
 [README review](docs/readme-review.md) for the hiring-manager audit and remaining evidence gaps.

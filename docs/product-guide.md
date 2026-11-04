@@ -167,7 +167,9 @@ walkthrough and the steps for adding a tool.
 - **Streaming bridge.** `graph.stream()` is translated into an NDJSON
   protocol (token deltas, tool status, actions, guardrail verdicts, usage).
   The frame types live in `shared/types.ts`, so an unhandled frame is a
-  compile error.
+  compile error. Answer text reaches the browser as the model generates it and
+  validates whole at the end. A failed answer is retracted with a `replace`
+  frame; a closed tab stops the generation and records nothing.
 - **Failure handling.** Ollama being down or having no model shows a notice
   instead of a 500. A 120s deadline and client-disconnect abort stop a
   closed tab from keeping the GPU busy. On SIGTERM the server stops its

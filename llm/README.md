@@ -8,8 +8,11 @@ application code. Generated Zod schemas check the Node boundary again.
 
 Defaults are three total attempts, one 120-second deadline, temperature 0, seed
 42, and 16,384 context tokens. Repairs receive bounded validation errors. Failure
-returns a typed error with no partial output. Agent text is released after the
-whole answer validates, so token-by-token display is intentionally unavailable.
+returns a typed error with no partial output. One thing leaves the gate early: the
+agent's answer text streams to the person as it generates, as `StreamFrame` display
+text, and the complete document still validates at the end. If an attempt fails, the
+worker says so and the app takes back what it showed. Tool calls, citations and every
+other task arrive only in the validated result, so nothing acts on unvalidated output.
 Schema conformance does not establish factual accuracy; evidence checks and evals
 cover that separately.
 
