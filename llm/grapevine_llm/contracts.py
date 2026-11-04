@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, AfterValidator, ConfigDict, Field, ValidationInfo, create_model, model_validator
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 Text = Annotated[str, Field(min_length=1, max_length=2000)]
 Short = Annotated[str, Field(min_length=1, max_length=200)]
 Id = Annotated[str, Field(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9_.:-]+$")]

@@ -77,6 +77,7 @@ def artifacts() -> dict[Path, str]:
     lines.append("export type Task = keyof typeof outputSchemas;")
     lines.append("export type Output<T extends Task> = z.infer<(typeof outputSchemas)[T]>;")
     lines.append("export type ValidationContext = z.input<typeof contextSchema>;")
+    lines.append("export type LlmStats = z.infer<typeof result_envelopeSchema>[\"stats\"];")
     result[GENERATED] = "\n".join(lines) + "\n"
     return result
 
