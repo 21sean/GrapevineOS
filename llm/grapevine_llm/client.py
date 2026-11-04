@@ -14,7 +14,7 @@ from pydantic import Field, RootModel, ValidationError
 
 from .contracts import OUTPUTS, VERSION, Context, Contract, RuleError, validate_output
 from .settings import Settings, local_endpoint
-from .streaming import GenerationLog
+from .streaming import AnswerStream, GenerationLog
 from .telemetry import sample, tracer
 
 # Instructor logs exception strings with rejected values. Our observer records
@@ -36,6 +36,9 @@ class Request(Contract):
     context: Context = Field(default_factory=Context)
     model: Annotated[str, Field(min_length=1, max_length=150)] | None = None
     base_url: Annotated[str, Field(max_length=200)] | None = None
+    # Send the answer text as it generates. Only the agent's answer may do this,
+    # and the complete document is still validated: see StreamFrame.
+    stream_answer: bool = False
 
 
 class Stats(Contract):
@@ -50,6 +53,7 @@ class Stats(Contract):
     # The first generation of the request: the one a person is waiting on. None
     # means nothing was timed, as with a replay transport, and never zero.
     first_token_ms: Annotated[float, Field(ge=0)] | None = None
+    first_answer_ms: Annotated[float, Field(ge=0)] | None = None
     first_reasoning_ms: Annotated[float, Field(ge=0)] | None = None
     tpot_ms: Annotated[float, Field(ge=0)] | None = None
     prompt_tokens: Annotated[int, Field(ge=0)] | None = None
@@ -57,6 +61,19 @@ class Stats(Contract):
     load_ms: Annotated[float, Field(ge=0)] | None = None
     prompt_eval_ms: Annotated[float, Field(ge=0)] | None = None
     eval_ms: Annotated[float, Field(ge=0)] | None = None
+
+
+class StreamFrame(Contract):
+    """
+    A piece of unvalidated answer text on its way to the person, or the order to
+    take back what was sent because the gate rejected it and is trying again. These
+    frames carry prose for display and nothing downstream may act on them: tool
+    calls, citations and every other task still arrive only in the validated Result.
+    """
+
+    id: str
+    delta: Annotated[str, Field(max_length=200_000)] | None = None
+    reset: Literal[True] | None = None
 
 
 class Success(Contract):
@@ -84,6 +101,7 @@ class ResultEnvelope(RootModel[Result]):
 
 Transport = Callable[[dict, float], str]
 Observer = Callable[[str, dict], None]
+FrameSink = Callable[[StreamFrame], None]
 
 
 def ollama_transport(base: str, max_bytes: int,
@@ -196,7 +214,7 @@ TRANSPORTS = {"ollama": ollama_transport, "vllm": vllm_transport}
 
 
 def _generate(request: Request, settings: Settings, *, transport: Transport | None = None,
-             observer: Observer | None = None) -> Result:
+             observer: Observer | None = None, on_frame: FrameSink | None = None) -> Result:
     started = time.perf_counter()
     deadline = started + settings.timeout_seconds
     attempts = failures = 0
@@ -237,6 +255,31 @@ def _generate(request: Request, settings: Settings, *, transport: Transport | No
     except ValueError:
         return fail("configuration", "Local model configuration rejected")
 
+    live = on_frame is not None and request.stream_answer and request.task == "agent"
+    shown = False
+
+    def new_generation() -> GenerationLog:
+        """A log for one attempt, which also pulls out the answer as it arrives."""
+        if request.task != "agent":
+            return GenerationLog()
+        answer = AnswerStream()
+
+        def on_text(text: str) -> str:
+            nonlocal shown
+            piece = answer.feed(text)
+            if piece and live:
+                shown = True
+                on_frame(StreamFrame(id=request.id, delta=piece))
+            return piece
+        return GenerationLog(on_text=on_text)
+
+    def take_back() -> None:
+        """This attempt failed validation, so what it showed must not stand."""
+        nonlocal shown
+        if shown:
+            shown = False
+            on_frame(StreamFrame(id=request.id, reset=True))
+
     def record_generation() -> None:
         nonlocal timing
         call_timing = generation.stats()
@@ -253,7 +296,7 @@ def _generate(request: Request, settings: Settings, *, transport: Transport | No
         attempts += 1
         emit("attempt", attempt=attempts)
 
-        generation = GenerationLog()
+        generation = new_generation()
 
         def completion(**kwargs):
             nonlocal validation_ms, model_ms
@@ -310,6 +353,7 @@ def _generate(request: Request, settings: Settings, *, transport: Transport | No
                     (str(e['ctx']['error']) if isinstance(e.get('ctx', {}).get('error'), RuleError) else e['type'])
                     for e in errors)[:1000]
             emit("validation_failure", attempt=attempts, error_type=type(exc).__name__)
+            take_back()
             if attempt + 1 < effective.max_attempts:
                 emit("retry", attempt=attempts+1)
                 messages.append({"role": "user", "content": "Repair the response: " + details})
@@ -320,14 +364,14 @@ def _generate(request: Request, settings: Settings, *, transport: Transport | No
 
 
 def generate(request: Request, settings: Settings, *, transport: Transport | None = None,
-             observer: Observer | None = None) -> Result:
+             observer: Observer | None = None, on_frame: FrameSink | None = None) -> Result:
     with tracer.start_as_current_span("llm." + request.task,
         attributes={"request.id": request.id, "schema.version": VERSION}) as span:
         def observe(event: str, attrs: dict) -> None:
             span.add_event(event, attributes=attrs)
             if observer:
                 observer(event, attrs)
-        result = _generate(request, settings, transport=transport, observer=observe)
+        result = _generate(request, settings, transport=transport, observer=observe, on_frame=on_frame)
         span.set_attribute("gate.ok", result.ok)
         sample(request, result)
         return result

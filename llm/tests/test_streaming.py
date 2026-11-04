@@ -148,3 +148,76 @@ def test_metrics_summarize_ttft_from_generation_events(tmp_path):
     metrics = summarize(path)
     assert metrics["model_ttft_ms"]["p99"] == 120.0
     assert metrics["model_tpot_ms"]["p50"] == 15.0
+
+
+def agent_request(base: str, **extra) -> Request:
+    from grapevine_llm.contracts import Context
+    return Request(id="a", task="agent", base_url=base, messages=[Message(role="user", content="x")],
+                   context=Context(evidence=[{"id": "jazz", "text": "Jazz at six"}], require_citations=True),
+                   stream_answer=True, **extra)
+
+
+def lines_for(body: str, size: int = 7) -> list[dict]:
+    lines = [{"message": {"content": body[i:i + size]}, "done": False} for i in range(0, len(body), size)]
+    lines.append({"message": {"content": ""}, "done": True, "done_reason": "stop", "eval_count": 20,
+                  "prompt_eval_count": 12})
+    return lines
+
+
+def test_answer_text_arrives_as_frames_and_the_result_still_validates():
+    body = json.dumps({"kind": "answer", "answer": "Jazz at \"six\".", "citations": ["jazz"], "tool_calls": []})
+    base, server = fake_runtime(lines_for(body))
+    frames = []
+    try:
+        result = generate(agent_request(base), Settings(), on_frame=frames.append)
+    finally:
+        server.shutdown()
+    assert isinstance(result, Success)
+    assert "".join(f.delta for f in frames) == 'Jazz at "six".'
+    assert all(f.id == "a" and f.reset is None for f in frames)
+    assert result.stats.first_answer_ms >= result.stats.first_token_ms
+
+
+def test_a_failed_attempt_is_taken_back_before_the_repair():
+    bad = json.dumps({"kind": "answer", "answer": "Invented.", "citations": ["nope"], "tool_calls": []})
+    base, server = fake_runtime(lines_for(bad))
+    frames = []
+    try:
+        result = generate(agent_request(base), Settings(max_attempts=2), on_frame=frames.append)
+    finally:
+        server.shutdown()
+    assert not result.ok
+    assert result.code == "validation_exhausted"
+    resets = [i for i, f in enumerate(frames) if f.reset]
+    assert len(resets) == 2
+    assert frames[-1].reset is True
+
+
+def test_only_the_agent_answer_can_stream():
+    body = json.dumps({"rating": 4, "rationale": "Local", "promoted": False})
+    base, server = fake_runtime(lines_for(body))
+    frames = []
+    try:
+        req = Request(id="r", task="rating", messages=[Message(role="user", content="x")], base_url=base,
+                      stream_answer=True)
+        result = generate(req, Settings(), on_frame=frames.append)
+    finally:
+        server.shutdown()
+    assert result.ok
+    assert frames == []
+
+
+def test_a_tool_turn_shows_nothing():
+    from grapevine_llm.contracts import Context
+    body = json.dumps({"kind": "tools", "answer": "", "citations": [],
+                       "tool_calls": [{"name": "search_web", "args": {"query": "jazz"}}]})
+    base, server = fake_runtime(lines_for(body))
+    frames = []
+    try:
+        req = Request(id="t", task="agent", base_url=base, messages=[Message(role="user", content="x")],
+                      context=Context(allowed_tools=["search_web"]), stream_answer=True)
+        result = generate(req, Settings(), on_frame=frames.append)
+    finally:
+        server.shutdown()
+    assert result.ok and result.output.tool_calls
+    assert frames == []

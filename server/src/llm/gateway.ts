@@ -6,6 +6,7 @@ import {
   outputSchemas,
   requestSchema,
   result_envelopeSchema,
+  stream_frameSchema,
   type LlmStats,
   type Output,
   type Task,
@@ -37,6 +38,8 @@ type Pending = {
   resolve: (v: unknown) => void;
   reject: (e: Error) => void;
   onStats?: (stats: LlmStats) => void;
+  onDelta?: (text: string) => void;
+  onReset?: () => void;
 };
 let worker: ChildProcessWithoutNullStreams | null = null;
 let buffer = "";
@@ -88,7 +91,17 @@ function start(): ChildProcessWithoutNullStreams {
       const line = buffer.slice(0, end);
       buffer = buffer.slice(end + 1);
       try {
-        const reply = envelope.parse(JSON.parse(line));
+        const parsed: unknown = JSON.parse(line);
+        // Answer text on its way to the person. The Result still follows.
+        const frame = stream_frameSchema.safeParse(parsed);
+        if (frame.success) {
+          const p = pending.get(frame.data.id);
+          if (!p) throw new Error("unexpected frame");
+          if (frame.data.delta) p.onDelta?.(frame.data.delta);
+          if (frame.data.reset) p.onReset?.();
+          continue;
+        }
+        const reply = envelope.parse(parsed);
         const p = pending.get(reply.id);
         if (!p) throw new Error("unexpected reply");
         pending.delete(reply.id);
@@ -117,6 +130,13 @@ export async function generateTyped<T extends Task>(opts: {
   signal?: AbortSignal;
   /** How the generation went, success or not. Telemetry: must not throw. */
   onStats?: (stats: LlmStats) => void;
+  /**
+   * Answer text as it generates, before validation: for display only. The promise
+   * resolving is what says the whole answer passed. See onReset.
+   */
+  onDelta?: (text: string) => void;
+  /** The gate rejected what onDelta has sent so far and is trying again. */
+  onReset?: () => void;
 }): Promise<Output<T>> {
   opts.signal?.throwIfAborted();
   if (pending.size >= 16) throw new LlmGateError("busy", "LLM gate queue is full");
@@ -131,6 +151,7 @@ export async function generateTyped<T extends Task>(opts: {
         context: opts.context ?? {},
         model: opts.model,
         base_url: opts.baseUrl,
+        ...(opts.onDelta && { stream_answer: true }),
       }),
     ) + "\n";
   if (Buffer.byteLength(line) > 1_000_000)
@@ -148,6 +169,8 @@ export async function generateTyped<T extends Task>(opts: {
     };
     pending.set(id, {
       onStats: opts.onStats,
+      onDelta: opts.onDelta,
+      onReset: opts.onReset,
       resolve: (value) => {
         clean();
         resolve(value);

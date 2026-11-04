@@ -95,10 +95,11 @@ class AnswerStream:
 class GenerationLog:
     """Timestamps for one call to the runtime, taken where the tokens arrive."""
 
-    def __init__(self, on_text: Callable[[str], None] | None = None) -> None:
+    def __init__(self, on_text: Callable[[str], str] | None = None) -> None:
         self._on_text = on_text
         self.sent: float = time.perf_counter()
         self.first_token: float | None = None
+        self.first_answer: float | None = None
         self.first_reasoning: float | None = None
         self.last_token: float | None = None
         self.chunks = 0
@@ -119,8 +120,10 @@ class GenerationLog:
             self.first_token = now
         self.last_token = now
         self.chunks += 1
-        if self._on_text:
-            self._on_text(text)
+        # The envelope comes first, so answer text starts a few tokens after the
+        # first generated token. The difference is real and is reported.
+        if self._on_text and self._on_text(text) and self.first_answer is None:
+            self.first_answer = time.perf_counter()
 
     def _ms(self, stamp: float | None) -> float | None:
         return None if stamp is None else (stamp - self.sent) * 1000
@@ -138,6 +141,7 @@ class GenerationLog:
         prompt_tokens = self.final.get("prompt_eval_count")
         return {
             "first_token_ms": self._ms(self.first_token),
+            "first_answer_ms": self._ms(self.first_answer),
             "first_reasoning_ms": self._ms(self.first_reasoning),
             "tpot_ms": tpot,
             "prompt_tokens": prompt_tokens if isinstance(prompt_tokens, int) else None,

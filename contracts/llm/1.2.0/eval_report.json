@@ -158,6 +158,19 @@
           "default": null,
           "title": "Eval Ms"
         },
+        "first_answer_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Answer Ms"
+        },
         "first_pass": {
           "title": "First Pass",
           "type": "boolean"
