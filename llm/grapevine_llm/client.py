@@ -100,6 +100,58 @@ def ollama_transport(base: str, max_bytes: int) -> Transport:
     return call
 
 
+def vllm_transport(base: str, max_bytes: int) -> Transport:
+    """Same payload and same fail-closed reads as Ollama, over vLLM's OpenAI endpoint."""
+    base = local_endpoint(base)
+
+    def call(payload: dict, remaining: float) -> str:
+        deadline = time.perf_counter() + remaining
+        options = payload["options"]
+        request_body = {
+            "model": payload["model"],
+            "messages": payload["messages"],
+            "stream": True,
+            "stream_options": {"include_usage": True},
+            "temperature": options["temperature"],
+            "seed": options["seed"],
+            "max_tokens": options["num_predict"],
+            "response_format": {"type": "json_schema", "json_schema": {
+                "name": "grapevine_contract", "schema": payload["format"], "strict": True}},
+            "chat_template_kwargs": {"enable_thinking": bool(payload.get("think"))},
+        }
+        parts: list[str] = []
+        size = 0
+        finish = None
+        with httpx.Client(trust_env=False, follow_redirects=False, timeout=remaining) as client:
+            with client.stream("POST", f"{base}/v1/chat/completions", json=request_body) as response:
+                response.raise_for_status()
+                for line in response.iter_lines():
+                    if time.perf_counter() >= deadline:
+                        raise TimeoutError("generation deadline")
+                    if not line.startswith("data:"):
+                        continue
+                    data = line.removeprefix("data:").strip()
+                    if data == "[DONE]":
+                        break
+                    size += len(data)
+                    if size > max_bytes:
+                        raise ValueError("model response exceeded byte limit")
+                    for choice in json.loads(data).get("choices") or []:
+                        content = (choice.get("delta") or {}).get("content")
+                        if content is not None and not isinstance(content, str):
+                            raise ValueError("model content must be text")
+                        if content:
+                            parts.append(content)
+                        finish = choice.get("finish_reason") or finish
+        if finish == "length":
+            raise ValueError("truncated model output")
+        return "".join(parts)
+    return call
+
+
+TRANSPORTS = {"ollama": ollama_transport, "vllm": vllm_transport}
+
+
 def _generate(request: Request, settings: Settings, *, transport: Transport | None = None,
              observer: Observer | None = None) -> Result:
     started = time.perf_counter()
@@ -132,7 +184,7 @@ def _generate(request: Request, settings: Settings, *, transport: Transport | No
     try:
         effective = Settings(**{**settings.model_dump(),
             "model": request.model or settings.model, "base_url": request.base_url or settings.base_url})
-        send = transport or ollama_transport(effective.base_url, effective.max_bytes)
+        send = transport or TRANSPORTS[effective.runtime](effective.base_url, effective.max_bytes)
     except ValueError:
         return fail("configuration", "Local model configuration rejected")
 
