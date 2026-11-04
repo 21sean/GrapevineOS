@@ -28,7 +28,7 @@ export interface WriteIntent {
   priorAnswer: string;
 }
 
-const SAVE_REQUEST = /\b(?:save|add|book|put|keep|schedule|calendar)\b/i;
+const SAVE_REQUEST = /\b(?:save|add|book|put|keep|schedule)\b/i;
 const AFFIRMATION =
   /^\s*(?:yes|yep|yeah|sure|ok|okay|please|do it|go ahead|sounds good|that works|perfect)\b/i;
 const REFERS_BACK = /\b(?:it|them|those|that|these|this one|both|all)\b/i;
@@ -98,5 +98,10 @@ export function splitCalendarSave(
 
 /** Whether this message is the person asking for events to be added to the catalog. */
 export function askedToAddEvents(intent: WriteIntent): boolean {
-  return ADD_TO_CATALOG.test(intent.userText) && EVENTS_NOUN.test(intent.userText);
+  return (
+    ADD_TO_CATALOG.test(intent.userText) &&
+    EVENTS_NOUN.test(intent.userText) &&
+    // "Add it to my calendar" is about one person's calendar, not the shared catalog.
+    !/\bcalendar\b/i.test(intent.userText)
+  );
 }

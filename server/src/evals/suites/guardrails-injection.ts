@@ -14,7 +14,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { classifierReady, guardConfig, scanText } from "../../agent/guardrails.js";
-import { ollamaBase } from "../../ollama.js";
+import { llmBase } from "../../llm/runtime.js";
 import { expect, type EvalSuite } from "../harness.js";
 import { caseId, injectionMatrix, runInjectionCase, type InjectionRow } from "../injection.js";
 import { judgeUnavailable } from "../judge.js";
@@ -26,7 +26,7 @@ function model(): string {
 
 /** With no database reachable (the safest way to run this) the env says where Ollama is. */
 async function base(): Promise<string> {
-  return await ollamaBase().catch(() => process.env.OLLAMA_URL ?? FIXTURE_SETTINGS.ollamaUrl);
+  return await llmBase().catch(() => process.env.OLLAMA_URL ?? FIXTURE_SETTINGS.ollamaUrl);
 }
 
 const rows: InjectionRow[] = [];

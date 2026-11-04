@@ -43,6 +43,12 @@ describe("saving to the calendar", () => {
     ).toEqual({ save: [], propose: ["gaslamp-bottle-service"] });
   });
 
+  it("does not count asking about the calendar as asking to save", () => {
+    expect(
+      splitCalendarSave(["casbah-moonchild"], events, intent("Is Moonchild on my calendar?")).save,
+    ).toEqual([]);
+  });
+
   it("does not count a question that happens to name the event as asking to save it", () => {
     expect(
       splitCalendarSave(
@@ -81,5 +87,6 @@ describe("adding to the catalog", () => {
     expect(askedToAddEvents(intent("yes, add them"))).toBe(true);
     expect(askedToAddEvents(intent("What free things can I do tonight?"))).toBe(false);
     expect(askedToAddEvents(intent("Find me jazz shows on the web"))).toBe(false);
+    expect(askedToAddEvents(intent("Add it to my calendar"))).toBe(false);
   });
 });
