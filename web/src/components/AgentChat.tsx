@@ -626,13 +626,16 @@ function UsageLine({ usage }: { usage: ChatUsage }) {
   const cached = usage.cacheReadInputTokens ?? 0
   return (
     <Hint
-      label={
+      label={[
         cached
-          ? `This turn read ${fmtTokens(usage.inputTokens)} input tokens, ${fmtTokens(cached)} of them from cache`
-          : usage.visibleTtftMs
-            ? `First words after ${(usage.visibleTtftMs / 1000).toFixed(1)}s`
-            : "This turn's token usage"
-      }
+          ? `This turn read ${fmtTokens(usage.inputTokens)} input tokens, ${fmtTokens(cached)} of them from cache.`
+          : "This turn's token usage.",
+        usage.visibleTtftMs
+          ? `First words after ${(usage.visibleTtftMs / 1000).toFixed(1)}s.`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
       {/* tabIndex so the explanation is reachable without a pointer; this is
           the only place the cache split is written down. */}
