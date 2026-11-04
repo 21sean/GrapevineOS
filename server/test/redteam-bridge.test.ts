@@ -6,7 +6,7 @@ vi.mock("../src/llm/gateway.js", async (importOriginal) => ({
   generateTyped: gate.generateTyped,
 }));
 import { LlmGateError } from "../src/llm/gateway.js";
-import { startBridge } from "../src/evals/redteam.js";
+import { attackConcurrency, startBridge } from "../src/evals/redteam.js";
 
 async function send(url: string, message: string) {
   const res = await fetch(url, {
@@ -15,6 +15,22 @@ async function send(url: string, message: string) {
   });
   return { status: res.status, body: (await res.json()) as Record<string, unknown> };
 }
+
+describe("attack concurrency", () => {
+  it("defaults to one and ignores nonsense", () => {
+    const set = (v: string | undefined) => {
+      if (v === undefined) delete process.env.REDTEAM_CONCURRENCY;
+      else process.env.REDTEAM_CONCURRENCY = v;
+      return attackConcurrency();
+    };
+    expect(set(undefined)).toBe(1);
+    expect(set("4")).toBe(4);
+    expect(set("0")).toBe(1);
+    expect(set("99")).toBe(1);
+    expect(set("lots")).toBe(1);
+    set(undefined);
+  });
+});
 
 describe("the red-team bridge", () => {
   it("hands the attack the text a person reads when the gate rejects every attempt", async () => {

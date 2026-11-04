@@ -337,6 +337,16 @@ function maxTurns(): number {
   return Number.isFinite(raw) && raw >= 1 && raw <= 20 ? Math.floor(raw) : 5;
 }
 
+/**
+ * Attacks at once. Default one. More only helps against a daemon started with
+ * OLLAMA_NUM_PARALLEL, and it can change a verdict by changing what the attacker
+ * reads next, so runs at different settings are not comparable.
+ */
+export function attackConcurrency(): number {
+  const raw = Number(process.env.REDTEAM_CONCURRENCY ?? 1);
+  return Number.isFinite(raw) && raw >= 1 && raw <= 8 ? Math.floor(raw) : 1;
+}
+
 /** Run every objective in one PyRIT process and return its verdicts. */
 export async function runAttacks(opts: RunOptions): Promise<AttackResult[]> {
   const config = {
@@ -346,6 +356,7 @@ export async function runAttacks(opts: RunOptions): Promise<AttackResult[]> {
     model: opts.model,
     max_turns: opts.maxTurns ?? maxTurns(),
     max_backtracks: opts.maxBacktracks ?? 3,
+    max_concurrency: attackConcurrency(),
     attacks: opts.objectives.map((o) => ({
       id: o.id,
       strategy: o.strategy,

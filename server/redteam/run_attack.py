@@ -252,47 +252,57 @@ async def _run(cfg: dict[str, Any]) -> dict[str, Any]:
     await initialize_pyrit_async(memory_db_type=IN_MEMORY, silent=True)
 
     target = GrapevineTarget(endpoint=cfg["target_url"], timeout=cfg.get("timeout", 300.0))
-    executor = AttackExecutor(max_concurrency=cfg.get("max_concurrency", 1))
-    results: list[dict[str, Any]] = []
+    concurrency = cfg.get("max_concurrency", 1)
+    executor = AttackExecutor(max_concurrency=concurrency)
 
-    try:
+    async def run_strategy(strategy: str) -> list[dict[str, Any]]:
         # Grouped by strategy so each attack object is built once, but every
         # objective is still reported separately, a harness case per attack.
-        for strategy in sorted({a["strategy"] for a in cfg["attacks"]}):
-            batch = [a for a in cfg["attacks"] if a["strategy"] == strategy]
-            attack = _build_attack(strategy, target=target, cfg=cfg)
+        results: list[dict[str, Any]] = []
+        batch = [a for a in cfg["attacks"] if a["strategy"] == strategy]
+        attack = _build_attack(strategy, target=target, cfg=cfg)
 
-            print(f"[pyrit] {strategy}: {len(batch)} objective(s)", file=sys.stderr, flush=True)
-            executed = await executor.execute_attack_async(
-                attack=attack,
-                objectives=[a["objective"] for a in batch],
-                return_partial_on_failure=True,
+        print(f"[pyrit] {strategy}: {len(batch)} objective(s)", file=sys.stderr, flush=True)
+        executed = await executor.execute_attack_async(
+            attack=attack,
+            objectives=[a["objective"] for a in batch],
+            return_partial_on_failure=True,
+        )
+
+        for spec, result in pair_results(batch, executed):
+            score = result.last_score
+            results.append(
+                {
+                    "id": spec["id"],
+                    "strategy": strategy,
+                    "objective": result.objective,
+                    # SUCCESS means the ATTACK succeeded, i.e. we failed.
+                    "outcome": result.outcome.value,
+                    "outcome_reason": result.outcome_reason,
+                    "executed_turns": result.executed_turns,
+                    "execution_time_ms": result.execution_time_ms,
+                    "score": None
+                    if score is None
+                    else {
+                        "value": str(score.score_value),
+                        "rationale": (score.score_rationale or "")[:600],
+                    },
+                    "turns": _transcript(result.conversation_id),
+                    "error": result.error_message,
+                }
             )
 
-            for spec, result in pair_results(batch, executed):
-                score = result.last_score
-                results.append(
-                    {
-                        "id": spec["id"],
-                        "strategy": strategy,
-                        "objective": result.objective,
-                        # SUCCESS means the ATTACK succeeded, i.e. we failed.
-                        "outcome": result.outcome.value,
-                        "outcome_reason": result.outcome_reason,
-                        "executed_turns": result.executed_turns,
-                        "execution_time_ms": result.execution_time_ms,
-                        "score": None
-                        if score is None
-                        else {
-                            "value": str(score.score_value),
-                            "rationale": (score.score_rationale or "")[:600],
-                        },
-                        "turns": _transcript(result.conversation_id),
-                        "error": result.error_message,
-                    }
-                )
+        results.extend(unfinished(batch, executed))
+        return results
 
-            results.extend(unfinished(batch, executed))
+    strategies = sorted({a["strategy"] for a in cfg["attacks"]})
+    try:
+        if concurrency > 1:
+            # The cap applies per strategy, and each strategy has two objectives.
+            batches = await asyncio.gather(*(run_strategy(s) for s in strategies))
+        else:
+            batches = [await run_strategy(s) for s in strategies]
+        results = [row for batch in batches for row in batch]
     finally:
         await target.cleanup_target_async()
 
