@@ -31,7 +31,14 @@ import { sessionUser } from "../auth.js";
 import { langfuseHandler } from "../langfuse.js";
 import { trackChat } from "../lifecycle.js";
 import { logger } from "../log.js";
-import { modelSupportsTools, ollamaBase } from "../ollama.js";
+import {
+  llmBase,
+  llmModel,
+  llmRuntime,
+  runtimeLabel,
+  runtimeSupportsTools,
+  runtimeVersion,
+} from "../llm/runtime.js";
 import { rateLimit, singleFlight } from "../rate-limit.js";
 import { currentRequestId } from "../request-id.js";
 import { store } from "../store.js";
@@ -107,8 +114,9 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
     if (threadOwner && !ownsThread) threadId = crypto.randomUUID();
 
     /** Persist the finished exchange for signed-in users (fire-and-forget). */
+    const model = llmModel(settings.model);
     const providerLabel =
-      settings.chatProvider === "ollama" ? settings.model || "ollama" : settings.chatProvider;
+      settings.chatProvider === "ollama" ? model || llmRuntime() : settings.chatProvider;
     const persist = (assistantText: string) => {
       if (!user || !assistantText.trim()) return;
       store
@@ -135,11 +143,11 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
     if (provider) {
       send({
         type: "error",
-        message: "Structured chat requires local Ollama. Select Ollama in Admin Providers.",
+        message: "Structured chat requires a local runtime. Select Ollama in Admin Providers.",
       });
       return done();
     } else {
-      if (!settings.model) {
+      if (!model) {
         send({
           type: "notice",
           code: "no-model",
@@ -147,19 +155,16 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
         });
         return done();
       }
-      baseUrl = await ollamaBase();
-      const up = await fetch(`${baseUrl}/api/version`, { signal: AbortSignal.timeout(3000) })
-        .then((r) => r.ok)
-        .catch(() => false);
-      if (!up) {
+      baseUrl = await llmBase();
+      if ((await runtimeVersion(baseUrl)) === null) {
         send({
           type: "notice",
           code: "ollama-down",
-          message: `Ollama isn't answering at ${baseUrl}. Start it, then try again.`,
+          message: `${runtimeLabel()} isn't answering at ${baseUrl}. Start it, then try again.`,
         });
         return done();
       }
-      toolsOk = await modelSupportsTools(settings.model);
+      toolsOk = await runtimeSupportsTools(model);
       if (!toolsOk) {
         send({
           type: "notice",
@@ -178,7 +183,7 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
       ctx,
       chat: chatCtx,
       baseUrl,
-      model: settings.model,
+      model,
       toolsOk,
       city: settings.city,
       userText: message.slice(0, MAX_MESSAGE_CHARS),
@@ -188,7 +193,7 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
         surface: provider ? "chat-cli" : "chat",
         threadId,
         userId: user?.id,
-        provider: provider ?? settings.model,
+        provider: provider ?? model,
       },
     });
 
