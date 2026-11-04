@@ -218,6 +218,13 @@ in-process on CPU.
   middle, which is why the 0.8 threshold stays where it is: more test
   coverage helps more than tuning it.
 
+The multi-turn red team needs PyRIT and its own model tag, the same weights at
+the agent's context size: install `server/redteam/requirements.txt`, run
+`ollama create qwen3.8-redteam:27b -f server/redteam/Modelfile`, and set
+`REDTEAM_MODEL=qwen3.8-redteam:27b` before
+`npm run evals -- --suite guardrails-redteam`. `npm run redteam:report -w server`
+turns saved runs into attack success rates.
+
 A red-team smoke test, including the persona break above, ships with the
 repo (the first run downloads the classifier):
 

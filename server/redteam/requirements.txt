@@ -4,6 +4,10 @@
 #   server/redteam/.venv/Scripts/pip install -r server/redteam/requirements.txt   # Windows
 #   server/redteam/.venv/bin/pip install -r server/redteam/requirements.txt       # macOS/Linux
 #
+# Then build the model it runs on (see Modelfile) and set REDTEAM_MODEL:
+#
+#   ollama create qwen3.8-redteam:27b -f server/redteam/Modelfile
+#
 # The suite skips with a reason when this isn't installed, so it is optional.
 # Set REDTEAM_PYTHON to point at a different interpreter.
 #

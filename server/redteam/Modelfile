@@ -1,0 +1,12 @@
+# The model the red team's attacker and scorers run on: the same weights as the
+# pinned model, with the context the agent under test uses.
+#
+#   ollama create qwen3.8-redteam:27b -f server/redteam/Modelfile
+#
+# PyRIT reaches Ollama through its OpenAI-compatible API, which ignores
+# options.num_ctx and uses the Modelfile's value. The pinned model says 100000 and
+# the agent sends 16384, and Ollama reloads a runner when the context changes, so
+# without this every switch between attacker and defender spends 6 to 12 seconds on
+# a reload. Set REDTEAM_MODEL=qwen3.8-redteam:27b so both sides share one runner.
+FROM qwen3.8:27b
+PARAMETER num_ctx 16384
