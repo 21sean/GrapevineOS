@@ -100,6 +100,13 @@ def ollama_transport(base: str, max_bytes: int) -> Transport:
     return call
 
 
+def one_system_message(messages: list[dict]) -> list[dict]:
+    """The model's chat template rejects a system message that is not first."""
+    system = [m["content"] for m in messages if m["role"] == "system"]
+    rest = [m for m in messages if m["role"] != "system"]
+    return [{"role": "system", "content": "\n\n".join(system)}, *rest] if system else rest
+
+
 def vllm_transport(base: str, max_bytes: int) -> Transport:
     """Same payload and same fail-closed reads as Ollama, over vLLM's OpenAI endpoint."""
     base = local_endpoint(base)
@@ -109,7 +116,7 @@ def vllm_transport(base: str, max_bytes: int) -> Transport:
         options = payload["options"]
         request_body = {
             "model": payload["model"],
-            "messages": payload["messages"],
+            "messages": one_system_message(payload["messages"]),
             "stream": True,
             "stream_options": {"include_usage": True},
             "temperature": options["temperature"],

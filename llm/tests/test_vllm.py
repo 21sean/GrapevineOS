@@ -4,7 +4,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from grapevine_llm.client import Failure, Message, Request, Success, generate, vllm_transport
+from grapevine_llm.client import Failure, Message, Request, Success, generate, one_system_message, vllm_transport
 from grapevine_llm.pins import VLLM_PATH, VllmManifest, manifest_path, verify_vllm, vllm_manifest
 from grapevine_llm.provenance import capture
 from grapevine_llm.settings import Settings
@@ -129,6 +129,22 @@ def test_transport_fails_closed_on_truncation_non_text_and_size():
         vllm_transport(fake.url, 100_000)(payload(), 5)
     with Fake() as fake, pytest.raises(ValueError, match="byte limit"):
         vllm_transport(fake.url, 8)(payload(), 5)
+
+
+def test_system_messages_merge_in_order_at_the_front():
+    merged = one_system_message([
+        {"role": "system", "content": "contract"},
+        {"role": "system", "content": "rules"},
+        {"role": "user", "content": "question"},
+        {"role": "system", "content": "summary"},
+        {"role": "assistant", "content": "answer"},
+    ])
+    assert merged == [
+        {"role": "system", "content": "contract\n\nrules\n\nsummary"},
+        {"role": "user", "content": "question"},
+        {"role": "assistant", "content": "answer"},
+    ]
+    assert one_system_message([{"role": "user", "content": "question"}]) == [{"role": "user", "content": "question"}]
 
 
 def test_generate_routes_through_vllm_when_selected():
