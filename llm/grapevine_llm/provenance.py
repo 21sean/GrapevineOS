@@ -3,6 +3,8 @@ import platform
 from pathlib import Path
 
 from .contracts import Contract
+from .pins import manifest_path
+from .settings import Settings
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -31,5 +33,5 @@ def capture(num_ctx: int, max_attempts: int) -> Provenance:
                ROOT / "server/scripts/llm-quality.ts", ROOT / "server/scripts/eval-network.mjs"]
     return Provenance(source_sha256=digest(sources),
                       dependencies_sha256=digest([ROOT / "package-lock.json", ROOT / "llm/uv.lock"]),
-                      models_sha256=digest([ROOT / "llm/evals/models.json"]),
+                      models_sha256=digest([manifest_path(Settings().runtime)]),
                       python_version=platform.python_version(), num_ctx=num_ctx, max_attempts=max_attempts)

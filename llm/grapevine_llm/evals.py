@@ -111,8 +111,8 @@ def run_case(case: GoldenCase, mode: str, settings: Settings) -> CaseResult:
 
 def run(mode: Literal["replay", "live"], settings: Settings, path: Path = DATA) -> Report:
     if mode == "live":
-        from .pins import verify
-        pins = verify(settings.base_url)
+        from .pins import verify, verify_vllm
+        pins = verify_vllm(settings.base_url, settings.num_ctx) if settings.runtime == "vllm" else verify(settings.base_url)
         if settings.model != pins.generation.name or settings.seed != pins.seed:
             raise ValueError("eval settings differ from model manifest")
     cases = [case for case in load_cases(path) if mode == "replay" or case.live]
