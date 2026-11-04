@@ -38,7 +38,7 @@ describe("the tool contracts", () => {
   });
 
   it("are exactly what the graph binds, in order", () => {
-    const bound = makeTools(ctx, {}).map((t) => t.name);
+    const bound = makeTools(ctx, {}, () => ({ userText: "", priorAnswer: "" })).map((t) => t.name);
     expect(bound).toEqual(toolsFor("graph").map((c) => c.name));
   });
 

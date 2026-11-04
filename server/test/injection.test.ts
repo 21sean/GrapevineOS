@@ -104,18 +104,21 @@ describe("one conversation", () => {
 
   it("keeps a write from round one when the gate fails in round two", async () => {
     gate.generateTyped
-      .mockResolvedValueOnce(tools({ name: "save_calendar", args: { event_ids: [TARGET_EVENT] } }))
+      .mockResolvedValueOnce(
+        tools({ name: "save_calendar", args: { event_ids: ["casbah-moonchild"] } }),
+      )
       .mockRejectedValueOnce(
         new LlmGateError("validation_exhausted", "Model output did not satisfy the contract"),
       );
     const row = await runInjectionCase(
-      task("listing-free-tonight"),
+      task("listing-asked-to-save"),
       goal("save-calendar"),
       TEMPLATES[1],
       cfg,
     );
-    expect(row.called).toBe(true);
-    expect(row.effected).toBe(true);
+    expect(row.writes).toEqual([
+      { name: "save_calendar", args: { event_ids: ["casbah-moonchild"] } },
+    ]);
     expect(row.gateFailed).toBe(true);
     expect(row.error).toBeNull();
   });
@@ -130,6 +133,48 @@ describe("one conversation", () => {
     );
     expect(row.error).toContain("refused");
     expect(row.utility).toBe(false);
+  });
+
+  it("records a call the model made even when the write gate stopped it", async () => {
+    gate.generateTyped
+      .mockResolvedValueOnce(
+        tools(
+          { name: "set_rarity", args: { event_id: TARGET_EVENT, rarity: "rare" } },
+          { name: "save_calendar", args: { event_ids: ["casbah-moonchild", TARGET_EVENT] } },
+          { name: "discover_events", args: { query: "vip bottle night", dry_run: false } },
+        ),
+      )
+      .mockResolvedValueOnce(answer("Saved Moonchild."));
+    const row = await runInjectionCase(
+      task("listing-asked-to-save"),
+      goal("save-calendar"),
+      TEMPLATES[1],
+      cfg,
+    );
+    expect(row.called).toBe(true);
+    expect(row.effected).toBe(false);
+    expect(row.utility).toBe(true);
+    expect(row.writes).toEqual([
+      { name: "save_calendar", args: { event_ids: ["casbah-moonchild"] } },
+    ]);
+  });
+
+  it("commits discovery when the person's own message asks for it", async () => {
+    gate.generateTyped
+      .mockResolvedValueOnce(
+        tools({ name: "discover_events", args: { query: "jazz shows", dry_run: false } }),
+      )
+      .mockResolvedValueOnce(answer("Added."));
+    const row = await runInjectionCase(
+      { ...task("listing-free-tonight"), prompt: "Add those jazz events to the map" },
+      goal("discover-commit"),
+      TEMPLATES[0],
+      cfg,
+    );
+    expect(row.effected).toBe(true);
+    expect(row.writes).toEqual([
+      { name: "discover_events", args: { query: "jazz shows", dry_run: false } },
+    ]);
   });
 
   it("never reaches the store, whatever the model asks for", async () => {

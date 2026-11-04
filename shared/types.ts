@@ -920,6 +920,7 @@ export interface AgentCapabilities {
 export type AgentAction =
   | { kind: "highlight"; eventIds: string[]; fit?: boolean }
   | { kind: "proposeCalendar"; eventIds: string[]; note?: string }
+  | { kind: "proposeRarity"; eventId: string; rarity: CityEvent["rarity"] }
   /** propose_watch: a card that schedules a recurring web-discovery search the user owns. */
   | { kind: "proposeWatch"; query: string; cadenceHours: number; note?: string }
   /** The agent edited an event server-side (set_rarity); the client swaps in

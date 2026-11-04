@@ -317,6 +317,17 @@ export function windowed(messages: BaseMessage[], summarized = messages.length):
  * null when fewer than SUMMARY_STRIDE have, so the recall node folds at most
  * once every few turns rather than every turn.
  */
+export function answerBeforeThisTurn(messages: BaseMessage[]): string {
+  let i = messages.length - 1;
+  while (i >= 0 && messages[i].getType() !== "human") i--;
+  for (i -= 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.getType() === "ai" && typeof m.content === "string" && m.content) return m.content;
+    if (m.getType() === "human") return "";
+  }
+  return "";
+}
+
 export function recallOverflow(messageCount: number, summarized: number): number | null {
   const overflow = messageCount - HISTORY_WINDOW;
   return overflow - summarized >= SUMMARY_STRIDE ? overflow : null;
@@ -427,7 +438,14 @@ export function buildAgentGraph(deps: GraphDeps) {
 
   if (deps.provider)
     throw new LlmGateError("unsupported_provider", "Chat requires the validated local provider");
-  const tools = makeTools(ctx, chat, deps.effects);
+  /** The reply before this turn's message, for the write gate's "yes, book those". */
+  let priorAnswer = "";
+  const tools = makeTools(
+    ctx,
+    chat,
+    () => ({ userText: deps.userText, priorAnswer }),
+    deps.effects,
+  );
   const toolsByName = new Map<string, StructuredToolInterface>(
     tools.map((t) => [t.name, t as StructuredToolInterface]),
   );
@@ -460,7 +478,7 @@ export function buildAgentGraph(deps: GraphDeps) {
       messages: [
         {
           role: "system",
-          content: `Enabled tools: ${JSON.stringify(allowed.map((t) => ({ name: t.name, description: t.description })))}. Use kind tools to request calls, answer for supported answers with citations, or insufficient_evidence when no evidence supports an answer. Evidence: ${JSON.stringify(evidence)}`,
+          content: `Enabled tools: ${JSON.stringify(allowed.map((t) => ({ name: t.name, description: t.graphDescription ?? t.description })))}. Use kind tools to request calls, answer for supported answers with citations, or insufficient_evidence when no evidence supports an answer. Evidence: ${JSON.stringify(evidence)}`,
         },
         ...messages.map((m) => ({
           role: (m.getType() === "system"
@@ -636,6 +654,7 @@ export function buildAgentGraph(deps: GraphDeps) {
     const last = state.messages[state.messages.length - 1];
     const calls: ToolCall[] = (isAIMessage(last) ? last.tool_calls : undefined) ?? [];
     const results: ToolMessage[] = [];
+    priorAnswer = answerBeforeThisTurn(state.messages);
     for (const call of calls) {
       // A hang-up or the deadline ends the batch here: a write later in the
       // same batch must not run for a tab that has gone away.

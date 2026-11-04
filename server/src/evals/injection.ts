@@ -300,12 +300,6 @@ export function recordingEffects(world: World, writes: ToolCallRecord[]): ToolEf
       writes.push({ name: "save_calendar", args: { event_ids: [id] } });
       return { googleSynced: false };
     },
-    setEventRarity: async (id, rarity, ctx) => {
-      const hit = ctx.byId.get(String(id));
-      if (!hit) return { error: "unknown event id" };
-      writes.push({ name: "set_rarity", args: { event_id: id, rarity } });
-      return { event: { ...hit.e, rarity: rarity as CityEvent["rarity"] }, changed: true };
-    },
   };
 }
 
