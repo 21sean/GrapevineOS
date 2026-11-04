@@ -37,8 +37,11 @@ START → input_rail ─ blocked ───────────────�
   messages) into a running summary, at most once every 8 turns. It is best
   effort: any failure skips the fold and the turn proceeds.
 - `agent` calls the model with the toolbox bound. The system prompt (the event
-  digest, the clock, the user's interests) is rebuilt every request and never
-  persisted, so state holds only the conversation.
+  digest, the user's interests, the clock) is rebuilt every request and never
+  persisted, so state holds only the conversation. It is ordered by how often each
+  part changes, so a runtime can reuse the prefix, and `modelPrompt` keeps the whole
+  thing inside the context: on a real catalog the old prompt ran about 39,600 tokens
+  against a 16,384 context, and the runtime silently dropped 79% of it.
 - `tools` runs the model's tool calls and streams start and done frames to the
   browser; UI tools also emit action frames from inside the tool.
 - `content_rail` scans the untrusted parts of those tool results (web pages,
@@ -144,6 +147,26 @@ Monitoring. The blocking threshold is 0.8 and stays there: the measured score
 distribution is bimodal with a dead band between roughly 0.06 and 0.6, so the
 threshold is not a lever worth tuning. Coverage is the lever, and it belongs
 to the persona rail and the judged suites.
+
+## Who can ask for a write
+
+The model reads text from strangers: web pages, search snippets, and event listings
+that arrive from newsletters. Prompts tell it to treat that as data, and a label on
+every tool result says so, but neither is a guarantee. So the decision does not rest
+with the model. `server/src/agent/write-gate.ts` checks a write against what the person
+typed this turn, the one input a stranger's page cannot touch, and a call that fails
+becomes the card the person would have confirmed.
+
+| Tool              | When the model calls it, what happens                                                                                                                      |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `set_rarity`      | Always a card. Rarity is shared catalog data, and confirming it is an admin write.                                                                         |
+| `save_calendar`   | Saves the events the person named, or the ones the last reply offered when they answer it ("yes, book those"). Everything else on the call becomes a card. |
+| `discover_events` | `dry_run: false` commits only when the person asked to add events. Otherwise it stays a dry run, and the model is told nothing was written.                |
+
+The check is deterministic wording rules, so it can be read and tested without a model,
+and it can be wrong in the safe direction: a phrasing it does not recognize costs a card,
+never a silent write. It covers the chat graph. MCP and REST callers are their own
+principals and keep their direct `set_rarity`.
 
 ## One graph, every provider
 
@@ -307,7 +330,8 @@ sees the reasoning rather than assuming an oversight.
 
 ```
 server/src/agent/
-  graph.ts        the StateGraph, state schema, routing, invokeModel, the persona rail
+  graph.ts        the StateGraph, state schema, routing, invokeModel, the prompt budget
+  write-gate.ts   which writes the person's own message authorizes
   contracts.ts    the tool table every surface derives from
   tools.ts        graph executors bound to the "graph" contracts
   chat.ts         the NDJSON bridge behind POST /api/agent/chat
