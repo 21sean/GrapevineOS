@@ -17,6 +17,7 @@
 import type { EvalSuite } from "./harness.js";
 import { dedupeSuite } from "./suites/dedupe.js";
 import { calibrationSuite } from "./suites/guardrails-calibration.js";
+import { injectionSuite } from "./suites/guardrails-injection.js";
 import { guardrailsJudgeSuite } from "./suites/guardrails-judge.js";
 import { redteamSuite } from "./suites/guardrails-redteam.js";
 import { guardrailsSuite } from "./suites/guardrails.js";
@@ -33,6 +34,7 @@ export const SUITES: EvalSuite[] = [
   hoursSuite,
   guardrailsSuite,
   calibrationSuite,
+  injectionSuite,
   guardrailsJudgeSuite,
   redteamSuite,
 ];
