@@ -113,8 +113,8 @@ def ollama_transport(base: str, max_bytes: int,
         generation = log()
         parts: list[str] = []
         size = 0
-        generation.mark_sent()
         with httpx.Client(trust_env=False, follow_redirects=False, timeout=remaining) as client:
+            generation.mark_sent()
             with client.stream("POST", f"{base}/api/chat", json={**payload, "stream": True}) as response:
                 response.raise_for_status()
                 for line in response.iter_lines():
