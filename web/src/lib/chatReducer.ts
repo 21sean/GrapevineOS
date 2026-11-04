@@ -1,4 +1,4 @@
-import type { AgentFrame, ChatUsage } from "@/lib/types"
+import type { AgentFrame, ChatUsage, CityEvent } from "@/lib/types"
 
 /**
  * The transcript the chat panel renders, and the pure half of how a streamed
@@ -20,6 +20,12 @@ export type Proposal =
       eventIds: string[]
       note?: string
       state: "pending" | "saved" | "dismissed"
+    }
+  | {
+      kind: "rarity"
+      eventId: string
+      rarity: CityEvent["rarity"]
+      state: "pending" | "applied" | "dismissed"
     }
   | {
       kind: "watch"

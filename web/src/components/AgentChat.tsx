@@ -35,7 +35,11 @@ import {
 import { CapabilitiesPopover } from "@/components/chat/Capabilities"
 import { EventChip } from "@/components/chat/EventChip"
 import { ModelEffortPicker } from "@/components/chat/ModelEffortPicker"
-import { CalendarCard, InterestsCard } from "@/components/chat/ProposalCards"
+import {
+  CalendarCard,
+  InterestsCard,
+  RarityCard,
+} from "@/components/chat/ProposalCards"
 import { WatchCard } from "@/components/chat/WatchCard"
 import { EVENT_LINK_RE, RichText } from "@/components/chat/RichText"
 import { ThreadHistory } from "@/components/chat/ThreadHistory"
@@ -555,6 +559,12 @@ function Message({
       {item.proposals.map((p, i) =>
         p.kind === "calendar" ? (
           <CalendarCard
+            key={i}
+            proposal={p}
+            onState={(s) => chat.setProposalState(itemIdx, i, s)}
+          />
+        ) : p.kind === "rarity" ? (
+          <RarityCard
             key={i}
             proposal={p}
             onState={(s) => chat.setProposalState(itemIdx, i, s)}

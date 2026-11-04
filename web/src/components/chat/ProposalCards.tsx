@@ -120,6 +120,70 @@ export function CalendarCard({
   )
 }
 
+export function RarityCard({
+  proposal,
+  onState,
+}: {
+  proposal: Extract<Proposal, { kind: "rarity" }>
+  onState: (s: Proposal["state"]) => void
+}) {
+  const event = useGrapevine((s) =>
+    s.events.find((e) => e.id === proposal.eventId)
+  )
+  const [busy, setBusy] = useState(false)
+  if (!event) return null
+
+  async function apply() {
+    setBusy(true)
+    try {
+      useGrapevine
+        .getState()
+        .upsertEvent(await api.setRarity(proposal.eventId, proposal.rarity))
+      onState("applied")
+    } catch (err) {
+      toast.error("Couldn't change the rarity", {
+        description: String(err).slice(0, 140),
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="glass flex flex-col gap-2.5 rounded-xl p-3">
+      <span className="font-mono text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
+        Change rarity
+      </span>
+      <span className="text-sm">
+        Mark <EventChip id={event.id} label={event.title} /> as{" "}
+        {proposal.rarity}?
+      </span>
+      {proposal.state === "applied" ? (
+        <div className="flex items-center gap-2 text-sm">
+          <CheckIcon className="size-4 text-live" />
+          Changed
+        </div>
+      ) : proposal.state === "dismissed" ? (
+        <span className="text-xs text-muted-foreground">Dismissed</span>
+      ) : (
+        <div className="flex gap-2">
+          <Button size="sm" onClick={() => void apply()} disabled={busy}>
+            {busy ? <Spinner /> : "Confirm"}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onState("dismissed")}
+            disabled={busy}
+          >
+            Dismiss
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function InterestsCard({
   proposal,
   onState,
