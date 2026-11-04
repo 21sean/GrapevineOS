@@ -205,6 +205,7 @@ async function chatTurn(url: string, question: string, threadId: string): Promis
   const row = { ...blank };
   let firstDelta: number | null = null;
   let lastDelta: number | null = null;
+  let deltas = 0;
   let buffer = "";
   const decoder = new TextDecoder();
   const handle = (line: string) => {
@@ -225,6 +226,7 @@ async function chatTurn(url: string, question: string, threadId: string): Promis
     if (frame.type === "delta") {
       firstDelta ??= now;
       lastDelta = now;
+      deltas++;
     }
     if (frame.type === "replace") row.retracted = true;
     if (frame.type === "error") row.error = frame.message ?? "error";
@@ -250,8 +252,10 @@ async function chatTurn(url: string, question: string, threadId: string): Promis
   handle(buffer);
   row.e2eMs = performance.now() - t0;
   row.visibleTtftMs = firstDelta === null ? null : firstDelta - t0;
-  if (firstDelta !== null && lastDelta !== null && lastDelta > firstDelta && row.outputTokens) {
-    row.visibleTpotMs = (lastDelta - firstDelta) / Math.max(1, row.outputTokens - 1);
+  // Interval between frames as they reached this client. With a whole-answer gate
+  // there is one frame, and so no interval to report.
+  if (firstDelta !== null && lastDelta !== null && deltas > 1) {
+    row.visibleTpotMs = (lastDelta - firstDelta) / (deltas - 1);
   }
   return row;
 }
