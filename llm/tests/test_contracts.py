@@ -40,3 +40,39 @@ def test_unknown_citation_and_tool_ids_fail():
 def test_enrichment_must_cover_batch_exactly():
     with pytest.raises(ValueError):
         validate_output("enrichment", '{"labels":[]}', Context(candidate_count=1))
+
+
+def test_the_generation_schema_holds_only_the_tools_this_request_may_call():
+    from jsonschema import Draft202012Validator
+    from grapevine_llm.contracts import TOOL_ARGS, request_schema
+    full = len(json.dumps(request_schema("agent", list(TOOL_ARGS))))
+    two = request_schema("agent", ["search_web", "get_event"])
+    Draft202012Validator.check_schema(two)
+    refs = [r["$ref"] for r in two["properties"]["tool_calls"]["items"]["oneOf"]]
+    assert sorted(refs) == ["#/$defs/get_event_call", "#/$defs/search_web_call"]
+    assert "save_calendar_call" not in two["$defs"]
+    assert len(json.dumps(two)) < full / 2
+    Draft202012Validator(two).validate(
+        {"kind": "tools", "answer": "", "citations": [], "tool_calls": [{"name": "search_web", "args": {"query": "x"}}]})
+
+
+def test_with_no_tools_enabled_the_schema_cannot_express_a_tool_call():
+    from jsonschema import Draft202012Validator, ValidationError
+    from grapevine_llm.contracts import request_schema
+    none = request_schema("agent", [])
+    Draft202012Validator.check_schema(none)
+    validator = Draft202012Validator(none)
+    validator.validate({"kind": "answer", "answer": "x", "citations": [], "tool_calls": []})
+    try:
+        validator.validate({"kind": "tools", "answer": "", "citations": [], "tool_calls": []})
+    except ValidationError:
+        return
+    raise AssertionError("tools should not be a kind when none are enabled")
+
+
+def test_narrowing_does_not_change_other_tasks_or_mutate_the_cache():
+    from grapevine_llm.contracts import OUTPUTS, request_schema
+    assert request_schema("rating", []) == OUTPUTS["rating"].model_json_schema()
+    first = request_schema("agent", [])
+    first["properties"].clear()
+    assert request_schema("agent", [])["properties"]

@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import re
 from datetime import date, datetime
+from functools import lru_cache
 from typing import Annotated, Literal, Self, Union
 from urllib.parse import urlsplit
 
@@ -350,6 +351,44 @@ OUTPUTS: dict[str, type[Contract]] = {
     "extraction": Extraction, "rating": EventRating, "enrichment": Enrichment,
     "verification": Verification, "summary": Summary, "judge": JudgeScore, "agent": AgentTurn,
 }
+
+
+@lru_cache(maxsize=32)
+def _agent_schema_json(allowed: tuple[str, ...]) -> str:
+    schema = AgentTurn.model_json_schema()
+    items = schema["properties"]["tool_calls"]["items"]
+    names = {name + "_call" for name in allowed}
+    items["oneOf"] = [ref for ref in items["oneOf"] if ref["$ref"].rsplit("/", 1)[-1] in names]
+    items["discriminator"]["mapping"] = {
+        name: ref for name, ref in items["discriminator"]["mapping"].items() if name in allowed
+    }
+    if not items["oneOf"]:
+        # No tools on this request: the only valid value is an empty list, and "tools"
+        # stops being a kind the model can pick.
+        schema["properties"]["tool_calls"] = {"type": "array", "items": {}, "maxItems": 0}
+        schema["properties"]["kind"]["enum"].remove("tools")
+    used = json.dumps({k: v for k, v in schema.items() if k != "$defs"})
+    defs = schema["$defs"]
+    keep: set[str] = set()
+    stack = re.findall(r"#/\$defs/([\w.-]+)", used)
+    while stack:
+        name = stack.pop()
+        if name not in keep:
+            keep.add(name)
+            stack.extend(re.findall(r"#/\$defs/([\w.-]+)", json.dumps(defs[name])))
+    schema["$defs"] = {name: defs[name] for name in defs if name in keep}
+    return json.dumps(schema)
+
+
+def request_schema(task: str, allowed_tools: list[str]) -> dict:
+    """
+    The schema a request generates against. For the agent this holds only the tools
+    enabled on the request: the validator rejects every other tool anyway, and each one
+    left in costs prompt tokens and constrained-decoding time on every turn.
+    """
+    if task == "agent":
+        return json.loads(_agent_schema_json(tuple(sorted(allowed_tools))))
+    return OUTPUTS[task].model_json_schema()
 
 
 def validate_output(task: str, raw: str, ctx: Context) -> Contract:
