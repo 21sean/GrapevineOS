@@ -6,6 +6,7 @@ import {
   outputSchemas,
   requestSchema,
   result_envelopeSchema,
+  type LlmStats,
   type Output,
   type Task,
   type ValidationContext,
@@ -32,7 +33,11 @@ const python =
       import.meta.url,
     ),
   );
-type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void };
+type Pending = {
+  resolve: (v: unknown) => void;
+  reject: (e: Error) => void;
+  onStats?: (stats: LlmStats) => void;
+};
 let worker: ChildProcessWithoutNullStreams | null = null;
 let buffer = "";
 const pending = new Map<string, Pending>();
@@ -87,6 +92,7 @@ function start(): ChildProcessWithoutNullStreams {
         const p = pending.get(reply.id);
         if (!p) throw new Error("unexpected reply");
         pending.delete(reply.id);
+        p.onStats?.(reply.stats);
         if (reply.ok) p.resolve(reply.output);
         else
           p.reject(
@@ -109,6 +115,8 @@ export async function generateTyped<T extends Task>(opts: {
   model?: string;
   baseUrl?: string;
   signal?: AbortSignal;
+  /** How the generation went, success or not. Telemetry: must not throw. */
+  onStats?: (stats: LlmStats) => void;
 }): Promise<Output<T>> {
   opts.signal?.throwIfAborted();
   if (pending.size >= 16) throw new LlmGateError("busy", "LLM gate queue is full");
@@ -139,6 +147,7 @@ export async function generateTyped<T extends Task>(opts: {
       opts.signal?.removeEventListener("abort", abort);
     };
     pending.set(id, {
+      onStats: opts.onStats,
       resolve: (value) => {
         clean();
         resolve(value);

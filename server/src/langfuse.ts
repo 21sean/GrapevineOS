@@ -188,6 +188,33 @@ export function recordRailScore(scan: {
   }
 }
 
+/** The turn's first-token latencies, as session scores beside the rail decisions. */
+export function recordLatencyScores(turn: {
+  threadId: string;
+  modelTtftMs?: number;
+  visibleTtftMs?: number;
+  tpotMs?: number;
+}): void {
+  if (!start()) return;
+  try {
+    client ??= new LangfuseClient();
+    for (const [name, value] of [
+      ["latency.model_ttft_ms", turn.modelTtftMs],
+      ["latency.visible_ttft_ms", turn.visibleTtftMs],
+      ["latency.tpot_ms", turn.tpotMs],
+    ] as const) {
+      if (value === undefined) continue;
+      void Promise.resolve(
+        client.score.create({ sessionId: turn.threadId, name, value, dataType: "NUMERIC" }),
+      )
+        .then(scheduleFlush)
+        .catch((err) => warnOnce("latency score", err));
+    }
+  } catch (err) {
+    warnOnce("latency score", err);
+  }
+}
+
 /**
  * Mirror one judged conversation into Langfuse as session scores: the
  * overall verdict plus each metric, attached to the same sessionId the

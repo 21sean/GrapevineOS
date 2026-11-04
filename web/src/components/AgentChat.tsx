@@ -629,7 +629,9 @@ function UsageLine({ usage }: { usage: ChatUsage }) {
       label={
         cached
           ? `This turn read ${fmtTokens(usage.inputTokens)} input tokens, ${fmtTokens(cached)} of them from cache`
-          : "This turn's token usage"
+          : usage.visibleTtftMs
+            ? `First words after ${(usage.visibleTtftMs / 1000).toFixed(1)}s`
+            : "This turn's token usage"
       }
     >
       {/* tabIndex so the explanation is reachable without a pointer; this is

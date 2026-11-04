@@ -28,7 +28,7 @@
  */
 import { Router } from "express";
 import { sessionUser } from "../auth.js";
-import { langfuseHandler } from "../langfuse.js";
+import { langfuseHandler, recordLatencyScores } from "../langfuse.js";
 import { trackChat } from "../lifecycle.js";
 import { logger } from "../log.js";
 import {
@@ -42,7 +42,7 @@ import {
 import { rateLimit, singleFlight } from "../rate-limit.js";
 import { currentRequestId } from "../request-id.js";
 import { store } from "../store.js";
-import { type AgentFrame } from "../types.js";
+import { type AgentFrame, type ChatUsage } from "../types.js";
 import { buildCtx, coercePos, type ChatContext } from "./context.js";
 import { buildAgentGraph, forgetThread, turnInput } from "./graph.js";
 import { turnFailureText } from "./refusals.js";
@@ -66,6 +66,7 @@ const chatFlight = singleFlight({
 });
 
 chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
+  const startedAt = performance.now();
   res.setHeader("Content-Type", "application/x-ndjson");
   res.setHeader("Cache-Control", "no-cache");
   const requestId = currentRequestId(res);
@@ -231,10 +232,16 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
     // Set when the input rail refuses the turn: a blocked turn is deliberately
     // kept out of the persisted transcript so it cannot prime the next one.
     let railBlocked = false;
+    let visibleTtftMs: number | undefined;
+    let usage: ChatUsage | undefined;
     for await (const frame of stream as AsyncIterable<AgentFrame>) {
       if (frame.type === "guardrail" && frame.rail === "input" && frame.blocked) railBlocked = true;
       if (frame.type === "delta") answer += frame.text;
       if (frame.type === "replace") answer = frame.text;
+      if ((frame.type === "delta" || frame.type === "replace") && visibleTtftMs === undefined) {
+        visibleTtftMs = performance.now() - startedAt;
+      }
+      if (frame.type === "usage") usage = frame.usage;
       send(frame);
     }
     // The client hung up, or the server is stopping, mid-answer: nothing to
@@ -245,6 +252,14 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
       return;
     }
     if (!railBlocked) persist(answer);
+    if (usage && visibleTtftMs !== undefined) {
+      send({ type: "usage", usage: { ...usage, visibleTtftMs } });
+      log.info(
+        { requestId, visibleTtftMs, modelTtftMs: usage.modelTtftMs, tpotMs: usage.tpotMs },
+        "chat turn latency",
+      );
+      recordLatencyScores({ threadId, ...usage, visibleTtftMs });
+    }
     done();
   } catch (err) {
     if (ac.signal.aborted) {

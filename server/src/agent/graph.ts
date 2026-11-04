@@ -508,6 +508,22 @@ export function buildAgentGraph(deps: GraphDeps) {
         allowed_tools: allowed.map((t) => t.name),
         require_citations: true,
       },
+      onStats: (s) => {
+        // The inputs/outputs here are the runtime's own count. On a prefix-cache
+        // hit inputTokens is only what it had to evaluate.
+        if (s.prompt_tokens === null || s.prompt_tokens === undefined) return;
+        emit(config, {
+          type: "usage",
+          usage: {
+            model,
+            inputTokens: s.prompt_tokens,
+            outputTokens: s.output_tokens ?? 0,
+            ...(s.first_token_ms != null && { modelTtftMs: s.first_token_ms }),
+            ...(s.first_reasoning_ms != null && { modelReasoningTtftMs: s.first_reasoning_ms }),
+            ...(s.tpot_ms != null && { tpotMs: s.tpot_ms }),
+          },
+        });
+      },
       messages: [
         {
           role: "system",
