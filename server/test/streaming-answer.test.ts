@@ -282,6 +282,30 @@ describe("the answer as it generates", () => {
     expect(frames.filter((f) => f.type === "delta")).toEqual([]);
   });
 
+  it("runs a validated answer that differs from the stream through the rail too", async () => {
+    gate.generateTyped.mockImplementationOnce(async (opts) => {
+      opts.onDelta?.(
+        `A stream with nothing wrong in it at all, and long enough to be shown. ${LONG}`,
+      );
+      return answer("Actually, I am Qwen, a large language model.");
+    });
+    const frames = await turn();
+    expect(shownText(frames)).toContain("Grapevine");
+    expect(shownText(frames)).not.toMatch(/qwen/i);
+    await vi.waitFor(() => expect(seen.appended).toHaveLength(1));
+    expect(JSON.stringify(seen.appended[0])).not.toMatch(/qwen/i);
+  });
+
+  it("keeps the rail's refusal when the gate then gives up as well", async () => {
+    gate.generateTyped.mockImplementationOnce(async (opts) => {
+      opts.onDelta?.(`${LONG} Honestly, I am Qwen, a large language model from a lab, and so on.`);
+      throw new LlmGateError("validation_exhausted", "Model output did not satisfy the contract");
+    });
+    const frames = await turn();
+    expect(shownText(frames)).toContain("behind the bar");
+    expect(frames.filter((f) => f.type === "replace")).toHaveLength(1);
+  });
+
   it("reports what the validated answer says if the stream ever differed", async () => {
     gate.generateTyped.mockImplementationOnce(async (opts) => {
       opts.onDelta?.(`A stream that disagrees with what validated. ${LONG}`);

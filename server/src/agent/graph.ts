@@ -660,6 +660,10 @@ export function buildAgentGraph(deps: GraphDeps) {
       // Every attempt failed: take back what was shown and fail closed in character.
       // The person reads the fallback, and that is what the graph records.
       if (err instanceof LlmGateError && err.code === "validation_exhausted") {
+        // The rail already spoke, and the person has read its refusal.
+        if (tripped) {
+          return { message: new AIMessage(personaRefusalMessage(city)), tripped: true };
+        }
         const fallback = gateFallbackMessage(city);
         if (shown) emit(config, { type: "replace", text: fallback });
         else emit(config, { type: "delta", text: fallback });
@@ -682,9 +686,19 @@ export function buildAgentGraph(deps: GraphDeps) {
     if (tripped) {
       return { message: new AIMessage(personaRefusalMessage(city)), tripped: true };
     }
-    // The validated answer is the record. If the stream somehow differed, the
-    // person is shown the record too, so what they read is what was validated.
-    if (shown !== result.answer) emit(config, { type: "replace", text: result.answer });
+    // The validated answer is the record. If the stream somehow differed, the person
+    // is shown the record too, so what they read is what was validated, and it gets
+    // the rail's whole attention because none of it went through as a stream.
+    if (shown !== result.answer) {
+      const recheck = personaGuard({ modelName: model, telemetry: { record: false } });
+      recheck.push(result.answer);
+      recheck.flush();
+      if (recheck.tripped) {
+        refuse();
+        return { message: new AIMessage(personaRefusalMessage(city)), tripped: true };
+      }
+      emit(config, { type: "replace", text: result.answer });
+    }
     return {
       message: new AIMessage({
         content: result.answer,
