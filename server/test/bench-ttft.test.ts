@@ -12,7 +12,8 @@ const sample = (over = {}) => ({
   modelAnswerTtftMs: 95,
   modelTpotMs: 9,
   outputTokens: 50,
-  promptTokens: 200,
+  promptTokens: 1000,
+  cachedTokens: 800,
   retracted: false,
   error: null,
   ...over,
@@ -25,17 +26,17 @@ describe("the bench summary", () => {
   });
 
   it("works out output rate and prefix-cache hit rate from the runtime's counts", () => {
-    const s = summarize([sample(), sample({ promptTokens: 400 })], 1000);
+    const s = summarize([sample(), sample({ cachedTokens: 600 })]);
     expect(s.output_tokens_per_s.p50).toBe(50);
     expect(s.cache_hit_rate).toBeCloseTo(0.7);
     expect(s.retractions).toBe(0);
   });
 
   it("does not let a failed turn into the latency numbers, and counts it", () => {
-    const s = summarize([sample(), sample({ error: "boom", visibleTtftMs: 99999 })], null);
+    const s = summarize([sample(), sample({ error: "boom", visibleTtftMs: 99999 })]);
     expect(s.errors).toBe(1);
     expect(s.visible_ttft_ms.p99).toBe(100);
-    expect(s.cache_hit_rate).toBeNull();
+    expect(summarize([sample({ cachedTokens: null })]).cache_hit_rate).toBeNull();
   });
 });
 
@@ -59,8 +60,8 @@ describe("the bench catalogs", () => {
   it("changes only the soonest listing when forcing a cache miss", () => {
     const events = benchCatalog(30, now);
     const changed = withNonce(events, 7);
-    const differs = changed.filter((e, i) => e.description !== events[i].description);
+    const differs = changed.filter((e, i) => e.title !== events[i].title);
     expect(differs).toHaveLength(1);
-    expect(differs[0].description).toContain("Updated listing 7");
+    expect(differs[0].title).toContain("update 7");
   });
 });

@@ -619,8 +619,7 @@ export function buildAgentGraph(deps: GraphDeps) {
           require_citations: true,
         },
         onStats: (s) => {
-          // The inputs/outputs here are the runtime's own count. On a prefix-cache
-          // hit inputTokens is only what it had to evaluate.
+          // The runtime's own counts. inputTokens is the whole prompt, cached or not.
           if (s.prompt_tokens === null || s.prompt_tokens === undefined) return;
           emit(config, {
             type: "usage",
@@ -628,6 +627,9 @@ export function buildAgentGraph(deps: GraphDeps) {
               model,
               inputTokens: s.prompt_tokens,
               outputTokens: s.output_tokens ?? 0,
+              ...(s.cached_prompt_tokens != null && {
+                cacheReadInputTokens: s.cached_prompt_tokens,
+              }),
               ...(s.first_token_ms != null && { modelTtftMs: s.first_token_ms }),
               ...(s.first_answer_ms != null && { modelAnswerTtftMs: s.first_answer_ms }),
               ...(s.first_reasoning_ms != null && { modelReasoningTtftMs: s.first_reasoning_ms }),

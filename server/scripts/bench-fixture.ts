@@ -49,6 +49,6 @@ export function benchCatalog(size: number, now = new Date()): CityEvent[] {
 export function withNonce(catalog: CityEvent[], n: number): CityEvent[] {
   const soonest = catalog.reduce((a, b) => (Date.parse(a.start) <= Date.parse(b.start) ? a : b));
   return catalog.map((e) =>
-    e.id === soonest.id ? { ...e, description: `${e.description} Updated listing ${n}.` } : e,
+    e.id === soonest.id ? { ...e, title: `${e.title} (update ${n})` } : e,
   );
 }

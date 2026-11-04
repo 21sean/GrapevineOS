@@ -1363,6 +1363,19 @@
           "title": "Attempts",
           "type": "integer"
         },
+        "cached_prompt_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cached Prompt Tokens"
+        },
         "eval_ms": {
           "anyOf": [
             {

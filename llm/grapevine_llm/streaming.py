@@ -139,12 +139,14 @@ class GenerationLog:
         if self.first_token is not None and self.last_token is not None and count > 1:
             tpot = (self.last_token - self.first_token) * 1000 / (count - 1)
         prompt_tokens = self.final.get("prompt_eval_count")
+        cached = self.final.get("prompt_eval_cached_count")
         return {
             "first_token_ms": self._ms(self.first_token),
             "first_answer_ms": self._ms(self.first_answer),
             "first_reasoning_ms": self._ms(self.first_reasoning),
             "tpot_ms": tpot,
             "prompt_tokens": prompt_tokens if isinstance(prompt_tokens, int) else None,
+            "cached_prompt_tokens": cached if isinstance(cached, int) else None,
             "output_tokens": count if count else None,
             "load_ms": self._ns("load_duration"),
             "prompt_eval_ms": self._ns("prompt_eval_duration"),

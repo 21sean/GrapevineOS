@@ -57,6 +57,7 @@ class Stats(Contract):
     first_reasoning_ms: Annotated[float, Field(ge=0)] | None = None
     tpot_ms: Annotated[float, Field(ge=0)] | None = None
     prompt_tokens: Annotated[int, Field(ge=0)] | None = None
+    cached_prompt_tokens: Annotated[int, Field(ge=0)] | None = None
     output_tokens: Annotated[int, Field(ge=0)] | None = None
     load_ms: Annotated[float, Field(ge=0)] | None = None
     prompt_eval_ms: Annotated[float, Field(ge=0)] | None = None
@@ -205,8 +206,11 @@ def vllm_transport(base: str, max_bytes: int,
                     usage = chunk.get("usage")
                     if usage:
                         # Named as Ollama names them, so one log reads both runtimes.
-                        generation.final = {"prompt_eval_count": usage.get("prompt_tokens"),
-                                            "eval_count": usage.get("completion_tokens")}
+                        generation.final = {
+                            "prompt_eval_count": usage.get("prompt_tokens"),
+                            "prompt_eval_cached_count": (usage.get("prompt_tokens_details") or {}).get("cached_tokens"),
+                            "eval_count": usage.get("completion_tokens"),
+                        }
                     for choice in chunk.get("choices") or []:
                         delta = choice.get("delta") or {}
                         generation.reasoning(delta.get("reasoning_content") or delta.get("reasoning") or "")

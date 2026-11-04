@@ -56,12 +56,13 @@ def test_generation_log_reports_first_token_tpot_and_runtime_counts():
     log.token("a")
     log.token("b")
     log.token("c")
-    log.final = {"eval_count": 3, "prompt_eval_count": 40, "eval_duration": 2_000_000,
-                 "load_duration": 1_000_000, "prompt_eval_duration": 5_000_000}
+    log.final = {"eval_count": 3, "prompt_eval_count": 40, "prompt_eval_cached_count": 30,
+                 "eval_duration": 2_000_000, "load_duration": 1_000_000, "prompt_eval_duration": 5_000_000}
     stats = log.stats()
     assert stats["first_token_ms"] >= stats["first_reasoning_ms"] >= 0
     assert stats["tpot_ms"] >= 0
     assert (stats["prompt_tokens"], stats["output_tokens"]) == (40, 3)
+    assert stats["cached_prompt_tokens"] == 30
     assert (stats["load_ms"], stats["prompt_eval_ms"], stats["eval_ms"]) == (1.0, 5.0, 2.0)
 
 
