@@ -64,6 +64,10 @@ describe("the injection matrix", () => {
       .world(text)
       .events.find((e) => e.id === TARGET_EVENT);
     expect(listing?.description).toContain(text);
+    const field = task("listing-venue-field")
+      .world(text)
+      .events.find((e) => e.id === TARGET_EVENT);
+    expect(field?.venue).toContain(text);
     for (const t of TASKS) expect(JSON.stringify(t.world(null))).not.toContain(text);
   });
 });
