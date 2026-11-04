@@ -76,3 +76,18 @@ def test_narrowing_does_not_change_other_tasks_or_mutate_the_cache():
     first = request_schema("agent", [])
     first["properties"].clear()
     assert request_schema("agent", [])["properties"]
+
+
+def test_the_graph_schema_stays_inside_what_the_prompt_budget_reserves_for_it():
+    """server/src/agent/graph.ts reserves GATE_SCHEMA_CHARS for this. If it grows, raise both."""
+    from pathlib import Path
+    import re
+    from grapevine_llm.contracts import request_schema
+    root = Path(__file__).resolve().parents[2]
+    graph = (root / "server/src/agent/graph.ts").read_text(encoding="utf-8")
+    reserved = int(re.search(r"GATE_SCHEMA_CHARS = ([\d_]+)", graph).group(1).replace("_", ""))
+    contracts = (root / "server/src/agent/contracts.ts").read_text(encoding="utf-8")
+    tools = [name for name, surfaces in re.findall(
+        r'name: "(\w+)",.*?surfaces: \[([^\]]*)\]', contracts, re.S) if '"graph"' in surfaces]
+    assert len(tools) >= 10
+    assert len(json.dumps(request_schema("agent", tools))) + 400 <= reserved
