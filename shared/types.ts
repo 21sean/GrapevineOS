@@ -211,8 +211,10 @@ export interface ChatUsage {
   costUSD?: number;
   /** The model the CLI actually billed (its resolved id, not our request). */
   model?: string;
-  /** Request sent to the runtime until its first answer token. */
+  /** Request sent to the runtime until its first generated token. */
   modelTtftMs?: number;
+  /** Request sent to the runtime until the first word of the answer text. */
+  modelAnswerTtftMs?: number;
   /** Request sent to the runtime until its first reasoning token, when it reasons. */
   modelReasoningTtftMs?: number;
   /** Time per output token after the first. */
