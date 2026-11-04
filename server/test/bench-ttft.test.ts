@@ -9,6 +9,7 @@ const sample = (over = {}) => ({
   visibleTpotMs: 10,
   e2eMs: 1000,
   modelTtftMs: 80,
+  modelAnswerTtftMs: 95,
   modelTpotMs: 9,
   outputTokens: 50,
   promptTokens: 200,

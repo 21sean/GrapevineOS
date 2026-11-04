@@ -92,6 +92,8 @@ interface Sample {
   visibleTpotMs: number | null;
   e2eMs: number;
   modelTtftMs: number | null;
+  /** First word of the answer text, a few tokens after the JSON envelope opens. */
+  modelAnswerTtftMs: number | null;
   modelTpotMs: number | null;
   outputTokens: number | null;
   promptTokens: number | null;
@@ -119,6 +121,7 @@ export function summarize(rows: Sample[], fullPromptTokens: number | null) {
     errors: rows.length - ok.length,
     retractions: ok.filter((r) => r.retracted).length,
     model_ttft_ms: percentiles(ok.map((r) => r.modelTtftMs)),
+    model_answer_ttft_ms: percentiles(ok.map((r) => r.modelAnswerTtftMs)),
     model_tpot_ms: percentiles(ok.map((r) => r.modelTpotMs)),
     visible_ttft_ms: percentiles(ok.map((r) => r.visibleTtftMs)),
     visible_tpot_ms: percentiles(ok.map((r) => r.visibleTpotMs)),
@@ -184,6 +187,7 @@ async function chatTurn(url: string, question: string, threadId: string): Promis
     visibleTpotMs: null,
     e2eMs: 0,
     modelTtftMs: null,
+    modelAnswerTtftMs: null,
     modelTpotMs: null,
     outputTokens: null,
     promptTokens: null,
@@ -218,6 +222,7 @@ async function chatTurn(url: string, question: string, threadId: string): Promis
         inputTokens?: number;
         outputTokens?: number;
         modelTtftMs?: number;
+        modelAnswerTtftMs?: number;
         tpotMs?: number;
       };
     };
@@ -233,6 +238,7 @@ async function chatTurn(url: string, question: string, threadId: string): Promis
     if (frame.type === "usage" && frame.usage) {
       // A later model call in the turn wins: that is the one that wrote the answer.
       row.modelTtftMs = frame.usage.modelTtftMs ?? row.modelTtftMs;
+      row.modelAnswerTtftMs = frame.usage.modelAnswerTtftMs ?? row.modelAnswerTtftMs;
       row.modelTpotMs = frame.usage.tpotMs ?? row.modelTpotMs;
       row.outputTokens = frame.usage.outputTokens ?? row.outputTokens;
       row.promptTokens = frame.usage.inputTokens ?? row.promptTokens;
@@ -284,6 +290,7 @@ async function directTurn(messages: { role: string; content: string }[]): Promis
     visibleTpotMs: null,
     e2eMs: 0,
     modelTtftMs: null,
+    modelAnswerTtftMs: null,
     modelTpotMs: null,
     outputTokens: null,
     promptTokens: null,
@@ -335,6 +342,7 @@ function report(label: string, s: ReturnType<typeof summarize>): void {
     `\n${label} (${s.samples} samples, ${s.errors} errors, ${s.retractions} retracted)`,
   );
   console.error(`  model TTFT ms   p50/p95/p99  ${fmt(s.model_ttft_ms)}`);
+  console.error(`  first answer ms p50/p95/p99  ${fmt(s.model_answer_ttft_ms)}`);
   console.error(`  model TPOT ms   p50/p95/p99  ${fmt(s.model_tpot_ms)}`);
   console.error(`  visible TTFT ms p50/p95/p99  ${fmt(s.visible_ttft_ms)}`);
   console.error(`  visible TPOT ms p50/p95/p99  ${fmt(s.visible_tpot_ms)}`);
