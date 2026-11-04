@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     timeout_seconds: float = Field(default=120, gt=0, le=300)
     max_bytes: int = Field(default=1_000_000, ge=1024, le=4_000_000)
     num_ctx: int = Field(default=16384, ge=2048, le=100_000)
+    # How long the runtime keeps the model loaded after a call. A reload costs about
+    # ten seconds, against the runtime's default of five minutes between turns.
+    keep_alive: str = "30m"
     seed: int = 42
 
     @model_validator(mode="after")

@@ -317,6 +317,7 @@ def _generate(request: Request, settings: Settings, *, transport: Transport | No
             model_started = time.perf_counter()
             try:
                 raw = send({"model": effective.model, "stream": False, "think": False,
+                    "keep_alive": effective.keep_alive,
                     "format": schema,
                     "options": {"temperature": 0, "seed": effective.seed, "num_ctx": effective.num_ctx, "num_predict": 4096},
                     "messages": kwargs["messages"]}, max(0.001, deadline-time.perf_counter()))

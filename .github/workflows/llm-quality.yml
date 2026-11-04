@@ -55,6 +55,9 @@ jobs:
     timeout-minutes: 30
     env:
       GRAPEVINE_LLM_BASE_URL: http://127.0.0.1:11435
+      # This runner shares its GPU. The app's 30 minute default would hold the model
+      # long after the job ended.
+      GRAPEVINE_LLM_KEEP_ALIVE: "1m"
       PYTHONUTF8: "1"
       ONNXRUNTIME_NODE_INSTALL: skip
     steps:
