@@ -1,0 +1,79 @@
+{
+  "$defs": {
+    "VllmModelPin": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 150,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "repository": {
+          "maxLength": 150,
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+          "title": "Repository",
+          "type": "string"
+        },
+        "revision": {
+          "pattern": "^[a-f0-9]{40}$",
+          "title": "Revision",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "repository",
+        "revision",
+        "sha256"
+      ],
+      "title": "VllmModelPin",
+      "type": "object"
+    }
+  },
+  "$id": "urn:grapevine:llm:1.1.0:vllm_manifest",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "generation": {
+      "$ref": "#/$defs/VllmModelPin"
+    },
+    "judge": {
+      "$ref": "#/$defs/VllmModelPin"
+    },
+    "runtime": {
+      "const": "vllm",
+      "default": "vllm",
+      "title": "Runtime",
+      "type": "string"
+    },
+    "runtime_version": {
+      "title": "Runtime Version",
+      "type": "string"
+    },
+    "seed": {
+      "const": 42,
+      "default": 42,
+      "title": "Seed",
+      "type": "integer"
+    },
+    "temperature": {
+      "const": 0,
+      "default": 0,
+      "title": "Temperature",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "runtime_version",
+    "generation",
+    "judge"
+  ],
+  "title": "VllmManifest",
+  "type": "object"
+}
