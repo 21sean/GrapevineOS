@@ -46,6 +46,22 @@ let buffer = "";
 const pending = new Map<string, Pending>();
 let idle: ReturnType<typeof setTimeout> | undefined;
 
+/**
+ * How long the worker outlives its last request. Python takes about two seconds to
+ * import the gate, and a person reads an answer for longer than a second, so a short
+ * idle spends those two seconds on nearly every chat turn.
+ */
+const WORKER_IDLE_MS = Number(process.env.GRAPEVINE_LLM_WORKER_IDLE_MS) || 600_000;
+
+/** An idle worker must not keep a script alive, and a busy one must. */
+function holdProcess(child: ChildProcessWithoutNullStreams, hold: boolean): void {
+  const method = hold ? "ref" : "unref";
+  child[method]();
+  for (const stream of [child.stdin, child.stdout, child.stderr]) {
+    (stream as unknown as Record<string, (() => void) | undefined>)[method]?.();
+  }
+}
+
 export function stopGate(reason = new LlmGateError("unavailable", "LLM gate stopped")): void {
   const previous = worker;
   worker = null;
@@ -57,7 +73,10 @@ export function stopGate(reason = new LlmGateError("unavailable", "LLM gate stop
 }
 function start(): ChildProcessWithoutNullStreams {
   clearTimeout(idle);
-  if (worker) return worker;
+  if (worker) {
+    holdProcess(worker, true);
+    return worker;
+  }
   const child = spawn(python, ["-m", "grapevine_llm.worker"], {
     cwd: `${root}/llm`,
     windowsHide: true,
@@ -111,7 +130,10 @@ function start(): ChildProcessWithoutNullStreams {
           p.reject(
             new LlmGateError(reply.code ?? "protocol", reply.message ?? "Generation failed"),
           );
-        if (!pending.size) idle = setTimeout(() => stopGate(), 1000).unref();
+        if (!pending.size) {
+          holdProcess(child, false);
+          idle = setTimeout(() => stopGate(), WORKER_IDLE_MS).unref();
+        }
       } catch {
         stopGate(new LlmGateError("protocol", "Invalid gate reply"));
         return;
@@ -119,6 +141,17 @@ function start(): ChildProcessWithoutNullStreams {
     }
   });
   return child;
+}
+
+/** Start the worker before the first request needs it. */
+export function warmGate(): void {
+  try {
+    const child = start();
+    holdProcess(child, false);
+    idle = setTimeout(() => stopGate(), WORKER_IDLE_MS).unref();
+  } catch {
+    /* the first real request reports what is wrong */
+  }
 }
 
 export async function generateTyped<T extends Task>(opts: {
