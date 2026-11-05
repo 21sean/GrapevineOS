@@ -5,6 +5,20 @@ are listed on [GitHub](https://github.com/21sean/GrapevineOS/releases).
 
 ## Unreleased
 
+- Fix over-deflection caused by the prompt work below. It lowered utility under attack in the
+  injection suite from 94.4% to 69.4%, because ordinary event questions got "I'm Grapevine" in
+  place of an answer, one of them with nothing injected. The attack success rate was 0 of 108
+  before and after, so the hardening did not lower it. A tool result had become the last thing
+  the model read, the full event JSON had left the prompt to fix the overflow, and the identity
+  line was an easy way out. The person's question now comes last after a tool result, and that
+  line applies only to what the person typed.
+  Utility under attack is back to 95.4%, level with where it started, and the live gate now
+  fails if the concierge deflects these questions again.
+- Measured results, with limits in `docs/readme-review.md` and `llm/README.md`: indirect
+  injection ASR 0 of 108 (0.0%, 95% CI 0.0% to 3.4%), utility under attack 103 of 108 (95.4%, 95% CI 89.6% to 98.0%);
+  multi-turn red team 0 of 7 (0.0%, 95% CI 0.0% to 35.4%), a small sample; warm no-tool turns on Ollama at p99 model
+  TTFT 337 ms and visible TTFT 703 ms on a 10575 token prompt, measured against MLPerf's
+  interactive latency limits: model TTFT and TPOT inside them, visible TTFT outside.
 - Fix tool use on Ollama. Instructor sent an empty assistant turn as an empty list and
   Ollama answered 400, so since v0.7.0 every chat turn that used a tool failed on its
   second generation. The live quality gate now runs a whole tool round and blocks merges.
