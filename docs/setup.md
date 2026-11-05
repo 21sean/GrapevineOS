@@ -201,8 +201,8 @@ Web discovery (Admin → Discover; `discover_events` over MCP;
 `/api/ext/v1/discovery/*` over REST; watches from the chat) needs no keys:
 search uses SearXNG when `SEARXNG_URL` is set (see **The optional stack**)
 and falls back to keyless DuckDuckGo scraping, and both extraction and
-verification run through the provider picked in **Admin → Providers** (local
-Ollama by default). Tuning lives in `server/.env`:
+verification run on the local runtime (Ollama by default). Tuning lives in
+`server/.env`:
 
 - `DISCOVERY_MIN_CONFIDENCE` (default `0.7`): verifier confidence a
   candidate needs before it can be added; candidates corroborated by 2+

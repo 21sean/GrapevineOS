@@ -5,6 +5,12 @@ are listed on [GitHub](https://github.com/21sean/GrapevineOS/releases).
 
 ## Unreleased
 
+- Stop offering hosted CLI generation, which has been disabled since v0.7.0. Admin → Providers
+  shows the local runtime and the MCP help, and no longer lists CLIs or their sign-in state; a
+  setting saved with a CLI still loads, and the tab has a button that switches back. The composer's
+  Claude model and effort picker is gone, the settings route accepts only the local runtime, and
+  `GET /api/providers`, which spawned each CLI and read its credential files, is replaced by
+  `GET /api/runtime`.
 - Redraw the agent and guardrail diagrams with the contract gate and write gate and without
   the hosted CLI path, and rewrite the guides to match: chat and extraction generate only
   on the local runtime, and the model nodes have an idle timeout but no retry policy.

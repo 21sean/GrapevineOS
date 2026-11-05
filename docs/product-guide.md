@@ -114,18 +114,19 @@ Ollama model as ingestion; pick a model that supports tool calls, such as
   changes are proposed as cards you confirm, with Undo. A calendar save goes
   straight through only for events you named, or ones the last reply offered
   when you say yes; anything else on the call becomes a card.
-- **Transparent.** A popover next to the composer shows which provider is
+- **Transparent.** A popover next to the composer shows which model is
   answering, which tools it has, whether the guardrails are on, and the MCP
   endpoint (`GET /api/agent/capabilities` returns the same thing).
 
-Chat and newsletter extraction generate only on the local runtime.
-**Admin → Providers** still lists Claude Code, OpenAI Codex, Gemini CLI and
-GitHub Copilot CLI with their sign-in state, but hosted CLI generation is
-disabled: a CLI selected for chat gets an error before generation that asks
-you to select Ollama, and one selected for extraction is refused the same
-way. Claude Code and other assistants can still connect to Grapevine's MCP
-endpoint as clients, for live event search and ETAs in their own sessions
-(see [Agent interoperability](#agent-interoperability-mcp-and-rest)).
+Chat and newsletter extraction generate only on the local runtime, and
+**Admin → Providers** shows that runtime with the MCP connection help. Hosted
+CLI generation is gone and no CLI can be selected. A setting saved before
+v0.7.0 can still name one (Claude Code, Codex, Gemini CLI or Copilot CLI): it
+loads, chat answers with an error before generation, extraction is refused the
+same way, and the tab names the CLI and has a button that switches back. Claude
+Code and other assistants can still connect to Grapevine's MCP endpoint as
+clients, for live event search and ETAs in their own sessions (see
+[Agent interoperability](#agent-interoperability-mcp-and-rest)).
 Account → Claude has the connector URL and two prompts for running a routine
 from your own Claude account.
 
@@ -342,8 +343,9 @@ run unless told otherwise.
 - **Admin → Models**: Ollama health, the active model, and a catalog of
   open-weights models grouped by lab (models.dev metadata and logos) with
   download progress.
-- **Admin → Providers**: choose who answers chat and who runs extraction,
-  plus MCP snippets for Claude.
+- **Admin → Providers**: the local runtime chat and extraction run on, its
+  health and model, a way back from a CLI saved before v0.7.0, and MCP snippets
+  for Claude.
 - **Admin → Ingest**: paste a newsletter, preview the extracted events, and
   approve which ones to keep.
 - **Admin → Discover**: search the web for events, review what verification
