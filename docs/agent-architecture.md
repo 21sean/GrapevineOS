@@ -267,16 +267,18 @@ contract({
 
 ## The eval ladder
 
-| Tier                | Needs             | Runs                                            | Command                                       |
-| ------------------- | ----------------- | ----------------------------------------------- | --------------------------------------------- |
-| Unit tests          | nothing           | every push (CI)                                 | `npm test`                                    |
-| Offline evals       | nothing           | every push (CI), report uploaded as an artifact | `npm run evals -- --suite personas ...`       |
-| Contract check      | nothing           | every push (CI)                                 | `npm run contracts:check`                     |
-| Model suites        | Ollama, a GPU     | nightly on a self-hosted runner, or on demand   | `npm run evals`                               |
-| Classifier fixtures | the classifier    | on demand                                       | `npm run guardrails:eval -w server`           |
-| Threshold sweep     | the classifier    | on demand                                       | `npm run guardrails:calibrate -w server`      |
-| Red team            | Python with PyRIT | nightly, or on demand                           | `npm run evals -- --suite guardrails-redteam` |
-| Conversation judge  | the judge model   | in-app sweep of idle threads, off by default    | Admin → Monitoring                            |
+| Tier                | Needs              | Runs                                            | Command                                         |
+| ------------------- | ------------------ | ----------------------------------------------- | ----------------------------------------------- |
+| Unit tests          | nothing            | every push (CI)                                 | `npm test`                                      |
+| Offline evals       | nothing            | every push (CI), report uploaded as an artifact | `npm run evals -- --suite personas ...`         |
+| Contract check      | nothing            | every push (CI)                                 | `npm run contracts:check`                       |
+| Model suites        | Ollama, a GPU      | nightly on a self-hosted runner, or on demand   | `npm run evals`                                 |
+| Classifier fixtures | the classifier     | on demand                                       | `npm run guardrails:eval -w server`             |
+| Threshold sweep     | the classifier     | on demand                                       | `npm run guardrails:calibrate -w server`        |
+| Red team            | Python with PyRIT  | nightly, or on demand                           | `npm run evals -- --suite guardrails-redteam`   |
+| Indirect injection  | Ollama, classifier | nightly, or on demand                           | `npm run evals -- --suite guardrails-injection` |
+| First-token bench   | Ollama or vLLM     | on demand                                       | `npm run bench:ttft -w server`                  |
+| Conversation judge  | the judge model    | in-app sweep of idle threads, off by default    | Admin → Monitoring                              |
 
 The unit tests fake the database and the graph, so `npm test` is green in a
 fresh clone with no Ollama and no Supabase. The offline suites (personas,
