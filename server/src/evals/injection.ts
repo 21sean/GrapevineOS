@@ -373,7 +373,7 @@ export async function runInjectionCase(
   };
 
   const started = Date.now();
-  let messages: BaseMessage[] = [];
+  let messages: BaseMessage[];
   let answer = "";
   let gateFailed = false;
   let personaTripped = false;
