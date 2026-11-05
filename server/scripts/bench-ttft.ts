@@ -2,7 +2,8 @@
  * Time to first token, measured the way a person meets it.
  *
  *   npm run bench:ttft -w server -- [--base-url URL] [--runtime ollama|vllm]
- *     [--model NAME] [--samples 100] [--cold 3] [--gap-ms 2000]
+ *     [--model NAME] [--samples 100] [--tool-samples 30] [--miss-samples 30] [--cold 3]
+ *     [--gap-ms 2000]
  *     [--scenario short,long,long-miss] [--out report.json]
  *
  * Reports TTFT, TPOT (time per output token: (last - first) / (tokens - 1)),
@@ -18,8 +19,9 @@
  * Warm samples rotate through fixed questions and wait --gap-ms between turns,
  * because a person reads an answer before asking again and the worker's idle
  * behavior is part of what they wait for. A cold sample unloads the model first.
- * Turns that ran a tool before answering are reported apart, because a tool round
- * delays the first answer token by design.
+ * --samples questions need no event pinned first and --tool-samples do. Which group a
+ * turn lands in is read from what it did, because a tool round delays the first answer
+ * token by design. p99 means little below about 100 samples.
  *
  * Scenarios:
  *  - short:     the fixture catalog, 15 events.
@@ -57,6 +59,8 @@ const baseUrl = arg(
 ).replace(/\/$/, "");
 const model = arg("model", runtime === "vllm" ? "qwen3.8-27b-int4" : "qwen3.8:27b");
 const samples = Number(arg("samples", "100"));
+const toolSamples = Number(arg("tool-samples", "30"));
+const missSamples = Number(arg("miss-samples", "30"));
 const coldSamples = Number(arg("cold", "3"));
 const gapMs = Number(arg("gap-ms", "2000"));
 const scenarios = arg("scenario", "short,long,long-miss").split(",");
@@ -74,7 +78,22 @@ process.env.LOG_LEVEL ??= "silent";
 
 export const LIMITS = { ttftMs: 500, tpotMs: 30 };
 
-const QUESTIONS = [
+/** Questions the concierge answers straight away, with no event to pin first. */
+const DIRECT_QUESTIONS = [
+  "Hi, what can you help me with?",
+  "What time is it, and what day?",
+  "What kinds of events do you know about?",
+  "How do I save an event to my calendar?",
+  "What city do you cover?",
+  "Good morning!",
+  "How far ahead do your listings go?",
+  "Can you help me plan a night out?",
+  "Thanks, that's all for now.",
+  "Do you know about free events?",
+];
+
+/** Questions whose answer names events, which the prompt says to pin on the map first. */
+const EVENT_QUESTIONS = [
   "What should I do tonight?",
   "Anything free this weekend?",
   "Is there live music on Saturday?",
@@ -83,8 +102,6 @@ const QUESTIONS = [
   "What's on at the Rady Shell?",
   "Are there any farmers markets this week?",
   "What's the priciest thing on this week?",
-  "Hi, what can you help me with?",
-  "What time is it, and what day?",
 ];
 
 interface Sample {
@@ -332,18 +349,25 @@ async function main(): Promise<void> {
     const cold: Sample[] = [];
     for (let i = 0; runtime === "ollama" && i < coldSamples; i++) {
       await unload();
-      cold.push(await chatTurn(url, QUESTIONS[0], crypto.randomUUID()));
+      cold.push(await chatTurn(url, DIRECT_QUESTIONS[0], crypto.randomUUID()));
       console.error(`${name} cold ${i + 1}: ${cold.at(-1)?.visibleTtftMs?.toFixed(0)} ms`);
     }
 
     const warm: Sample[] = [];
     // One throwaway turn so the first warm sample is not the worker's cold start.
-    await chatTurn(url, QUESTIONS[0], crypto.randomUUID());
-    for (let i = 0; i < samples; i++) {
+    await chatTurn(url, DIRECT_QUESTIONS[0], crypto.randomUUID());
+    const direct = name === "long-miss" ? missSamples : samples;
+    const questions = [
+      ...Array.from({ length: direct }, (_, i) => DIRECT_QUESTIONS[i % DIRECT_QUESTIONS.length]),
+      ...Array.from({ length: name === "long-miss" ? 0 : toolSamples }, (_, i) => {
+        return EVENT_QUESTIONS[i % EVENT_QUESTIONS.length];
+      }),
+    ];
+    for (const [i, question] of questions.entries()) {
       await new Promise((r) => setTimeout(r, gapMs));
       if (name === "long-miss") catalog = withNonce(base, i);
-      warm.push(await chatTurn(url, QUESTIONS[i % QUESTIONS.length], crypto.randomUUID()));
-      if ((i + 1) % 10 === 0) console.error(`${name} warm ${i + 1}/${samples}`);
+      warm.push(await chatTurn(url, question, crypto.randomUUID()));
+      if ((i + 1) % 10 === 0) console.error(`${name} warm ${i + 1}/${questions.length}`);
     }
     const noTool = warm.filter((r) => !r.toolFirst);
     const toolFirst = warm.filter((r) => r.toolFirst);
