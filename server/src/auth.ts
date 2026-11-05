@@ -9,20 +9,11 @@
  * a DB trigger on auth.users; sessionUser falls back to a JIT upsert from
  * the verified claims so a trigger race can never 401 a valid user.
  */
-import { randomBytes } from "node:crypto";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { isAdminUser } from "./admin-gate.js";
 import { store } from "./store.js";
 import type { User } from "./types.js";
-
-/**
- * Per-boot secret for in-process loopback calls (providers.ts points a CLI's
- * MCP config back at this same server's /mcp). Never leaves the process, so
- * the loopback works even with no AGENT_API_KEY configured. Lives here rather
- * than mcp.ts to keep providers.ts → mcp.ts → llm.ts → providers.ts acyclic.
- */
-export const INTERNAL_MCP_KEY = randomBytes(32).toString("hex");
 
 function env(name: string): string {
   const v = process.env[name];

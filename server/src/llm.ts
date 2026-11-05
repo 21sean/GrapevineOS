@@ -4,7 +4,7 @@ import { generateTyped, LlmGateError } from "./llm/gateway.js";
 import { llmBase, llmModel } from "./llm/runtime.js";
 import type { Output, Task, ValidationContext } from "./llm/generated.js";
 
-export async function activeProvider(model?: string): Promise<LlmProviderId> {
+async function activeProvider(model?: string): Promise<LlmProviderId> {
   return model ? "ollama" : (await store.settings()).extractProvider;
 }
 

@@ -1,19 +1,27 @@
 /**
- * Chat providers (the subscription CLIs) and where MCP clients connect. Both
- * feed Admin, Providers, so both are admin-only.
+ * The local runtime chat and extraction generate on, and where MCP clients
+ * connect. Both feed Admin, Providers, so both are admin-only.
  */
 import { Router } from "express";
 import { requireAdmin } from "../auth.js";
+import { llmBase, llmModel, llmRuntime, runtimeLabel, runtimeVersion } from "../llm/runtime.js";
 import { MCP_ENDPOINT, mcpAuthMode } from "../mcp.js";
-import { detectProviders } from "../providers.js";
-import type { McpInfo } from "../types.js";
+import { store } from "../store.js";
+import type { LocalRuntimeStatus, McpInfo } from "../types.js";
 import { apiOrigin } from "../urls.js";
 
 export const providers = Router();
 
-providers.get("/api/providers", requireAdmin, async (req, res) => {
-  const force = req.query.refresh === "1";
-  res.json({ providers: await detectProviders(force) });
+providers.get("/api/runtime", requireAdmin, async (_req, res) => {
+  const url = await llmBase();
+  const status: LocalRuntimeStatus = {
+    id: llmRuntime(),
+    name: runtimeLabel(),
+    url,
+    version: await runtimeVersion(url),
+    model: llmModel((await store.settings()).model),
+  };
+  res.json(status);
 });
 
 providers.get("/api/mcp/info", requireAdmin, (_req, res) => {

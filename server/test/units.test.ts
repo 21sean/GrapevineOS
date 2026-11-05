@@ -176,13 +176,10 @@ describe("the SSRF guard", () => {
 });
 
 describe("the LLM policy", () => {
-  it("never retries a subscription CLI and gives it a longer leash", () => {
-    const ollama = llmPolicy("ollama");
-    const claude = llmPolicy("claude");
-    expect(ollama.retries).toBeGreaterThanOrEqual(1);
-    expect(claude.retries).toBe(0);
-    expect(claude.idleTimeoutMs).toBeGreaterThan(ollama.idleTimeoutMs);
-    expect(claude.timeoutMs).toBeLessThan(120_000);
+  it("fails a stalled stream well before a whole call would time out", () => {
+    const policy = llmPolicy();
+    expect(policy.retries).toBeGreaterThanOrEqual(1);
+    expect(policy.idleTimeoutMs).toBeLessThan(policy.timeoutMs);
   });
 });
 

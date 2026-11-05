@@ -60,7 +60,7 @@ describe("the history window", () => {
     // Folded through m8: m8 onwards is either summarized or visible, never neither.
     const out = windowed(msgs, SUMMARY_STRIDE);
     expect(out[0].content).toBe(`m${SUMMARY_STRIDE}`);
-    // Nothing summarized yet (a CLI provider): at most one stride beyond the window.
+    // Nothing summarized yet: at most one stride beyond the window.
     expect(windowed(msgs, 0).length).toBe(HISTORY_WINDOW + SUMMARY_STRIDE);
   });
 });

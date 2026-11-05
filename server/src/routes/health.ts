@@ -49,7 +49,8 @@ health.get("/healthz", (_req, res) => {
  * Ready means the database and the checkpointer answer: without them a chat
  * turn cannot read settings or remember anything. The classifier is reported
  * but does not gate readiness (the rails fail open by design, and the panel
- * says so), and Ollama is informational: a CLI provider serves chat without it.
+ * says so), and the local runtime is informational: the map and the rest of the
+ * app work without it, and chat says so itself when it is down.
  */
 health.get("/readyz", async (_req, res) => {
   const [database, checkpointer, local, guard] = await Promise.all([

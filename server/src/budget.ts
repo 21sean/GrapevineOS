@@ -22,34 +22,13 @@ function envInt(name: string, fallback: number): number {
 }
 
 /**
- * Characters of source text handed to the model in one call, per provider.
+ * Characters of source text handed to the model in one call.
  *
- * Ollama is sized against the 16k-token num_ctx in ollama.ts (roughly 4
- * chars/token, leaving room for the system prompt and the JSON response).
- * Raising it without raising num_ctx just moves the silent truncation inside
- * the model. The subscription CLIs have context windows large enough that a
- * whole newsletter is one call, which is both faster and more accurate: an
- * event mentioned in the intro and dated in the footer stays in one prompt.
- *
- * One env override applies to whichever provider is active; unset, each gets
- * the ceiling that actually fits it.
+ * Sized against the 16k-token num_ctx in ollama.ts (roughly 4 chars/token,
+ * leaving room for the system prompt and the JSON response). Raising it without
+ * raising num_ctx just moves the silent truncation inside the model.
  */
-const CHARS_PER_CHUNK_BY_PROVIDER: Record<string, number> = {
-  ollama: 24_000,
-  claude: 150_000,
-  codex: 150_000,
-  gemini: 150_000,
-  copilot: 150_000,
-};
-
-export function charsPerChunk(provider: string): number {
-  const override = process.env.EXTRACT_CHARS_PER_CHUNK;
-  if (override) {
-    const n = Number(override);
-    if (Number.isFinite(n) && n > 0) return Math.floor(n);
-  }
-  return CHARS_PER_CHUNK_BY_PROVIDER[provider] ?? 24_000;
-}
+export const CHARS_PER_CHUNK = envInt("EXTRACT_CHARS_PER_CHUNK", 24_000);
 
 /**
  * Overlap between consecutive chunks. An event described across a chunk
@@ -85,15 +64,12 @@ export const LLM_RETRIES = envInt("EXTRACT_LLM_RETRIES", 1);
 export const LLM_RETRY_DELAY_MS = envInt("EXTRACT_LLM_RETRY_DELAY_MS", 2_000);
 
 /**
- * The one policy for "a model call took too long", per provider. The Ollama
- * JSON client, the CLI spawn and the graph's node policies all read this;
- * four unrelated timeout-and-retry rules used to describe the same event.
+ * The one policy for "a model call took too long" on the local runtime. The
+ * graph's model nodes read it.
  *
  * `timeoutMs` caps one whole call. `idleTimeoutMs` is the streaming leash: a
  * healthy stream refreshes it per token, a stalled one fails there instead of
- * eating the whole HTTP deadline. Subscription CLIs never retry (a re-run
- * spends real tokens on a duplicate turn) and get a longer idle leash because
- * their tool phases stream nothing.
+ * eating the whole HTTP deadline.
  */
 export interface LlmPolicy {
   timeoutMs: number;
@@ -102,20 +78,12 @@ export interface LlmPolicy {
   retryDelayMs: number;
 }
 
-export function llmPolicy(provider: string): LlmPolicy {
-  if (provider === "ollama") {
-    return {
-      timeoutMs: LLM_TIMEOUT_MS,
-      idleTimeoutMs: envInt("LLM_IDLE_TIMEOUT_MS", 45_000),
-      retries: LLM_RETRIES,
-      retryDelayMs: LLM_RETRY_DELAY_MS,
-    };
-  }
+export function llmPolicy(): LlmPolicy {
   return {
-    timeoutMs: envInt("CLI_TIMEOUT_MS", 110_000),
-    idleTimeoutMs: envInt("CLI_IDLE_TIMEOUT_MS", 115_000),
-    retries: 0,
-    retryDelayMs: 0,
+    timeoutMs: LLM_TIMEOUT_MS,
+    idleTimeoutMs: envInt("LLM_IDLE_TIMEOUT_MS", 45_000),
+    retries: LLM_RETRIES,
+    retryDelayMs: LLM_RETRY_DELAY_MS,
   };
 }
 

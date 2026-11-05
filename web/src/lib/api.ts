@@ -7,7 +7,6 @@ import type {
   ChatMessage,
   ChatThreadMeta,
   CityEvent,
-  CliProviderStatus,
   ConversationEval,
   ConversationMonitorRow,
   DiscoveryRunResult,
@@ -26,6 +25,7 @@ import type {
   InboxEmail,
   IngestRecord,
   Interests,
+  LocalRuntimeStatus,
   McpInfo,
   Reaction,
   Settings,
@@ -242,11 +242,8 @@ export const api = {
       >(r)
     ),
 
-  /** CLI chat providers (claude/codex/gemini) installed on the server machine. */
-  providers: (refresh = false) =>
-    fetch(`/api/providers${refresh ? "?refresh=1" : ""}`).then((r) =>
-      json<{ providers: CliProviderStatus[] }>(r)
-    ),
+  /** The local runtime chat and extraction generate on. */
+  runtime: () => fetch("/api/runtime").then((r) => json<LocalRuntimeStatus>(r)),
 
   /** models.dev provider logo as raw SVG text (inlined to inherit currentColor). */
   providerLogo: (id: string) =>
@@ -328,9 +325,6 @@ export const api = {
         savedEventIds?: string[]
         signedIn?: boolean
       }
-      /** Claude Code CLI overrides (empty/omitted = the CLI's own default). */
-      model?: string
-      effort?: string
     },
     onFrame: (frame: AgentFrame) => void,
     signal?: AbortSignal
