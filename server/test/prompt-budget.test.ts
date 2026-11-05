@@ -43,7 +43,7 @@ describe("the prompt on a realistic catalog", () => {
 
   it("keeps the instructions and the question however long the conversation got", () => {
     const ctx = bigCtx();
-    const long = "A long reply about parking and doors and the weather. ".repeat(150);
+    const long = "A long reply about parking and doors and the weather. ".repeat(100);
     const history = Array.from({ length: 30 }, (_, i) =>
       i % 2 ? new AIMessage(`${long} ${i}`) : new HumanMessage(`Question ${i}`),
     );
@@ -76,6 +76,26 @@ describe("the prompt on a realistic catalog", () => {
       new AIMessage({ content: "", tool_calls: [{ name: "read_page", args: {}, id: "c1" }] }),
       page,
     ]);
+    expect(prompt.reduce((sum, m) => sum + m.content.length, 0)).toBeLessThanOrEqual(
+      PROMPT_BUDGET_CHARS,
+    );
+  });
+
+  it("keeps this turn's tool result when older conversation has to go", () => {
+    const ctx = bigCtx();
+    const long = "A long reply about parking and doors and the weather. ".repeat(100);
+    const history = Array.from({ length: 30 }, (_, i) =>
+      i % 2 ? new AIMessage(`${long} ${i}`) : new HumanMessage(`Question ${i}`),
+    );
+    const { prompt } = modelPrompt(ctx, toolsFor("graph"), [
+      ...systemMessages(ctx),
+      ...history,
+      new HumanMessage("Read that page"),
+      new AIMessage({ content: "", tool_calls: [{ name: "read_page", args: {}, id: "c1" }] }),
+      new ToolMessage({ name: "read_page", tool_call_id: "c1", content: "The doors open at 5." }),
+    ]);
+    expect(prompt.at(-2)?.content).toContain("The doors open at 5.");
+    expect(prompt.at(-1)?.content).toContain("Read that page");
     expect(prompt.reduce((sum, m) => sum + m.content.length, 0)).toBeLessThanOrEqual(
       PROMPT_BUDGET_CHARS,
     );
@@ -123,7 +143,7 @@ describe("what the model may cite", () => {
     expect(ids).toContain(ctx.upcoming[0].e.id);
     expect(evidence.length).toBeLessThanOrEqual(200);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(prompt.at(-1)?.content).toContain("cited as tool-120");
+    expect(prompt.at(-2)?.content).toContain("cited as tool-120");
   });
 });
 

@@ -252,8 +252,8 @@ npm run contracts:check
 ```
 
 CI also requires schema/version checks, 30 deterministic golden cases, and
-15 pinned local model cases with local judges, plus one whole tool round through the
-real graph. See the
+15 pinned local model cases with local judges, plus six whole turns through the real
+graph, including a tool round and questions the concierge once deflected. See the
 [structured inference guide](llm/README.md) for adding schemas, eval cases,
 and reviewed baselines. Existing offline and red-team suites remain available.
 

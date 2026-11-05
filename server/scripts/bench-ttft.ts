@@ -320,6 +320,20 @@ async function main(): Promise<void> {
     import("../src/evals/fixtures.js"),
   ]);
 
+  // No database here, and supabase-js spends about 7 s retrying each failed read, which
+  // would land on every visible number. A real deployment pays one round trip instead,
+  // which this bench does not measure.
+  const [{ SupabaseSaver }, { MemorySaver }] = await Promise.all([
+    import("../src/checkpointer.js"),
+    import("@langchain/langgraph"),
+  ]);
+  const memory = new MemorySaver();
+  const saver = SupabaseSaver.prototype as unknown as Record<string, unknown>;
+  saver.getTuple = memory.getTuple.bind(memory);
+  saver.list = memory.list.bind(memory);
+  saver.put = memory.put.bind(memory);
+  saver.putWrites = memory.putWrites.bind(memory);
+
   const results: Record<string, unknown> = {};
   const facts = { ...machine(), ...(await runtimeFacts()) };
   console.error(JSON.stringify(facts));
