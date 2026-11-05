@@ -16,8 +16,8 @@
  *  - Shape in people. Two heavy users, a long tail of one-session visitors.
  *  - Shape in failure. About 4 percent of turns error and 8 percent warn, each
  *    with a status message that names a failure this system actually has
- *    (ollama loading a model, a CLI provider timing out, SearXNG falling over
- *    to DuckDuckGo, a verification pass finding nothing).
+ *    (ollama loading a model, SearXNG falling over to DuckDuckGo, a verification
+ *    pass finding nothing).
  *  - Shape in words. Every question and answer comes from content.ts, composed
  *    out of the real Supabase catalog. No invented events.
  *
@@ -190,7 +190,7 @@ interface ModelSpec {
   genName: string;
   /** trace metadata.model, the provider the user picked in the UI. */
   provider: string;
-  surface: "chat" | "chat-cli";
+  surface: "chat";
   ttft: [number, number];
   total: [number, number];
 }
@@ -240,67 +240,12 @@ const MODELS: [ModelSpec, number][] = [
     },
     5,
   ],
-  [
-    {
-      model: "claude-sonnet-5",
-      genName: "CliChatModel",
-      provider: "claude",
-      surface: "chat-cli",
-      ttft: [1100, 3400],
-      total: [5000, 21000],
-    },
-    15,
-  ],
-  [
-    {
-      model: "claude-opus-5",
-      genName: "CliChatModel",
-      provider: "claude",
-      surface: "chat-cli",
-      ttft: [1500, 4200],
-      total: [8000, 30000],
-    },
-    11,
-  ],
-  [
-    {
-      model: "gpt-5.2",
-      genName: "CliChatModel",
-      provider: "codex",
-      surface: "chat-cli",
-      ttft: [1200, 3800],
-      total: [6000, 24000],
-    },
-    9,
-  ],
-  [
-    {
-      model: "gpt-5.4-mini",
-      genName: "CliChatModel",
-      provider: "codex",
-      surface: "chat-cli",
-      ttft: [700, 2000],
-      total: [3000, 11000],
-    },
-    6,
-  ],
-  [
-    {
-      model: "gemini-3-pro-preview",
-      genName: "CliChatModel",
-      provider: "gemini",
-      surface: "chat-cli",
-      ttft: [1000, 3000],
-      total: [5000, 19000],
-    },
-    6,
-  ],
 ];
 
 /**
- * The turn-latency objective. Generous on purpose: a CLI provider shells out to
- * a subprocess and a turn with two model rounds plus tool calls is genuinely
- * slow, so a tighter number would just paint every hosted turn red.
+ * The turn-latency objective. Generous on purpose: a turn with two model rounds
+ * plus tool calls is genuinely slow, so a tighter number would just paint those
+ * turns red.
  */
 const LATENCY_SLO_MS = 25_000;
 

@@ -313,10 +313,10 @@ const SPECS: MonitorSpec[] = [
     routes: [PAGE, QUALITY],
   },
 
-  // Measured p95 generation latency on this box is about 36s, because the CLI
-  // providers and the 27b ollama model are genuinely slow. The alert therefore
-  // sits at 45s (clearly worse than today) and the warning at 30s (just under
-  // today, so the tab honestly shows how close the current setup already runs).
+  // Measured p95 generation latency on this box is about 36s, because the 27b
+  // ollama model is genuinely slow. The alert therefore sits at 45s (clearly
+  // worse than today) and the warning at 30s (just under today, so the tab
+  // honestly shows how close the current setup already runs).
   // LAST_SEVERITY on no data: an idle window must not silently clear a
   // regression that was real ten minutes ago.
   {
@@ -335,8 +335,8 @@ const SPECS: MonitorSpec[] = [
     routes: [PAGE],
   },
 
-  // The concierge is supposed to run entirely on local ollama and CLI providers,
-  // where marginal cost is zero; total recorded spend across the whole corpus is
+  // The concierge is supposed to run entirely on the local runtime, where
+  // marginal cost is zero; total recorded spend across the whole corpus is
   // under five cents. So any day above 50 cents means traffic quietly fell back
   // to a metered API, and two dollars a day means it has been doing that for
   // hours. This is a leak detector, not a budget.

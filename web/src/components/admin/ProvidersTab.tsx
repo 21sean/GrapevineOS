@@ -8,40 +8,36 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { ProviderLogo } from "@/components/admin/ProviderLogo"
 import { api } from "@/lib/api"
 import { useGrapevine } from "@/lib/store"
-import type { LlmProviderId, CliProviderStatus, McpInfo } from "@/lib/types"
+import {
+  CLI_PROVIDER_NAMES,
+  type LocalRuntimeStatus,
+  type McpInfo,
+} from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 /**
- * Admin → Providers: pick who answers "Ask Grapevine" and who runs the
- * newsletter extraction pipeline (the local Ollama model or a
- * subscription-authed CLI: Claude Code / Codex / Gemini / Copilot, no API
- * keys), and wire Claude up to this app's tools over MCP.
+ * Admin → Providers: the local runtime chat and extraction generate on, and
+ * wiring Claude up to this app's tools over MCP. Hosted CLI generation is gone,
+ * so there is nothing to pick here. The one action is the way back from a CLI
+ * saved before v0.7.0, which still loads and which chat and extraction refuse.
  */
 export function ProvidersTab() {
   const settings = useGrapevine((s) => s.settings)
   const setSettings = useGrapevine((s) => s.setSettings)
 
-  const [clis, setClis] = useState<CliProviderStatus[] | null>(null)
-  const [ollama, setOllama] = useState<{
-    ok: boolean
-    url: string
-    version: string | null
-  } | null>(null)
+  // undefined until the first answer; null when the server could not say.
+  const [runtime, setRuntime] = useState<LocalRuntimeStatus | null>()
   const [mcp, setMcp] = useState<McpInfo | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [switching, setSwitching] = useState(false)
 
-  const refresh = useCallback((force = false) => {
+  const refresh = useCallback(() => {
     setRefreshing(true)
-    Promise.allSettled([
-      api
-        .providers(force)
-        .then((r) => setClis(r.providers))
-        .catch(() => setClis([])),
-      api
-        .ollamaHealth()
-        .then(setOllama)
-        .catch(() => setOllama(null)),
-    ]).finally(() => setRefreshing(false))
+    api
+      .runtime()
+      .then(setRuntime)
+      .catch(() => setRuntime(null))
+      .finally(() => setRefreshing(false))
   }, [])
 
   useEffect(() => {
@@ -52,63 +48,27 @@ export function ProvidersTab() {
       .catch(() => setMcp(null))
   }, [refresh])
 
-  const chatActive = settings?.chatProvider ?? "ollama"
-  const extractActive = settings?.extractProvider ?? "ollama"
+  const chatProvider = settings?.chatProvider ?? "ollama"
+  const extractProvider = settings?.extractProvider ?? "ollama"
+  const onLocal = chatProvider === "ollama" && extractProvider === "ollama"
 
-  async function setProvider(
-    role: "chatProvider" | "extractProvider",
-    id: LlmProviderId,
-    label: string
-  ) {
+  async function switchToLocal() {
+    setSwitching(true)
     try {
-      const next = await api.saveSettings({ [role]: id })
+      const next = await api.saveSettings({
+        chatProvider: "ollama",
+        extractProvider: "ollama",
+      })
       setSettings(next)
-      toast.success(
-        role === "chatProvider"
-          ? `Ask Grapevine now answers via ${label}`
-          : `Newsletter extraction now runs via ${label}`
-      )
+      toast.success("Chat and extraction are back on the local runtime")
     } catch (err) {
-      toast.error("Couldn't switch provider", {
+      toast.error("Couldn't switch back", {
         description: String(err).slice(0, 140),
       })
+    } finally {
+      setSwitching(false)
     }
   }
-
-  const roleActions = (id: LlmProviderId, label: string, disabled = false) => (
-    <div className="flex shrink-0 flex-col items-end gap-1">
-      {chatActive === id ? (
-        <Badge variant="outline" className="text-live">
-          Chat
-        </Badge>
-      ) : (
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-6 px-2 text-xs"
-          disabled={disabled}
-          onClick={() => setProvider("chatProvider", id, label)}
-        >
-          Use for chat
-        </Button>
-      )}
-      {extractActive === id ? (
-        <Badge variant="outline" className="text-live">
-          Extraction
-        </Badge>
-      ) : (
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-6 px-2 text-xs"
-          disabled={disabled}
-          onClick={() => setProvider("extractProvider", id, label)}
-        >
-          Use for extraction
-        </Button>
-      )}
-    </div>
-  )
 
   return (
     <div className="flex flex-col gap-5">
@@ -116,126 +76,101 @@ export function ProvidersTab() {
         <div className="flex flex-col gap-1">
           <h3 className="font-heading text-base font-semibold">Providers</h3>
           <p className="text-sm text-muted-foreground">
-            Who answers Ask Grapevine, and who runs newsletter extraction and
-            buzz ratings. The CLIs sign in with the subscription you already
-            have (Claude.ai, ChatGPT, Google, GitHub), no API keys.
+            Ask Grapevine, newsletter extraction and buzz ratings all run on the
+            local runtime.
           </p>
         </div>
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="Re-detect providers"
-          onClick={() => refresh(true)}
+          aria-label="Check the runtime again"
+          onClick={refresh}
           disabled={refreshing}
         >
           <RefreshCwIcon className={cn(refreshing && "animate-spin")} />
         </Button>
       </div>
 
-      {/* Ollama: the full agent, and the fully local pipeline */}
+      {/* The way back from a CLI saved before hosted generation was removed */}
+      {!onLocal && (
+        <div className="flex flex-col gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5 text-sm">
+          {chatProvider !== "ollama" && (
+            <p>
+              Ask Grapevine is still set to {CLI_PROVIDER_NAMES[chatProvider]},
+              so chat answers with an error.
+            </p>
+          )}
+          {extractProvider !== "ollama" && (
+            <p>
+              Newsletter extraction is still set to{" "}
+              {CLI_PROVIDER_NAMES[extractProvider]}, so extraction and buzz
+              ratings fail.
+            </p>
+          )}
+          <p className="text-xs text-muted-foreground">
+            Hosted CLI generation was removed in v0.7.0.
+          </p>
+          <Button
+            size="sm"
+            className="self-start"
+            disabled={switching}
+            onClick={switchToLocal}
+          >
+            Switch back to the local runtime
+          </Button>
+        </div>
+      )}
+
+      {/* The local runtime: the full agent, and the fully local pipeline */}
       <div
         className={cn(
           "flex flex-col gap-2 rounded-lg border px-3 py-2.5",
-          (chatActive === "ollama" || extractActive === "ollama") &&
+          (chatProvider === "ollama" || extractProvider === "ollama") &&
             "border-wine/60"
         )}
       >
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
-            <ProviderLogo id="ollama" />
+            <ProviderLogo id={runtime?.id ?? "ollama"} />
             <div className="flex min-w-0 flex-col">
               <span className="flex items-center gap-2 text-sm">
-                Ollama (local)
+                {runtime ? `${runtime.name} (local)` : "Local runtime"}
                 <span
                   className={cn(
                     "size-1.5 rounded-full",
-                    ollama?.ok ? "bg-live" : "bg-destructive"
+                    runtime?.version ? "bg-live" : "bg-destructive",
+                    runtime === undefined && "invisible"
                   )}
                 />
               </span>
               <span className="truncate font-mono text-xs text-muted-foreground">
-                {ollama?.ok ? `v${ollama.version}` : "unreachable"} ·{" "}
-                {settings?.model || "no model picked"}
+                {runtime === undefined
+                  ? "checking…"
+                  : `${runtime?.version ? `v${runtime.version}` : "unreachable"} · ${runtime?.model || "no model picked"}`}
               </span>
             </div>
           </div>
-          {roleActions("ollama", "the local Ollama model")}
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            {chatProvider === "ollama" && (
+              <Badge variant="outline" className="text-live">
+                Chat
+              </Badge>
+            )}
+            {extractProvider === "ollama" && (
+              <Badge variant="outline" className="text-live">
+                Extraction
+              </Badge>
+            )}
+          </div>
         </div>
         <p className="text-xs text-muted-foreground">
           Chat gets the full toolbox (map pinning, ETAs, calendar proposals, web
-          search), and extraction stays entirely on this machine. Pick the model
-          in the Models tab.
+          search), and extraction stays entirely on this machine.{" "}
+          {runtime?.id === "vllm"
+            ? "It serves one pinned model, set with GRAPEVINE_LLM_MODEL."
+            : "Pick the model in the Models tab."}
         </p>
       </div>
-
-      {/* Subscription CLIs */}
-      {!clis && (
-        <div className="flex flex-col gap-2">
-          <Skeleton className="h-20 w-full" />
-          <Skeleton className="h-20 w-full" />
-          <Skeleton className="h-20 w-full" />
-          <Skeleton className="h-20 w-full" />
-        </div>
-      )}
-      {clis?.map((p) => {
-        const isActive = chatActive === p.id || extractActive === p.id
-        return (
-          <div
-            key={p.id}
-            className={cn(
-              "flex flex-col gap-2 rounded-lg border px-3 py-2.5",
-              isActive && "border-wine/60"
-            )}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-2">
-                <ProviderLogo id={p.logo} />
-                <div className="flex min-w-0 flex-col">
-                  <span className="flex items-center gap-2 text-sm">
-                    {p.name}
-                    <span
-                      className={cn(
-                        "size-1.5 rounded-full",
-                        !p.installed
-                          ? "bg-destructive"
-                          : p.authed
-                            ? "bg-live"
-                            : "bg-amber-400"
-                      )}
-                    />
-                  </span>
-                  <span className="truncate font-mono text-xs text-muted-foreground">
-                    {!p.installed
-                      ? "not installed"
-                      : `${p.version ?? "installed"} · ${
-                          p.authed
-                            ? p.authKind === "api-key"
-                              ? "API key detected"
-                              : "signed in (subscription)"
-                            : "not signed in"
-                        }`}
-                  </span>
-                </div>
-              </div>
-              {roleActions(p.id, p.name, !p.installed)}
-            </div>
-            {!p.installed && <Snippet text={p.installHint} />}
-            {p.installed && !p.authed && (
-              <>
-                <p className="text-xs text-muted-foreground">
-                  Sign in on the server machine with your {p.loginNote}:
-                </p>
-                <Snippet text={p.loginHint} />
-              </>
-            )}
-            <p className="text-xs text-muted-foreground">
-              {p.loginNote}. Chat answers from the event digest, with no map or
-              calendar tools in this mode. Extraction runs the same newsletter
-              pipeline through the CLI instead of the local model.
-            </p>
-          </div>
-        )
-      })}
 
       <Separator />
 
@@ -245,9 +180,10 @@ export function ProvidersTab() {
           Connect Claude to Grapevine (MCP)
         </h3>
         <p className="text-sm text-muted-foreground">
-          The reverse direction: give Claude Code or Claude Desktop this app's
-          tools (event search, details, ETAs, calendar saves, interests) over
-          the Model Context Protocol.
+          Give Claude Code or Claude Desktop this app's tools (event search,
+          details, ETAs, calendar saves, interests) over the Model Context
+          Protocol. They answer in their own sessions; nothing here generates
+          through them.
         </p>
       </div>
 

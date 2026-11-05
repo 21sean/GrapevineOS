@@ -31,9 +31,8 @@
  *     browser consent flow on its own; the connector dialog needs nothing but
  *     the /mcp URL.
  *
- * Headless fallbacks: AGENT_API_KEY as X-Agent-Key/Bearer still works for
- * scripts (and the in-process CLI loopback uses a per-boot internal key);
- * writes on that path act on AGENT_USER_EMAIL, same as /api/ext/v1.
+ * Headless fallback: AGENT_API_KEY as X-Agent-Key/Bearer still works for
+ * scripts; writes on that path act on AGENT_USER_EMAIL, same as /api/ext/v1.
  *
  * Hosting: FastMCP owns its own HTTP listener (mcp-proxy binds the port), so
  * it runs on loopback and mcp-proxy.ts reverse-proxies /mcp and the
@@ -43,7 +42,7 @@
 import type http from "node:http";
 import { FastMCP, UserError } from "fastmcp";
 import { isAdminUser } from "./admin-gate.js";
-import { INTERNAL_MCP_KEY, ISSUER, userFromClaims, verifySupabaseToken } from "./auth.js";
+import { ISSUER, userFromClaims, verifySupabaseToken } from "./auth.js";
 import { logger } from "./log.js";
 import {
   applyInterests,
@@ -314,9 +313,7 @@ async function authenticate(req: http.IncomingMessage): Promise<McpAuth | undefi
   }
   const agentKey = req.headers["x-agent-key"];
   const given = (Array.isArray(agentKey) ? agentKey[0] : agentKey) ?? bearer;
-  if (safeEqual(given, process.env.AGENT_API_KEY) || safeEqual(given, INTERNAL_MCP_KEY)) {
-    return { user: null, via: "key" };
-  }
+  if (safeEqual(given, process.env.AGENT_API_KEY)) return { user: null, via: "key" };
   if (mcpAuthMode() === "open") return { user: null, via: "open" }; // explicit MCP_OPEN=1 opt-in
   return undefined;
 }

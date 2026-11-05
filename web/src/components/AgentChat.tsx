@@ -34,7 +34,6 @@ import {
 } from "@/components/ui/tooltip"
 import { CapabilitiesPopover } from "@/components/chat/Capabilities"
 import { EventChip } from "@/components/chat/EventChip"
-import { ModelEffortPicker } from "@/components/chat/ModelEffortPicker"
 import {
   CalendarCard,
   InterestsCard,
@@ -46,7 +45,6 @@ import { ThreadHistory } from "@/components/chat/ThreadHistory"
 import { useAgentChat, type ChatItem } from "@/hooks/useAgentChat"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useSpeechInput } from "@/hooks/useSpeechInput"
-import { modelLabel } from "@/lib/chatModels"
 import { useGrapevine } from "@/lib/store"
 import type { ChatUsage } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -197,7 +195,6 @@ function Conversation({
 }) {
   const { items, busy, send, stop, reset, loadThread } = chat
   const user = useGrapevine((s) => s.user)
-  const chatProvider = useGrapevine((s) => s.settings?.chatProvider)
   // Draft lives in the persisted store, not local state, so clicking away from
   // the chat (which unmounts this component) doesn't discard a half-typed line.
   const input = useGrapevine((s) => s.chatDraft)
@@ -307,20 +304,9 @@ function Conversation({
         )}
       </ScrollArea>
 
-      {chatProvider === "claude" && (
-        <div className="flex shrink-0 items-center border-t border-border/60 px-2 pt-1.5">
-          <ModelEffortPicker />
-        </div>
-      )}
-
       <form
         onSubmit={submit}
-        className={cn(
-          "flex shrink-0 items-center gap-2 py-2 pr-2",
-          // The picker row already draws the top divider when it's shown.
-          chatProvider === "claude" ? "" : "border-t border-border/60",
-          "pl-2"
-        )}
+        className="flex shrink-0 items-center gap-2 border-t border-border/60 py-2 pr-2 pl-2"
       >
         <CapabilitiesPopover />
         {user && (
@@ -492,13 +478,7 @@ function Message({
           className="flex flex-wrap items-center gap-2 rounded-lg bg-card/60 px-3 py-2 text-xs text-muted-foreground"
         >
           <span className="min-w-0">{n.message}</span>
-          {[
-            "no-model",
-            "ollama-down",
-            "no-tools",
-            "cli-missing",
-            "cli-auth",
-          ].includes(n.code) && (
+          {["no-model", "ollama-down", "no-tools"].includes(n.code) && (
             <Button
               variant="outline"
               size="sm"
@@ -612,17 +592,13 @@ function fmtTokens(n: number): string {
   return String(n)
 }
 
-/** Per-turn token/cost footer under a Claude Code reply. The input figure
- *  counts everything the turn read, cache included; the raw uncached count
- *  reads as single digits next to a real cost. */
+/** Per-turn token footer under a reply. The input figure counts everything
+ *  the turn read, cache included. */
 function UsageLine({ usage }: { usage: ChatUsage }) {
   const parts: string[] = []
-  if (usage.model) parts.push(modelLabel(usage.model).replace(/^claude-/i, ""))
+  if (usage.model) parts.push(usage.model)
   parts.push(`${fmtTokens(usage.inputTokens)} in`)
   parts.push(`${fmtTokens(usage.outputTokens)} out`)
-  if (typeof usage.costUSD === "number" && usage.costUSD > 0) {
-    parts.push(`$${usage.costUSD.toFixed(usage.costUSD < 0.1 ? 3 : 2)}`)
-  }
   const cached = usage.cacheReadInputTokens ?? 0
   return (
     <Hint

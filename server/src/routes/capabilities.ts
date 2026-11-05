@@ -11,7 +11,6 @@ import { toolsFor } from "../agent/contracts.js";
 import { classifierReady, guardConfig } from "../agent/guardrails.js";
 import { MCP_ENDPOINT, mcpAuthMode } from "../mcp.js";
 import { llmModel, runtimeSupportsTools } from "../llm/runtime.js";
-import { cliSupportsTools } from "../providers.js";
 import { store } from "../store.js";
 import type { AgentCapabilities } from "../types.js";
 import { apiOrigin } from "../urls.js";
@@ -22,20 +21,15 @@ capabilities.get("/api/agent/capabilities", async (_req, res) => {
   const [settings, guard] = await Promise.all([store.settings(), guardConfig()]);
   const provider = settings.chatProvider;
   const model = llmModel(settings.model);
-  // A CLI brings its own toolbox, this server's MCP surface, when it can.
+  // A saved CLI is refused before generation (chat.ts), so it has no tools.
   const tools =
-    provider === "ollama"
-      ? model
-        ? await runtimeSupportsTools(model).catch(() => false)
-        : false
-      : cliSupportsTools(provider);
-  const surface: "graph" | "mcp" | null = !tools ? null : provider === "ollama" ? "graph" : "mcp";
+    provider === "ollama" && model ? await runtimeSupportsTools(model).catch(() => false) : false;
   const body: AgentCapabilities = {
     provider,
     model: provider === "ollama" ? model : "",
     tools,
-    toolbox: surface
-      ? toolsFor(surface).map((c) => ({
+    toolbox: tools
+      ? toolsFor("graph").map((c) => ({
           name: c.name,
           description: c.description,
           effect: c.effect,

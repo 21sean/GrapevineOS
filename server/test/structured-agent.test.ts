@@ -40,6 +40,21 @@ function graph() {
 }
 
 describe("validated chat boundary", () => {
+  it("refuses a hosted provider before it builds anything", () => {
+    expect(() =>
+      buildAgentGraph({
+        ctx,
+        chat: {},
+        baseUrl: "http://127.0.0.1:11434",
+        model: "test",
+        toolsOk: false,
+        city: "Testville",
+        userText: "",
+        ephemeral: true,
+        provider: "claude",
+      }),
+    ).toThrow(expect.objectContaining({ code: "unsupported_provider" }));
+  });
   it("emits only the completed validated answer", async () => {
     gate.generateTyped.mockResolvedValueOnce({
       kind: "insufficient_evidence",

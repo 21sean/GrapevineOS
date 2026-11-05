@@ -5,7 +5,6 @@ import type { AgentCtx } from "../src/agent/context.js";
 import {
   CONTRACTS,
   TOOL_LIST,
-  cliToolsNote,
   coerceQuery,
   parseArgs,
   toolDetail,
@@ -100,13 +99,6 @@ describe("derived prose", () => {
     expect(toolDetail("search_events", JSON.stringify({ count: 1 }))).toBe("1 result");
     expect(toolDetail("get_eta", JSON.stringify({ error: "no route" }))).toBe("failed");
     expect(toolDetail("get_eta", "not json")).toBeUndefined();
-  });
-
-  it("tell a CLI about the MCP tools and the app-only ones", () => {
-    const note = cliToolsNote();
-    for (const c of toolsFor("mcp")) expect(note).toContain(c.name);
-    expect(note).toContain("show_on_map");
-    expect(note).toContain("apply_interests");
   });
 
   it("match the generated skill file on disk", () => {

@@ -177,7 +177,6 @@ export function useAgentChat() {
       const current = () => abortRef.current === ac
 
       const s = useGrapevine.getState()
-      const { chatModel: model, chatEffort: effort } = s
       api
         .agentChat(
           {
@@ -189,10 +188,6 @@ export function useAgentChat() {
               savedEventIds: s.calendar?.synced ?? [],
               signedIn: !!s.user,
             },
-            // Only meaningful for the Claude Code provider; the server drops
-            // them for the others. Omit empties so the CLI keeps its default.
-            ...(model && { model }),
-            ...(effort && { effort }),
           },
           (frame) => {
             if (current()) onFrame(frame)

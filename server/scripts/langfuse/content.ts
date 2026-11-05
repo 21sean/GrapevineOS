@@ -1500,13 +1500,6 @@ export const ERRORS: Failure[] = [
   },
   {
     node: "generation",
-    statusMessage: "CLI provider timed out after 110000ms without a token",
-    rootMessage: "provider timeout, no answer streamed",
-    reply:
-      "That one timed out before I could answer. Try me again, the second attempt is normally fine.",
-  },
-  {
-    node: "generation",
     statusMessage: "idle timeout: no token for 45000ms, aborting generation",
     rootMessage: "generation stalled mid-stream",
     reply: "I stalled halfway through that. Say it again and I will start clean.",

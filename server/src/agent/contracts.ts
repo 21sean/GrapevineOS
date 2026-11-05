@@ -7,7 +7,6 @@
  *   - the external REST API (agent/ext.ts) and the discovery router
  *     (routes/discovery.ts) parse bodies and query strings with these schemas
  *   - the OpenClaw skill file is generated from it (scripts/contracts-gen.ts)
- *     and the CLI providers' tool note is built from it at run time
  *
  * Four things that had drifted between the copies are settled here, once:
  * lngLat is one type on every surface; discovery is dry_run (default true)
@@ -16,9 +15,8 @@
  * the human-in-the-loop story is the same whether the caller is the browser,
  * Claude Desktop, or a curl script.
  *
- * Import-light on purpose: zod and the shared types only, so the generator,
- * the tests, and the CLI prompt builder can load it without booting the
- * database or the graph.
+ * Import-light on purpose: zod and the shared types only, so the generator and
+ * the tests can load it without booting the database or the graph.
  */
 import { z } from "zod";
 import { toolSchemas } from "../llm/generated.js";
@@ -455,36 +453,4 @@ export function coerceQuery(
     else out[key] = value;
   }
   return out;
-}
-
-/**
- * What a CLI provider needs to hear about its toolbox. Built from the table
- * so a tool added or renamed here is described correctly on the next turn.
- */
-export function cliToolsNote(): string {
-  const mcp = toolsFor("mcp").map((c) => c.name);
-  const appOnly = toolsFor("graph")
-    .filter((c) => !c.surfaces.includes("mcp"))
-    .map((c) => c.name);
-  const writes = toolsFor("mcp")
-    .filter((c) => c.effect === "write")
-    .map((c) => c.name);
-  return `Tools in this session: the "grapevine" MCP server is your entire toolbox:
-${mcp.join(", ")}. You have no web search, no shell, and no file access, so
-never claim to have browsed a site directly.
-
-The in-app tools the system prompt mentions (${appOnly.join(", ")}) do NOT
-exist here: never claim to have pinned the map or changed filters. Recommend
-events in text with the [Title](event:id) grammar, use search_events and
-get_event beyond the digest, and get_eta for travel questions.
-
-When the user wants events that are not in the catalog yet ("find more",
-"keep searching", "add events"), call discover_events. It searches the open
-web and verifies each candidate against its source page before writing. It
-dry-runs by default: report what it found, then call it again with
-dry_run:false once the user confirms. Offer schedule_search when they want an
-ongoing watch. update_interests only proposes; show the proposal, and call
-apply_interests with confirmed:true when the user agrees. Every write
-(${writes.join(", ")}) lands on the linked Grapevine account, so make one only
-when the user asks.`;
 }

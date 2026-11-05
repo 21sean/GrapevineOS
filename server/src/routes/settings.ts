@@ -8,7 +8,6 @@ import { invalidateGuardConfig } from "../agent/guardrails.js";
 import { requireAdmin } from "../auth.js";
 import { inboxDomain } from "../inbox.js";
 import { store } from "../store.js";
-import { LLM_PROVIDERS } from "../types.js";
 
 export const settings = Router();
 
@@ -48,11 +47,13 @@ settings.get("/api/settings", async (_req, res) => {
 
 settings.put("/api/settings", requireAdmin, async (req, res) => {
   const { city, center, tz, model, ollamaUrl, chatProvider, extractProvider } = req.body ?? {};
-  if (chatProvider !== undefined && !LLM_PROVIDERS.includes(chatProvider)) {
-    return res.status(400).json({ error: "unknown chatProvider" });
+  // A CLI saved before v0.7.0 still loads, so the page can offer the way back,
+  // but the only value anyone can save now is the local runtime.
+  if (chatProvider !== undefined && chatProvider !== "ollama") {
+    return res.status(400).json({ error: "chatProvider must be ollama, the local runtime" });
   }
-  if (extractProvider !== undefined && !LLM_PROVIDERS.includes(extractProvider)) {
-    return res.status(400).json({ error: "unknown extractProvider" });
+  if (extractProvider !== undefined && extractProvider !== "ollama") {
+    return res.status(400).json({ error: "extractProvider must be ollama, the local runtime" });
   }
   if (tz !== undefined && !validTimeZone(tz)) {
     return res

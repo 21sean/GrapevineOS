@@ -3,8 +3,8 @@
  * Checks a clone for what `npm run dev` needs and prints exactly what is
  * missing: the Node version, the install, the two env files and their
  * required values, the Supabase project and whether the schema reached it,
- * Ollama and its models, and the two ports. Optional pieces (a CLI provider,
- * Langfuse, SearXNG, Docker) are reported but never fail the run.
+ * Ollama and its models, and the two ports. Optional pieces (Langfuse, SearXNG,
+ * Docker) are reported but never fail the run.
  *
  *   npm run doctor
  */
@@ -156,8 +156,9 @@ if (serverEnv && isSet(serverEnv.SUPABASE_URL) && isSet(serverEnv.SUPABASE_SECRE
   }
 }
 
-// --- Ollama, or a CLI provider ---------------------------------------------
-if ((serverEnv?.GRAPEVINE_LLM_RUNTIME || process.env.GRAPEVINE_LLM_RUNTIME) === "vllm") {
+// --- The local runtime: Ollama, or vLLM -------------------------------------
+const onVllm = (serverEnv?.GRAPEVINE_LLM_RUNTIME || process.env.GRAPEVINE_LLM_RUNTIME) === "vllm";
+if (onVllm) {
   const vllmUrl = (serverEnv?.GRAPEVINE_LLM_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
   try {
     const res = await get(`${vllmUrl}/v1/models`);
@@ -168,7 +169,6 @@ if ((serverEnv?.GRAPEVINE_LLM_RUNTIME || process.env.GRAPEVINE_LLM_RUNTIME) === 
   }
 }
 const ollamaUrl = (serverEnv?.OLLAMA_URL || "http://localhost:11434").replace(/\/$/, "");
-const clis = ["claude", "codex", "gemini", "copilot"].filter(onPath);
 try {
   const res = await get(`${ollamaUrl}/api/tags`);
   const body = await res.json();
@@ -183,19 +183,12 @@ try {
     );
   }
 } catch {
-  if (clis.length) {
-    warn(
-      `Ollama not reachable at ${ollamaUrl}; ${clis.join(", ")} on PATH`,
-      "install Ollama for local models, or pick the CLI under Admin > Providers",
-    );
-  } else {
-    fail(
-      `Ollama not reachable at ${ollamaUrl}`,
-      "install Ollama (ollama.com), then: ollama pull qwen3:8b",
-    );
-  }
+  // vLLM serves its own model, so Ollama is optional on that runtime.
+  (onVllm ? warn : fail)(
+    `Ollama not reachable at ${ollamaUrl}`,
+    "install Ollama (ollama.com), then: ollama pull qwen3:8b",
+  );
 }
-if (clis.length) ok(`CLI providers on PATH: ${clis.join(", ")} (Admin > Providers can use them)`);
 
 // --- Ports ------------------------------------------------------------------
 const apiPort = Number(serverEnv?.PORT || 8787);

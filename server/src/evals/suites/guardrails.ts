@@ -247,7 +247,7 @@ export const guardrailsSuite: EvalSuite = {
     {
       id: "output-rail-is-not-the-model-name",
       name: "Output rail catches a leak even when the model name is unknown",
-      note: "The rail must not depend on being told which model is running — the CLI providers never say.",
+      note: "The rail must not depend on being told which model is running.",
       run: () => {
         const { tripped } = streamThrough(
           "I am Qwen, a large language model independently developed by Alibaba Group's Tongyi Lab.",

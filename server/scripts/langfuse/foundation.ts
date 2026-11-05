@@ -9,10 +9,9 @@
  *      provided model names the app emits ("claude", "ollama", "qwen3.6:27b")
  *      match none of the 175 Langfuse-managed price rows. This registers
  *      project-scoped models for the local Ollama names, and reports which
- *      hosted names already auto-match a built-in so the traffic simulator
- *      can pick real ones. Local GPU inference is not billed by anyone; the
- *      prices here are an internal cost-to-serve estimate, and each model
- *      carries that caveat in Langfuse itself.
+ *      hosted names already auto-match a built-in. Local GPU inference is not
+ *      billed by anyone; the prices here are an internal cost-to-serve estimate,
+ *      and each model carries that caveat in Langfuse itself.
  *
  *   2. SCORE CONFIGS. One config per score name anything in this repo emits:
  *      the conversation judge's four, the three rails, the human reply-quality
@@ -162,7 +161,7 @@ const LOCAL_MODELS: LocalModel[] = [
     inputPrice: 3e-7,
     outputPrice: 9e-7,
     tokenizerId: "openai",
-    note: "Open-weight fallback for extraction when the CLI providers are unavailable.",
+    note: "Open-weight fallback for extraction.",
   },
   {
     modelName: "laguna-xs-2.1:latest",
@@ -181,10 +180,7 @@ const LOCAL_MODELS: LocalModel[] = [
   },
 ];
 
-/**
- * Hosted names to probe. The traffic simulator picks its model names from
- * whichever of these auto-match a Langfuse-managed price row.
- */
+/** Hosted names to probe, to report which auto-match a Langfuse-managed price row. */
 const HOSTED_CANDIDATES = [
   "claude-opus-5",
   "claude-sonnet-5",

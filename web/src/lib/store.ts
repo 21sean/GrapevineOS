@@ -3,7 +3,6 @@ import { persist } from "zustand/middleware"
 import type {
   CalendarStatus,
   Category,
-  ChatEffort,
   CityEvent,
   Filters,
   Interests,
@@ -13,7 +12,7 @@ import type {
   Source,
   User,
 } from "./types"
-import { CHAT_EFFORT_LEVELS, DEFAULT_FILTERS, normalizeFilters } from "./types"
+import { DEFAULT_FILTERS, normalizeFilters } from "./types"
 import { DEFAULT_MAP_LAYERS, type MapLayerKey } from "./mapLayers"
 import { localDay, type MapTheme } from "./time"
 import type { PolygonRings } from "./geo"
@@ -96,11 +95,8 @@ export interface GrapevineState {
   // per-event feedback ("going" / "went, great" / "not for me"); server-backed
   // when signed in, this browser otherwise
   reactions: Record<string, Reaction>
-  // "Ask Grapevine" composer: per-turn model and effort overrides for the
-  // Claude Code provider ("" = the CLI's own default) and the unsent draft,
-  // kept so closing the panel does not lose a half-typed message
-  chatModel: string
-  chatEffort: "" | ChatEffort
+  // "Ask Grapevine" composer: the unsent draft, kept so closing the panel does
+  // not lose a half-typed message
   chatDraft: string
 
   // actions
@@ -126,8 +122,6 @@ export interface GrapevineState {
   setSignInOpen: (open: boolean) => void
   setCalendarOpen: (open: boolean) => void
   setWeekOpen: (open: boolean) => void
-  setChatModel: (model: string) => void
-  setChatEffort: (effort: "" | ChatEffort) => void
   setChatDraft: (draft: string) => void
   setReaction: (id: string, reaction: Reaction | null) => void
   setAgentHighlight: (ids: string[], fit?: boolean) => void
@@ -223,8 +217,6 @@ export const useGrapevine = create<GrapevineState>()(
       signInOpen: false,
       calendarOpen: false,
       weekOpen: false,
-      chatModel: "",
-      chatEffort: "",
       chatDraft: "",
       agentHighlight: null,
       searchQuery: "",
@@ -353,8 +345,6 @@ export const useGrapevine = create<GrapevineState>()(
       setCalendarOpen: (calendarOpen) => set({ calendarOpen }),
 
       setWeekOpen: (weekOpen) => set({ weekOpen }),
-      setChatModel: (chatModel) => set({ chatModel }),
-      setChatEffort: (chatEffort) => set({ chatEffort }),
       setChatDraft: (chatDraft) => set({ chatDraft }),
 
       setReaction(id, reaction) {
@@ -509,7 +499,7 @@ export const useGrapevine = create<GrapevineState>()(
     }),
     {
       name: "grapevine-prefs",
-      version: 6,
+      version: 7,
       partialize: (s) => ({
         filters: s.filters,
         interests: s.interests,
@@ -526,8 +516,6 @@ export const useGrapevine = create<GrapevineState>()(
         trafficOn: s.trafficOn,
         mapLayers: s.mapLayers,
         mapTheme: s.mapTheme,
-        chatModel: s.chatModel,
-        chatEffort: s.chatEffort,
         chatDraft: s.chatDraft,
       }),
       // v0 persisted a `trafficOn` toggle; that stale value is dropped so the
@@ -539,8 +527,9 @@ export const useGrapevine = create<GrapevineState>()(
       // v5 added mapLayers (fill any missing basemap toggle with its default).
       // mapTheme needs no migration: it's a scalar, so an older payload simply
       // leaves it absent and persist's shallow merge keeps the "auto" default.
-      // v6 folded the composer prefs (chatModel, chatEffort, chatDraft) in from
-      // their own localStorage key; an existing value is carried over once.
+      // v6 folded the composer draft in from its own localStorage key; an
+      // existing value is carried over once.
+      // v7 dropped chatModel and chatEffort, the Claude Code composer overrides.
       migrate: (persisted, version) => {
         const p = persisted as Record<string, unknown> | undefined
         if (version < 1 && p && typeof p === "object") {
@@ -561,18 +550,16 @@ export const useGrapevine = create<GrapevineState>()(
             const raw = localStorage.getItem("grapevine.chatPrefs.v1")
             if (raw) {
               const old = JSON.parse(raw) as Record<string, unknown>
-              if (typeof old.model === "string") p.chatModel = old.model
-              if (
-                typeof old.effort === "string" &&
-                (CHAT_EFFORT_LEVELS as readonly string[]).includes(old.effort)
-              )
-                p.chatEffort = old.effort
               if (typeof old.draft === "string") p.chatDraft = old.draft
               localStorage.removeItem("grapevine.chatPrefs.v1")
             }
           } catch {
             /* nothing to carry over */
           }
+        }
+        if (version < 7 && p && typeof p === "object") {
+          delete p.chatModel
+          delete p.chatEffort
         }
         return persisted as GrapevineState
       },

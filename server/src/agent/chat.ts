@@ -23,7 +23,7 @@
  *   action     a map highlight, filter change, proposal, or refresh
  *   notice     a degraded-mode explanation the person should read
  *   guardrail  a rail acted on this turn (machine-readable)
- *   usage      token and cost telemetry, when the provider reports it
+ *   usage      token and timing telemetry, when the runtime reports it
  *   done       the thread id to continue with, and this request's id
  */
 import { Router } from "express";
@@ -91,9 +91,6 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
     threadId?: string;
     message?: string;
     context?: ChatContext;
-    /** Claude Code CLI overrides picked from the chat composer. */
-    model?: string;
-    effort?: string;
   };
   let threadId =
     typeof body.threadId === "string" && /^[\w-]{8,64}$/.test(body.threadId)
@@ -117,8 +114,7 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
 
     /** Persist the finished exchange for signed-in users (fire-and-forget). */
     const model = llmModel(settings.model);
-    const providerLabel =
-      settings.chatProvider === "ollama" ? model || llmRuntime() : settings.chatProvider;
+    const providerLabel = model || llmRuntime();
     const persist = (assistantText: string) => {
       if (!user || !assistantText.trim()) return;
       store
@@ -135,46 +131,40 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
       return res.end();
     }
 
-    // Retain settings compatibility; the graph rejects hosted providers before
-    // generation because this profile requires validated local inference.
-    const provider =
-      settings.chatProvider && settings.chatProvider !== "ollama" ? settings.chatProvider : null;
-
-    let baseUrl = "http://localhost:11434";
-    let toolsOk = false;
-    if (provider) {
+    // A CLI saved before v0.7.0 still loads from settings, but it cannot answer:
+    // this profile requires validated local inference.
+    if (settings.chatProvider !== "ollama") {
       send({
         type: "error",
-        message: "Structured chat requires a local runtime. Select Ollama in Admin Providers.",
+        message: "Chat runs only on the local runtime. Switch back to it in Admin → Providers.",
       });
       return done();
-    } else {
-      if (!model) {
-        send({
-          type: "notice",
-          code: "no-model",
-          message: "No model selected. Pick one in Admin → Models.",
-        });
-        return done();
-      }
-      baseUrl = await llmBase();
-      if ((await runtimeVersion(baseUrl)) === null) {
-        send({
-          type: "notice",
-          code: "ollama-down",
-          message: `${runtimeLabel()} isn't answering at ${baseUrl}. Start it, then try again.`,
-        });
-        return done();
-      }
-      toolsOk = await runtimeSupportsTools(model);
-      if (!toolsOk) {
-        send({
-          type: "notice",
-          code: "no-tools",
-          message:
-            "This model can't use tools, so answers come from the event digest only. Pick a tools-capable model (e.g. qwen3) in Admin → Models for ETAs and calendar saves.",
-        });
-      }
+    }
+    if (!model) {
+      send({
+        type: "notice",
+        code: "no-model",
+        message: "No model selected. Pick one in Admin → Models.",
+      });
+      return done();
+    }
+    const baseUrl = await llmBase();
+    if ((await runtimeVersion(baseUrl)) === null) {
+      send({
+        type: "notice",
+        code: "ollama-down",
+        message: `${runtimeLabel()} isn't answering at ${baseUrl}. Start it, then try again.`,
+      });
+      return done();
+    }
+    const toolsOk = await runtimeSupportsTools(model);
+    if (!toolsOk) {
+      send({
+        type: "notice",
+        code: "no-tools",
+        message:
+          "This model can't use tools, so answers come from the event digest only. Pick a tools-capable model (e.g. qwen3) in Admin → Models for ETAs and calendar saves.",
+      });
     }
 
     // sessionUser comes from the verified Supabase JWT, never from the wire:
@@ -192,10 +182,10 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
       // Stamped onto every rail decision this turn records, so the panel can
       // slice the distribution by surface and by provider.
       telemetry: {
-        surface: provider ? "chat-cli" : "chat",
+        surface: "chat",
         threadId,
         userId: user?.id,
-        provider: provider ?? model,
+        provider: model,
       },
     });
 

@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/popover"
 import { Spinner } from "@/components/ui/spinner"
 import { api } from "@/lib/api"
-import type { AgentCapabilities } from "@/lib/types"
+import { CLI_PROVIDER_NAMES, type AgentCapabilities } from "@/lib/types"
 
 /**
  * "What can I ask?" A popover off the composer that says who is answering,
@@ -23,14 +23,6 @@ const EFFECT_LABEL: Record<(typeof EFFECT_ORDER)[number], string> = {
   ui: "Changes your map",
   propose: "Asks you first",
   write: "Writes when you say so",
-}
-
-const PROVIDER_LABEL: Record<AgentCapabilities["provider"], string> = {
-  ollama: "the local model",
-  claude: "Claude Code",
-  codex: "Codex CLI",
-  gemini: "Gemini CLI",
-  copilot: "Copilot CLI",
 }
 
 /** First sentence of a tool description, for a one-line row. */
@@ -57,7 +49,7 @@ export function CapabilitiesPopover() {
       ? caps.model
         ? `${caps.model} on this machine`
         : "no model selected yet"
-      : `${PROVIDER_LABEL[caps.provider]} (its own default model)`
+      : "chat is off"
     : ""
   const rails = caps
     ? caps.rails.classifier === "ready"
@@ -95,9 +87,11 @@ export function CapabilitiesPopover() {
               </div>
               <div className="mt-1 font-medium">{who}</div>
               <div className="text-xs text-muted-foreground">
-                {caps.tools
-                  ? `${caps.toolbox.length} tools · ${rails}`
-                  : `answers from the event digest only, no tools · ${rails}`}
+                {caps.provider !== "ollama"
+                  ? `It's still set to ${CLI_PROVIDER_NAMES[caps.provider]}, which can't answer here. An admin can switch back in Admin → Providers.`
+                  : caps.tools
+                    ? `${caps.toolbox.length} tools · ${rails}`
+                    : `answers from the event digest only, no tools · ${rails}`}
               </div>
             </div>
             {EFFECT_ORDER.map((effect) => {

@@ -116,7 +116,7 @@ import type { StructuredToolInterface } from "@langchain/core/tools";
 import { z } from "zod";
 import { llmPolicy } from "../budget.js";
 import { SupabaseSaver } from "../checkpointer.js";
-import type { ChatEffort, CliProviderId } from "../types.js";
+import type { CliProviderId } from "../types.js";
 import { promptSections, type AgentCtx, type ChatContext } from "./context.js";
 import { toolDetail, toolLabel, toolsFor, presentArgs, type AnyContract } from "./contracts.js";
 import {
@@ -280,9 +280,6 @@ export interface GraphDeps {
   effects?: ToolEffects;
   /** Hosted generation is disabled: setting this makes buildAgentGraph throw. */
   provider?: CliProviderId;
-  /** Left from the hosted CLI path; nothing reads these. */
-  cliModel?: string;
-  cliEffort?: ChatEffort;
   /**
    * Stamped onto every telemetry row this turn writes. `record: false` opts
    * the whole turn out, which the red-team simulation uses so its synthetic
@@ -975,9 +972,8 @@ export function buildAgentGraph(deps: GraphDeps) {
     return replacements.length ? { messages: replacements } : {};
   }
 
-  // The local runtime's idle timeout (budget.ts). A provider never gets this
-  // far: it threw at the top of this function.
-  const policy = llmPolicy(deps.provider ?? "ollama");
+  // The local runtime's idle timeout (budget.ts).
+  const policy = llmPolicy();
   const modelNodePolicy = { timeout: { idleTimeout: policy.idleTimeoutMs } };
 
   return (

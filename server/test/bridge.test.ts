@@ -9,26 +9,34 @@ import type { AgentFrame } from "../src/types.js";
  */
 
 const frames: AgentFrame[] = [];
-const seen = { signal: null as AbortSignal | null, appended: [] as unknown[] };
+const seen = {
+  signal: null as AbortSignal | null,
+  appended: [] as unknown[],
+  graphs: 0,
+  chatProvider: "ollama",
+};
 
 vi.mock("../src/agent/graph.js", () => ({
-  buildAgentGraph: () => ({
-    stream: async (_input: unknown, opts: { signal: AbortSignal }) => {
-      seen.signal = opts.signal;
-      return (async function* () {
-        for (const f of frames) {
-          if (f.type === "status" && f.label === "wait-for-abort") {
-            // Hold the stream open until the client goes away.
-            await new Promise<void>((resolve) =>
-              opts.signal.addEventListener("abort", () => resolve(), { once: true }),
-            );
-            return;
+  buildAgentGraph: () => {
+    seen.graphs++;
+    return {
+      stream: async (_input: unknown, opts: { signal: AbortSignal }) => {
+        seen.signal = opts.signal;
+        return (async function* () {
+          for (const f of frames) {
+            if (f.type === "status" && f.label === "wait-for-abort") {
+              // Hold the stream open until the client goes away.
+              await new Promise<void>((resolve) =>
+                opts.signal.addEventListener("abort", () => resolve(), { once: true }),
+              );
+              return;
+            }
+            yield f;
           }
-          yield f;
-        }
-      })();
-    },
-  }),
+        })();
+      },
+    };
+  },
   hasCheckpoint: async () => false,
   forgetThread: async () => {},
   turnInput: () => ({}),
@@ -51,7 +59,7 @@ vi.mock("../src/store.js", () => ({
       tz: "UTC",
       model: "test-model",
       ollamaUrl: "",
-      chatProvider: "ollama",
+      chatProvider: seen.chatProvider,
       extractProvider: "ollama",
       guardMode: "on",
       guardThreshold: 0.8,
@@ -104,6 +112,8 @@ beforeEach(() => {
   frames.length = 0;
   seen.signal = null;
   seen.appended = [];
+  seen.graphs = 0;
+  seen.chatProvider = "ollama";
 });
 
 const realFetch = globalThis.fetch;
@@ -127,6 +137,20 @@ async function chatLines(
 }
 
 describe("POST /api/agent/chat", () => {
+  it("refuses a CLI saved in settings before anything can generate", async () => {
+    seen.chatProvider = "claude";
+    frames.push({ type: "delta", text: "never sent" });
+    const { status, lines } = await chatLines({ threadId: "thread-abcdefgh", message: "hi" });
+    expect(status).toBe(200);
+    expect(lines.map((f) => f.type)).toEqual(["error", "done"]);
+    const refusal = lines[0];
+    expect(refusal.type === "error" && refusal.message).toBe(
+      "Chat runs only on the local runtime. Switch back to it in Admin → Providers.",
+    );
+    expect(seen.graphs).toBe(0);
+    expect(seen.appended).toEqual([]);
+  });
+
   it("relays the graph's frames in order and ends with done carrying the ids", async () => {
     frames.push({ type: "delta", text: "Hello" }, { type: "delta", text: " there" });
     const { status, lines, requestId } = await chatLines({

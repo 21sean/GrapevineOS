@@ -192,8 +192,10 @@ Hosted CLI generation is disabled. `server/src/agent/chat.ts` answers a turn wit
 an error frame before generation when `chatProvider` is anything but `ollama`,
 `buildAgentGraph` throws `unsupported_provider` if it is handed a provider anyway,
 and `generateJSON` in `server/src/llm.ts` refuses extraction the same way.
-`server/src/providers.ts` keeps the CLI metadata and detection only for settings
-compatibility.
+`PUT /api/settings` accepts only `ollama` for either provider. `shared/types.ts`
+keeps the CLI ids and names only so that a value saved before v0.7.0 still loads:
+Admin → Providers names it and has a button that switches back, and the capabilities
+endpoint reports it with no tools.
 
 A model that supports tool calling gets the graph toolbox, and one that does not
 answers from the event digest with a notice saying so. Claude Code, Claude Desktop
@@ -361,7 +363,6 @@ server/src/agent/
   telemetry.ts    Langfuse spans and scores
 llm/grapevine_llm/           the contract gate: Pydantic contracts, validation, repair
 server/src/llm/gateway.ts    generateTyped, the Node side of the gate
-server/src/providers.ts      CLI metadata and detection, for settings compatibility
 server/src/checkpointer.ts   SupabaseSaver
 server/src/mcp.ts            the FastMCP server over the "mcp" contracts
 server/src/routes/capabilities.ts   GET /api/agent/capabilities

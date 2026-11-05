@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
-import { MAX_CHUNKS, charsPerChunk } from "./budget.js";
+import { CHARS_PER_CHUNK, MAX_CHUNKS } from "./budget.js";
 import { chunkDocument } from "./chunk.js";
-import { activeProvider, generateJSON } from "./llm.js";
+import { generateJSON } from "./llm.js";
 import { geocode } from "./mapbox.js";
 import { normalizeRRule } from "./recurrence.js";
 import { store } from "./store.js";
@@ -114,8 +114,7 @@ export async function extractEvents(opts: {
   // Cover the whole document instead of truncating it. Everything past the
   // model's window used to be dropped in silence, which on a long newsletter
   // meant the back half of the week simply never existed.
-  const budget = charsPerChunk(await activeProvider(opts.model));
-  const { chunks, dropped } = chunkDocument(opts.text, budget);
+  const { chunks, dropped } = chunkDocument(opts.text, CHARS_PER_CHUNK);
   if (dropped > 0) throw new Error(`Document exceeds the ${MAX_CHUNKS}-chunk extraction budget`);
   const items: Output<"extraction">["events"] = [];
   for (const chunk of chunks) {

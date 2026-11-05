@@ -70,25 +70,26 @@ export type Reaction = "going" | "went" | "not_for_me";
 export const REACTIONS: Reaction[] = ["going", "went", "not_for_me"];
 
 /**
- * An LLM engine: the local Ollama model or a subscription-authed CLI. This
- * tuple is the single provider registry: the CLI subset, settings coercion,
- * and the web client's provider pickers all derive from it.
+ * What a saved chat or extraction provider can hold. "ollama" means the local
+ * runtime, Ollama or vLLM. The rest are hosted CLIs that could be selected
+ * before v0.7.0: a saved row may still name one, so it loads and the app can
+ * say which, but nothing generates through it and nothing new can select it.
  */
 const LLM_PROVIDER_IDS = ["ollama", "claude", "codex", "gemini", "copilot"] as const;
 
 export type LlmProviderId = (typeof LLM_PROVIDER_IDS)[number];
 
-export const LLM_PROVIDERS: LlmProviderId[] = [...LLM_PROVIDER_IDS];
-
-/** The subscription-authed CLI engines: every provider except local Ollama. */
 export type CliProviderId = Exclude<LlmProviderId, "ollama">;
 
-export const CLI_PROVIDER_IDS: CliProviderId[] = LLM_PROVIDERS.filter(
-  (p): p is CliProviderId => p !== "ollama",
-);
+export const CLI_PROVIDER_NAMES: Record<CliProviderId, string> = {
+  claude: "Claude Code",
+  codex: "Codex CLI",
+  gemini: "Gemini CLI",
+  copilot: "Copilot CLI",
+};
 
 export function isLlmProviderId(v: unknown): v is LlmProviderId {
-  return typeof v === "string" && (LLM_PROVIDERS as string[]).includes(v);
+  return typeof v === "string" && (LLM_PROVIDER_IDS as readonly string[]).includes(v);
 }
 
 export interface Settings {
@@ -97,9 +98,9 @@ export interface Settings {
   tz: string;
   model: string;
   ollamaUrl: string;
-  /** Who answers chat: the local Ollama agent or a subscription-authed CLI. */
+  /** Who answers chat. Anything but "ollama" is a saved CLI, and chat refuses it. */
   chatProvider: LlmProviderId;
-  /** Who runs newsletter extraction and buzz ratings (default: ollama). */
+  /** Who runs extraction and buzz ratings. Anything but "ollama" is refused the same way. */
   extractProvider: LlmProviderId;
   /** What the injection rails do with a message at or over the threshold. */
   guardMode: GuardrailMode;
@@ -174,7 +175,7 @@ export interface DiscoverySearch {
 export interface ChatThreadMeta {
   id: string; // the LangGraph thread id the client minted
   title: string; // first user message, truncated
-  provider: string; // who answered: ollama model path or a CLI provider
+  provider: string; // who answered: the local model, or a CLI id on a thread from before v0.7.0
   updatedAt: string; // ISO 8601, last exchange
 }
 
@@ -186,30 +187,14 @@ export interface ChatMessage {
 }
 
 /**
- * Reasoning-effort tiers the Claude Code CLI accepts via `--effort` (maps to
- * Anthropic's internal thinking-budget). Only the `claude` chat provider
- * honours this; the others ignore it.
- */
-export const CHAT_EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
-export type ChatEffort = (typeof CHAT_EFFORT_LEVELS)[number];
-
-export function isChatEffort(v: unknown): v is ChatEffort {
-  return typeof v === "string" && (CHAT_EFFORT_LEVELS as readonly string[]).includes(v);
-}
-
-/**
- * Per-turn token + cost telemetry from a CLI provider. Currently only Claude
- * Code reports it (the `usage` block + `total_cost_usd` in its
- * `--output-format json` envelope); the other CLIs and the local Ollama agent
- * leave it undefined. Surfaced under the assistant reply when present.
+ * Per-turn token and timing telemetry from the local runtime. Surfaced under
+ * the assistant reply when present.
  */
 export interface ChatUsage {
   inputTokens: number;
   outputTokens: number;
   cacheReadInputTokens?: number;
-  cacheCreationInputTokens?: number;
-  costUSD?: number;
-  /** The model the CLI actually billed (its resolved id, not our request). */
+  /** The model that generated this turn. */
   model?: string;
   /** Request sent to the runtime until its first generated token. */
   modelTtftMs?: number;
@@ -427,8 +412,7 @@ export const GUARDRAIL_RAILS: GuardrailRail[] = ["input", "content", "output"];
  * so a new one records as itself instead of failing an insert; an unfamiliar
  * surface showing up in the panel is the correct way to learn about it.
  */
-export type GuardrailSurface =
-  "chat" | "chat-cli" | "discovery" | "eval" | "warmup" | "unknown" | (string & {});
+export type GuardrailSurface = "chat" | "discovery" | "eval" | "warmup" | "unknown" | (string & {});
 
 /** Operator triage. Labelled rows are the calibration set the sweep scores. */
 export type GuardrailLabel = "correct" | "false_positive" | "false_negative";
@@ -781,27 +765,16 @@ export interface InboxEmail {
   error?: string;
 }
 
-/** A subscription-authed CLI the server can route chat or extraction through. */
-export interface CliProviderInfo {
-  id: CliProviderId;
+/** GET /api/runtime: the local runtime chat and extraction generate on. */
+export interface LocalRuntimeStatus {
+  id: "ollama" | "vllm";
+  /** "Ollama" or "vLLM". */
   name: string;
-  vendor: string;
-  /** models.dev logo id (served via /api/logo/:id) */
-  logo: string;
-  bin: string;
-  installHint: string;
-  /** Command(s) that set up key-less auth. */
-  loginHint: string;
-  /** What account the login uses. */
-  loginNote: string;
-}
-
-/** One row from GET /api/providers: a locally installed, OAuth-authed CLI. */
-export interface CliProviderStatus extends CliProviderInfo {
-  installed: boolean;
+  url: string;
+  /** Null when the runtime does not answer. */
   version: string | null;
-  authed: boolean;
-  authKind: "subscription" | "api-key" | null;
+  /** The model it will generate with; empty when none is picked yet. */
+  model: string;
 }
 
 export interface McpInfo {
@@ -909,13 +882,13 @@ export interface GcalEventPatch {
 // ---------------------------------------------------------------------------
 
 export interface AgentCapabilities {
-  /** Who answers: the local Ollama model or a subscription CLI. */
+  /** The saved chat provider. Anything but "ollama" is a CLI, and chat refuses it. */
   provider: LlmProviderId;
-  /** The Ollama tag when provider is ollama; empty for a CLI, which uses its own default. */
+  /** The local model when provider is ollama; empty for a saved CLI. */
   model: string;
   /** Whether the answering model can call tools at all. */
   tools: boolean;
-  /** The toolbox that provider gets, in the order the agent sees it. */
+  /** The toolbox that model gets, in the order the agent sees it. */
   toolbox: { name: string; description: string; effect: "read" | "ui" | "propose" | "write" }[];
   rails: { mode: GuardrailMode; classifier: "ready" | "failing-open" | "off" };
   /** Where an MCP client (Claude Desktop, claude.ai) connects to the same tools. */
@@ -968,7 +941,7 @@ export type AgentFrame =
   /** A tool call started or finished; `detail` is a short result summary. */
   | { type: "tool"; name: string; label: string; state: "start" | "done"; detail?: string }
   | { type: "action"; action: AgentAction }
-  /** A degraded-mode explanation the person should read (rail blocked, CLI missing, ...). */
+  /** A degraded-mode explanation the person should read (rail blocked, runtime down, ...). */
   | { type: "notice"; code: string; message: string }
   /** A rail acted on this turn, machine-readable; the notice carries the sentence. */
   | {
