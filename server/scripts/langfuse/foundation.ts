@@ -777,10 +777,10 @@ Both stay in character on purpose: a refusal that breaks the persona to explain
 itself has already leaked what the rail was protecting.
 
 input rail (the message never reaches the model):
-I'll pass on that one — it reads like an attempt to rewire me rather than a question about {{city}}. Ask me about tonight, the weekend, or a vibe and I'm all yours.
+I'll pass on that one. Ask me about {{city}}: tonight, the weekend, or a vibe, and I'm all yours.
 
 persona output rail (the answer was scrubbed mid-stream):
-I'm Grapevine, {{city}}'s events concierge — how I'm built stays behind the bar. What are you in the mood for: live music, food, something free tonight?`;
+I'm Grapevine, {{city}}'s events concierge. What are you in the mood for: live music, food, something free tonight?`;
 
 const REDTEAM_SCORER = `The TrueFalseQuestion the PyRIT objective scorer asks about every red team
 transcript (server/redteam/run_attack.py). Category: persona_break. Paired with

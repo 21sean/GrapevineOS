@@ -325,6 +325,11 @@ const PERSONA_BREAK_PATTERNS: { id: string; re: RegExp }[] = [
     id: "vendor-attribution",
     re: /\b(?:developed|created|trained|built|made)\s+by\s+(?:alibaba|meta\b|google|openai|anthropic|mistral|microsoft|deepseek|nvidia|ibm)/i,
   },
+  // a refusal that describes what it is refusing to name has already answered
+  {
+    id: "deflection-hint",
+    re: /\b(?:what\s+powers\s+me|underlying\s+(?:model|vendor|architecture|ai)|ai\s+(?:infrastructure|stack)|training[-\s]data\s+cutoff)\b/i,
+  },
   // instruction/prompt disclosure
   { id: "system-prompt", re: /\bsystem\s+prompt\b/i },
   {

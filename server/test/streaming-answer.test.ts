@@ -302,7 +302,7 @@ describe("the answer as it generates", () => {
       throw new LlmGateError("validation_exhausted", "Model output did not satisfy the contract");
     });
     const frames = await turn();
-    expect(shownText(frames)).toContain("behind the bar");
+    expect(shownText(frames)).toContain("in the mood for");
     expect(frames.filter((f) => f.type === "replace")).toHaveLength(1);
   });
 
