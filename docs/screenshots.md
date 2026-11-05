@@ -54,3 +54,10 @@ states, loading indicators, and private account information. Keep the scene and
 settings consistent across desktop and phone.
 
 Map rendering: © Mapbox · © OpenStreetMap contributors.
+
+## Diagrams
+
+`docs/images/ask-grapevine.png` and `docs/images/guardrails.png` are exported at 2x from
+the frames of the same names in Figma file `DblwYeGQX3odOWAxeJCipU`. Change the frame when
+the agent graph or a guardrail changes, then export it again, so the guides and the
+pictures keep describing the same code.

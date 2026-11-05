@@ -5,6 +5,9 @@ are listed on [GitHub](https://github.com/21sean/GrapevineOS/releases).
 
 ## Unreleased
 
+- Redraw the agent and guardrail diagrams with the contract gate and write gate and without
+  the hosted CLI path, and rewrite the guides to match: chat and extraction generate only
+  on the local runtime, and the model nodes have an idle timeout but no retry policy.
 - Fix tool use on Ollama. Instructor sent an empty assistant turn as an empty list and
   Ollama answered 400, so since v0.7.0 every chat turn that used a tool failed on its
   second generation. The live quality gate now runs a whole tool round and blocks merges.
