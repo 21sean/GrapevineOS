@@ -51,6 +51,9 @@ jobs:
   model-quality:
     # Runner holds only local public models. Outside contributors require approval.
     # Never use pull_request_target to execute a contributor's checkout.
+    # Main requires strict, up-to-date PR checks, so a merged tree has already passed
+    # this job. Rerunning it on the push only collides with other work on this GPU.
+    if: github.event_name != 'push'
     runs-on: [self-hosted, Windows, X64, grapevine-llm]
     timeout-minutes: 30
     env:
