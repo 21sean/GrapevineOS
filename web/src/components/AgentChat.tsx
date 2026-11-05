@@ -35,7 +35,11 @@ import {
 import { CapabilitiesPopover } from "@/components/chat/Capabilities"
 import { EventChip } from "@/components/chat/EventChip"
 import { ModelEffortPicker } from "@/components/chat/ModelEffortPicker"
-import { CalendarCard, InterestsCard } from "@/components/chat/ProposalCards"
+import {
+  CalendarCard,
+  InterestsCard,
+  RarityCard,
+} from "@/components/chat/ProposalCards"
 import { WatchCard } from "@/components/chat/WatchCard"
 import { EVENT_LINK_RE, RichText } from "@/components/chat/RichText"
 import { ThreadHistory } from "@/components/chat/ThreadHistory"
@@ -559,6 +563,12 @@ function Message({
             proposal={p}
             onState={(s) => chat.setProposalState(itemIdx, i, s)}
           />
+        ) : p.kind === "rarity" ? (
+          <RarityCard
+            key={i}
+            proposal={p}
+            onState={(s) => chat.setProposalState(itemIdx, i, s)}
+          />
         ) : p.kind === "watch" ? (
           <WatchCard
             key={i}
@@ -616,11 +626,16 @@ function UsageLine({ usage }: { usage: ChatUsage }) {
   const cached = usage.cacheReadInputTokens ?? 0
   return (
     <Hint
-      label={
+      label={[
         cached
-          ? `This turn read ${fmtTokens(usage.inputTokens)} input tokens, ${fmtTokens(cached)} of them from cache`
-          : "This turn's token usage"
-      }
+          ? `This turn read ${fmtTokens(usage.inputTokens)} input tokens, ${fmtTokens(cached)} of them from cache.`
+          : "This turn's token usage.",
+        usage.visibleTtftMs
+          ? `First words after ${(usage.visibleTtftMs / 1000).toFixed(1)}s.`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
       {/* tabIndex so the explanation is reachable without a pointer; this is
           the only place the cache split is written down. */}

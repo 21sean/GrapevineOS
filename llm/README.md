@@ -8,8 +8,11 @@ application code. Generated Zod schemas check the Node boundary again.
 
 Defaults are three total attempts, one 120-second deadline, temperature 0, seed
 42, and 16,384 context tokens. Repairs receive bounded validation errors. Failure
-returns a typed error with no partial output. Agent text is released after the
-whole answer validates, so token-by-token display is intentionally unavailable.
+returns a typed error with no partial output. One thing leaves the gate early: the
+agent's answer text streams to the person as it generates, as `StreamFrame` display
+text, and the complete document still validates at the end. If an attempt fails, the
+worker says so and the app takes back what it showed. Tool calls, citations and every
+other task arrive only in the validated result, so nothing acts on unvalidated output.
 Schema conformance does not establish factual accuracy; evidence checks and evals
 cover that separately.
 
@@ -170,6 +173,11 @@ exhaustion, injection, and empty evidence. Fifteen also run on the real model.
 Copy a case, give it a unique matching request ID, and add exact field checks.
 `responses` drives deterministic replay, not the live run. Set `live: true` for
 model cases and add an explicit `rubric` only for subjective criteria.
+
+The live run also drives one whole tool round through the real graph, gate and model:
+the model asks for a tool, the result goes back, and the answer has to use it. Golden
+cases are single generations and cannot see that path, and on 2026-11-04 it turned out
+every tool turn had been failing since v0.7.0 with all of them green.
 
 Deterministic failures stop the run before judging. DeepEval applies local typed
 judges with explicit score anchors. RAG answers additionally receive groundedness

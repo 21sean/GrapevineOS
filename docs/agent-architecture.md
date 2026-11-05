@@ -37,8 +37,11 @@ START → input_rail ─ blocked ───────────────�
   messages) into a running summary, at most once every 8 turns. It is best
   effort: any failure skips the fold and the turn proceeds.
 - `agent` calls the model with the toolbox bound. The system prompt (the event
-  digest, the clock, the user's interests) is rebuilt every request and never
-  persisted, so state holds only the conversation.
+  digest, the user's interests, the clock) is rebuilt every request and never
+  persisted, so state holds only the conversation. It is ordered by how often each
+  part changes, so a runtime can reuse the prefix, and `modelPrompt` keeps the whole
+  thing inside the context: on a real catalog the old prompt ran about 39,600 tokens
+  against a 16,384 context, and the runtime silently dropped 79% of it.
 - `tools` runs the model's tool calls and streams start and done frames to the
   browser; UI tools also emit action frames from inside the tool.
 - `content_rail` scans the untrusted parts of those tool results (web pages,
@@ -113,16 +116,57 @@ The classifier rails fail open on purpose: a missing download or a runtime
 error logs once and chat continues unscreened, and `GET
 /api/agent/capabilities` reports the classifier as `failing-open` so the
 state is never invisible. The persona rail is not a node. Every model call the
-graph makes streams through it, a trip aborts the model mid-stream, and the
-refusal that replaces the answer is what the graph records. Every consumer of
-the graph (the chat bridge, the red-team bridge, a test) therefore gets the
+graph makes streams through it: a trip replaces what was shown at once, drops
+the rest of the stream, and the refusal is what the graph records. Every consumer
+of the graph (the chat bridge, the red-team bridge, a test) therefore gets the
 same output rail without applying it by hand.
+
+## Streaming and retraction
+
+The answer reaches the person as it generates. The gate runs the model with its
+JSON Schema constraint, pulls the decoded `answer` field out of the partial JSON,
+and sends it as display text; the persona rail holds back a short window of it, so
+a leak split across tokens never leaves in full. The complete document then goes
+through the same validation as before. What can happen next:
+
+| Outcome                     | What the person sees                                                  | What is recorded   |
+| --------------------------- | --------------------------------------------------------------------- | ------------------ |
+| The answer validates        | The text they already read                                            | The validated text |
+| An attempt fails, repair ok | A `replace` frame clears the text and the repair streams              | The repaired text  |
+| Every attempt fails         | A `replace` frame swaps the text for the in-character fallback        | The fallback       |
+| The persona rail trips      | A `replace` frame swaps the text for the refusal; the rest is dropped | The refusal        |
+| The runtime dies            | The text is withdrawn, then an error frame                            | Nothing            |
+| The client hangs up         | Nobody is left to tell; the generation stops                          | Nothing            |
+
+Only prose takes this path. Tool calls, citations, extraction, discovery and every
+other task arrive only in the validated result, so nothing acts on unvalidated output
+and a retraction only ever concerns words on a screen.
 
 Every rail decision is recorded in `guardrail_scans` and shown in Admin →
 Monitoring. The blocking threshold is 0.8 and stays there: the measured score
 distribution is bimodal with a dead band between roughly 0.06 and 0.6, so the
 threshold is not a lever worth tuning. Coverage is the lever, and it belongs
 to the persona rail and the judged suites.
+
+## Who can ask for a write
+
+The model reads text from strangers: web pages, search snippets, and event listings
+that arrive from newsletters. Prompts tell it to treat that as data, and a label on
+every tool result says so, but neither is a guarantee. So the decision does not rest
+with the model. `server/src/agent/write-gate.ts` checks a write against what the person
+typed this turn, the one input a stranger's page cannot touch, and a call that fails
+becomes the card the person would have confirmed.
+
+| Tool              | When the model calls it, what happens                                                                                                                      |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `set_rarity`      | Always a card. Rarity is shared catalog data, and confirming it is an admin write.                                                                         |
+| `save_calendar`   | Saves the events the person named, or the ones the last reply offered when they answer it ("yes, book those"). Everything else on the call becomes a card. |
+| `discover_events` | `dry_run: false` commits only when the person asked to add events. Otherwise it stays a dry run, and the model is told nothing was written.                |
+
+The check is deterministic wording rules, so it can be read and tested without a model,
+and it can be wrong in the safe direction: a phrasing it does not recognize costs a card,
+never a silent write. It covers the chat graph. MCP and REST callers are their own
+principals and keep their direct `set_rarity`.
 
 ## One graph, every provider
 
@@ -151,13 +195,13 @@ added on one side is a compile error on the other until it is handled.
 | Frame       | Carries                                                      |
 | ----------- | ------------------------------------------------------------ |
 | `status`    | A label while nothing streams yet.                           |
-| `delta`     | Answer text, appended in order.                              |
-| `replace`   | The persona rail replaced the partial answer with this text. |
+| `delta`     | Answer text as it generates, provisional until it validates. |
+| `replace`   | The partial answer was taken back; this text replaces it.    |
 | `tool`      | A tool call started or finished, with a label and a detail.  |
 | `action`    | Something for the browser to do or propose (below).          |
 | `notice`    | A degraded-mode sentence the person should read.             |
 | `guardrail` | A rail acted, machine-readable: which rail, blocked, score.  |
-| `usage`     | Token and cost telemetry when the provider reports it.       |
+| `usage`     | Token counts, first-token times and time per output token.   |
 | `done`      | The turn ended; carries the thread id and the trace id.      |
 | `error`     | The turn failed.                                             |
 
@@ -169,7 +213,8 @@ map, applied with an undo toast), `proposeCalendar`, `proposeWatch` and
 The bridge in `server/src/agent/chat.ts` translates `graph.stream()` into
 these frames, persists the finished answer to `chat_messages`, and aborts the
 run when the client disconnects. A turn the input rail refused is never
-persisted; a persona replacement is persisted as the replacement.
+persisted; a replacement is persisted as the replacement, and a turn the client
+abandoned is not persisted at all.
 
 ## The contract module
 
@@ -222,16 +267,18 @@ contract({
 
 ## The eval ladder
 
-| Tier                | Needs             | Runs                                            | Command                                       |
-| ------------------- | ----------------- | ----------------------------------------------- | --------------------------------------------- |
-| Unit tests          | nothing           | every push (CI)                                 | `npm test`                                    |
-| Offline evals       | nothing           | every push (CI), report uploaded as an artifact | `npm run evals -- --suite personas ...`       |
-| Contract check      | nothing           | every push (CI)                                 | `npm run contracts:check`                     |
-| Model suites        | Ollama, a GPU     | nightly on a self-hosted runner, or on demand   | `npm run evals`                               |
-| Classifier fixtures | the classifier    | on demand                                       | `npm run guardrails:eval -w server`           |
-| Threshold sweep     | the classifier    | on demand                                       | `npm run guardrails:calibrate -w server`      |
-| Red team            | Python with PyRIT | nightly, or on demand                           | `npm run evals -- --suite guardrails-redteam` |
-| Conversation judge  | the judge model   | in-app sweep of idle threads, off by default    | Admin → Monitoring                            |
+| Tier                | Needs              | Runs                                            | Command                                         |
+| ------------------- | ------------------ | ----------------------------------------------- | ----------------------------------------------- |
+| Unit tests          | nothing            | every push (CI)                                 | `npm test`                                      |
+| Offline evals       | nothing            | every push (CI), report uploaded as an artifact | `npm run evals -- --suite personas ...`         |
+| Contract check      | nothing            | every push (CI)                                 | `npm run contracts:check`                       |
+| Model suites        | Ollama, a GPU      | nightly on a self-hosted runner, or on demand   | `npm run evals`                                 |
+| Classifier fixtures | the classifier     | on demand                                       | `npm run guardrails:eval -w server`             |
+| Threshold sweep     | the classifier     | on demand                                       | `npm run guardrails:calibrate -w server`        |
+| Red team            | Python with PyRIT  | nightly, or on demand                           | `npm run evals -- --suite guardrails-redteam`   |
+| Indirect injection  | Ollama, classifier | nightly, or on demand                           | `npm run evals -- --suite guardrails-injection` |
+| First-token bench   | Ollama or vLLM     | on demand                                       | `npm run bench:ttft -w server`                  |
+| Conversation judge  | the judge model    | in-app sweep of idle threads, off by default    | Admin → Monitoring                              |
 
 The unit tests fake the database and the graph, so `npm test` is green in a
 fresh clone with no Ollama and no Supabase. The offline suites (personas,
@@ -285,7 +332,8 @@ sees the reasoning rather than assuming an oversight.
 
 ```
 server/src/agent/
-  graph.ts        the StateGraph, state schema, routing, invokeModel, the persona rail
+  graph.ts        the StateGraph, state schema, routing, invokeModel, the prompt budget
+  write-gate.ts   which writes the person's own message authorizes
   contracts.ts    the tool table every surface derives from
   tools.ts        graph executors bound to the "graph" contracts
   chat.ts         the NDJSON bridge behind POST /api/agent/chat

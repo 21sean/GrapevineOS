@@ -9,6 +9,7 @@ import { logAdminPosture } from "./admin-gate.js";
 import { chat } from "./agent/chat.js";
 import { ext } from "./agent/ext.js";
 import { warmupGuardrails } from "./agent/guardrails.js";
+import { warmGate } from "./llm/gateway.js";
 import { flush as flushGuardrailTelemetry } from "./agent/telemetry.js";
 import { auth, requireAdmin } from "./auth.js";
 import { calendar } from "./calendar.js";
@@ -120,6 +121,7 @@ const server = app.listen(port, () => {
   startRetentionSweep();
   startEvalSweep();
   warmupGuardrails();
+  warmGate();
   startMcpServer().catch((err) =>
     log.error({ err: String(err).slice(0, 300) }, "mcp failed to start"),
   );

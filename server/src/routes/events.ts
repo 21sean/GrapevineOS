@@ -7,7 +7,7 @@ import { Router } from "express";
 import { requireAdmin, sessionUser } from "../auth.js";
 import { rateEvent } from "../ingest.js";
 import { store } from "../store.js";
-import { REACTIONS, type Reaction } from "../types.js";
+import { RARITIES, REACTIONS, type CityEvent, type Reaction } from "../types.js";
 
 export const events = Router();
 
@@ -25,6 +25,20 @@ events.post("/api/events/:id/rate", requireAdmin, async (req, res) => {
     promoted: r.promoted,
   });
   res.json(updated);
+});
+
+/**
+ * The confirm half of the chat's rarity card. Rarity is shared catalog data, so
+ * this is an admin write like re-rating: the model can only ever propose it.
+ */
+events.post("/api/events/:id/rarity", requireAdmin, async (req, res) => {
+  const rarity = String(req.body?.rarity ?? "");
+  if (!(RARITIES as readonly string[]).includes(rarity)) {
+    return res.status(400).json({ error: `rarity must be one of: ${RARITIES.join(", ")}` });
+  }
+  const event = await store.eventById(String(req.params.id));
+  if (!event) return res.status(404).json({ error: "unknown event" });
+  res.json(await store.updateEvent(event.id, { rarity: rarity as CityEvent["rarity"] }));
 });
 
 // ---------- reactions (per-user feedback loop) ----------

@@ -5,6 +5,37 @@ are listed on [GitHub](https://github.com/21sean/GrapevineOS/releases).
 
 ## Unreleased
 
+- Fix tool use on Ollama. Instructor sent an empty assistant turn as an empty list and
+  Ollama answered 400, so since v0.7.0 every chat turn that used a tool failed on its
+  second generation. The live quality gate now runs a whole tool round and blocks merges.
+- Fit the prompt to the context on a real catalog. It ran about 39,600 tokens against a
+  16,384 context on a 120-event catalog, and the runtime silently dropped 79% of it. The
+  model now reads the digest and calls `get_event` for details, and a budget drops the
+  oldest conversation first.
+- Stream agent answers through the persona filter as they generate, validate the whole
+  answer at the end, and retract it with a fallback if it fails. Tool calls, extraction,
+  discovery and every other action still validate before anything acts on them.
+- Add a write gate: a chat tool call that writes is checked against what the person
+  typed, and a call that fails the check becomes a confirmation card. `set_rarity` is now
+  always a card, and confirming it is an admin write.
+- Label tool results as data in the transcript, tell the model who can ask it for things,
+  answer in character when the gate rejects every attempt, and catch refusals that
+  describe what they withhold.
+- Run the PyRIT red team for the first time: fix its result mapping, a crash on a gate
+  failure, a case budget that failed long runs, an undetermined verdict that counted as a
+  pass, and a scorer that did not ask about role abandonment. Add a model tag so the
+  attacker, judge and agent share one runner, `REDTEAM_CONCURRENCY`, saved transcripts, and
+  `npm run redteam:report` with Wilson intervals.
+- Add an indirect prompt injection suite scored the way AgentDojo scores it: whether the
+  target tool call happened, and whether the person's task still got done. No LLM judge,
+  no real data.
+- Record time to first token and time per output token per generation, with cached prompt
+  tokens, in the spans, the usage frame and Langfuse. Add `npm run bench:ttft`.
+- Keep the gate worker warm, reuse one HTTP client, generate against a schema holding only
+  the enabled tools, order the prompt by how often each part changes, keep the model loaded
+  for 30 minutes, and send a smaller batch so a new question re-evaluates less.
+- Stop rerunning `model-quality` on the push to main. Strict PR checks already tested the
+  merged tree, and the rerun only collided with other work on the GPU.
 - Add vLLM 0.33.0 as a runtime option beside Ollama, selected with
   `GRAPEVINE_LLM_RUNTIME=vllm`. Ollama stays the default, and its manifest and
   baseline are unchanged.

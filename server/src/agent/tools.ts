@@ -28,13 +28,13 @@ import {
   getEta,
   getEvent,
   searchEvents,
-  setEventRarity,
   vetEventIds,
   vetTopics,
   type AgentCtx,
   type ChatContext,
 } from "./context.js";
 import { readPage, webSearch } from "./websearch.js";
+import { askedToAddEvents, splitCalendarSave, type WriteIntent } from "./write-gate.js";
 
 /** Push a typed frame onto the "custom" stream (a no-op outside a streamed run). */
 export function emit(config: LangGraphRunnableConfig | undefined, frame: AgentFrame): void {
@@ -52,31 +52,63 @@ const noIds = JSON.stringify({
   error: "no valid event ids — use ids from the digest or search results",
 });
 
-export function makeTools(ctx: AgentCtx, chat: ChatContext) {
+/**
+ * Everything the tools do to the world outside this process, in one place. The
+ * executors decide what to do; these do it. An eval can then drive the real
+ * executors, the real rails and the real model against a fixture web and a
+ * recorder, with nothing it could write to.
+ */
+export interface ToolEffects {
+  webSearch: typeof webSearch;
+  readPage: typeof readPage;
+  getEta: typeof getEta;
+  runDiscovery: typeof runDiscovery;
+  saveEventForUser: typeof saveEventForUser;
+}
+
+const LIVE_EFFECTS: ToolEffects = {
+  webSearch,
+  readPage,
+  getEta,
+  runDiscovery,
+  saveEventForUser,
+};
+
+export function makeTools(
+  ctx: AgentCtx,
+  chat: ChatContext,
+  /** What the person asked for this turn; the write gate reads it. See write-gate.ts. */
+  intent: () => WriteIntent,
+  effects: ToolEffects = LIVE_EFFECTS,
+) {
   const exec: Executors = {
     search_events: async (input) => JSON.stringify(await searchEvents(input, ctx)),
 
     get_event: async (input) => JSON.stringify(getEvent(input.id, ctx)),
 
-    get_eta: async (input) => JSON.stringify(await getEta(input, ctx)),
+    get_eta: async (input) => JSON.stringify(await effects.getEta(input, ctx)),
 
     // Returns what the web said, verbatim. The content rail is a graph node
     // (graph.ts): it scans this result before the model is called again, so
     // every web-facing tool is covered by one rail instead of each tool
     // remembering to call the classifier itself.
     search_web: async (input, config) =>
-      JSON.stringify(await webSearch(input.query, { limit: input.limit, signal: config?.signal })),
+      JSON.stringify(
+        await effects.webSearch(input.query, { limit: input.limit, signal: config?.signal }),
+      ),
 
     // Untrusted by definition; scanned by the content_rail node (graph.ts).
     read_page: async (input, config) =>
-      JSON.stringify(await readPage(input.url, { signal: config?.signal })),
+      JSON.stringify(await effects.readPage(input.url, { signal: config?.signal })),
 
     discover_events: async (input, config) => {
-      const commit = input.dry_run === false;
+      // The model can ask to commit; only the person's own words can authorize it.
+      const wanted = input.dry_run === false;
+      const commit = wanted && askedToAddEvents(intent());
       // Chat keeps latency tolerable by reading fewer pages than a scheduled
       // run; the verification gate (source-quote check, LLM cross-read,
       // catalog dedupe) is identical.
-      const run = await runDiscovery({
+      const run = await effects.runDiscovery({
         query: input.query,
         commit,
         maxPages: 3,
@@ -97,7 +129,9 @@ export function makeTools(ctx: AgentCtx, chat: ChatContext) {
               ? "found candidates but none could be verified against their source pages; see rejected_reasons, then try a tighter or different query."
               : "no event listings found on the pages read; try a different query."
         : run.verified.length > 0
-          ? "dry run, nothing written. Re-run with dry_run:false to add the verified events."
+          ? wanted
+            ? "dry run, nothing written: the person has not asked to add events. Tell them what you found and ask."
+            : "dry run, nothing written. Re-run with dry_run:false once the person asks to add the verified events."
           : "dry run; nothing passed verification. See rejected_reasons before spending another run.";
       return JSON.stringify({
         query: run.query,
@@ -234,37 +268,59 @@ export function makeTools(ctx: AgentCtx, chat: ChatContext) {
       }
       const ids = vetEventIds(input.event_ids, ctx);
       if (!ids.length) return noIds;
+      // Anything the person did not ask to save goes on a card they can confirm.
+      const { save, propose } = splitCalendarSave(
+        ids,
+        ctx.upcoming.map((u) => u.e),
+        intent(),
+      );
+      if (propose.length) {
+        emit(config, { type: "action", action: { kind: "proposeCalendar", eventIds: propose } });
+      }
       const saved: string[] = [];
       let googleSynced = 0;
-      for (const id of ids) {
-        const result = await saveEventForUser(user, id);
+      for (const id of save) {
+        const result = await effects.saveEventForUser(user, id);
         if ("error" in result) continue;
         saved.push(id);
         if (result.googleSynced) googleSynced++;
       }
-      if (!saved.length) return JSON.stringify({ error: "nothing could be saved" });
-      emit(config, { type: "action", action: { kind: "calendarSaved", eventIds: saved } });
+      if (save.length && !saved.length) return JSON.stringify({ error: "nothing could be saved" });
+      if (saved.length) {
+        emit(config, { type: "action", action: { kind: "calendarSaved", eventIds: saved } });
+      }
       return JSON.stringify({
         ok: true,
         saved,
         google_synced: googleSynced,
-        note:
-          "Saved to the user's Grapevine calendar" + (googleSynced ? " and Google Calendar" : ""),
+        ...(propose.length && { proposed: propose }),
+        note: [
+          saved.length
+            ? "Saved to the user's Grapevine calendar" +
+              (googleSynced ? " and Google Calendar." : ".")
+            : "",
+          propose.length
+            ? `${propose.length} event(s) were not saved: the person did not ask for them, so a card asks them to confirm. Do not claim they are saved.`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
       });
     },
 
     set_rarity: async (input, config) => {
-      const result = await setEventRarity(input.event_id, input.rarity, ctx);
-      if ("error" in result) return JSON.stringify(result);
-      // The DB is already updated; tell the browser so badges and the
-      // "Rare finds" filter reflect it without a reload.
-      emit(config, { type: "action", action: { kind: "eventPatched", event: result.event } });
+      // Rarity is shared catalog data, so the chat never writes it: a card asks
+      // the person, and the confirm route checks they may change it.
+      const hit = ctx.byId.get(String(input.event_id));
+      if (!hit) return JSON.stringify({ error: "unknown event id" });
+      emit(config, {
+        type: "action",
+        action: { kind: "proposeRarity", eventId: hit.e.id, rarity: input.rarity },
+      });
       return JSON.stringify({
         ok: true,
-        id: result.event.id,
-        title: result.event.title,
-        rarity: result.event.rarity,
-        note: result.changed ? "saved" : "already had this rarity",
+        proposed: { id: hit.e.id, title: hit.e.title, rarity: input.rarity },
+        note: "Nothing changed yet: a card asks the person to confirm. Do not claim it is done.",
       });
     },
 

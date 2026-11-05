@@ -1,10 +1,23 @@
 """Bounded NDJSON worker. stdout is exclusively the validated wire protocol."""
 import sys
-from .client import Failure, Request, Stats, generate
+from .client import Failure, Message, Request, Stats, StreamFrame, generate
 from .settings import Settings
+
+def send(frame: StreamFrame) -> None:
+    print(frame.model_dump_json(exclude_none=True), flush=True)
+
+
+def warm(settings: Settings) -> None:
+    """The first generation in a process spends about 300 ms on lazy setup in the
+    parsing stack. Spend it here, with no model, so nobody is waiting for it."""
+    raw = '{"kind":"insufficient_evidence","answer":"warm","citations":[],"tool_calls":[]}'
+    generate(Request(id="warm", task="agent", messages=[Message(role="user", content="warm")]),
+             settings, transport=lambda *_: raw)
+
 
 def main() -> None:
     settings = Settings()
+    warm(settings)
     while True:
         line = sys.stdin.buffer.readline(settings.max_bytes + 1)
         if not line:
@@ -18,7 +31,7 @@ def main() -> None:
                 stats=Stats(attempts=0, validation_failures=0, first_pass=False,
                             validation_ms=0, total_ms=0, repair_ms=0))
         else:
-            result = generate(request, settings)
+            result = generate(request, settings, on_frame=send)
         print(result.model_dump_json(by_alias=True), flush=True)
 
 if __name__ == "__main__":

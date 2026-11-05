@@ -135,6 +135,12 @@ export const api = {
       json<{ venue: VenueDetails | null }>(r)
     ),
 
+  setRarity: (id: string, rarity: CityEvent["rarity"]) =>
+    fetch(`/api/events/${encodeURIComponent(id)}/rarity`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ rarity }),
+    }).then((r) => json<CityEvent>(r)),
   rate: (id: string) =>
     fetch(`/api/events/${id}/rate`, { method: "POST" }).then((r) =>
       json<CityEvent>(r)

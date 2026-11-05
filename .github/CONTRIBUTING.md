@@ -26,17 +26,19 @@ The ten-minute path in the [README](../README.md) covers the env files;
 
 From the root:
 
-| Script                    | Does                                                                 |
-| ------------------------- | -------------------------------------------------------------------- |
-| `npm run dev`             | API and web app together                                             |
-| `npm run build`           | the production web bundle                                            |
-| `npm run typecheck`       | `tsc` in every workspace                                             |
-| `npm run lint`            | eslint in every workspace                                            |
-| `npm test`                | the unit tests in every workspace, no model or database needed       |
-| `npm run format`          | prettier over the tree (`format:check` only checks)                  |
-| `npm run contracts:check` | the generated skill file matches the contracts                       |
-| `npm run evals`           | the eval runner (`-- --suite <name>`, `-- --json`)                   |
-| `npm run doctor`          | checks Node, the install, the env files, Supabase, Ollama, the ports |
+| Script                             | Does                                                                 |
+| ---------------------------------- | -------------------------------------------------------------------- |
+| `npm run dev`                      | API and web app together                                             |
+| `npm run build`                    | the production web bundle                                            |
+| `npm run typecheck`                | `tsc` in every workspace                                             |
+| `npm run lint`                     | eslint in every workspace                                            |
+| `npm test`                         | the unit tests in every workspace, no model or database needed       |
+| `npm run format`                   | prettier over the tree (`format:check` only checks)                  |
+| `npm run contracts:check`          | the generated skill file matches the contracts                       |
+| `npm run evals`                    | the eval runner (`-- --suite <name>`, `-- --json`)                   |
+| `npm run doctor`                   | checks Node, the install, the env files, Supabase, Ollama, the ports |
+| `npm run bench:ttft -w server`     | first-token and per-token latency, on Ollama or vLLM                 |
+| `npm run redteam:report -w server` | attack success rates from saved red team runs                        |
 
 In `server/` (`npm run <script> -w server`): `db:types` regenerates
 `src/db-types.ts` from the linked project, `contracts:gen` rewrites the

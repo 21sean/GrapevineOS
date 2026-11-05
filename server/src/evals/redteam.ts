@@ -33,6 +33,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { AIMessage, HumanMessage, isAIMessage, type BaseMessage } from "@langchain/core/messages";
 import { buildAgentGraph, turnInput } from "../agent/graph.js";
+import { gateFallbackMessage } from "../agent/refusals.js";
 import { ollamaBase } from "../ollama.js";
 import { FIXTURE_SETTINGS, fixtureCtx } from "./fixtures.js";
 
@@ -118,6 +119,8 @@ export interface Bridge {
   blockedTurns: number;
   /** Turns where the persona rail replaced the reply. */
   personaTrips: number;
+  /** Turns where the gate rejected every attempt and the person got the error text. */
+  gateFailures: number;
   close(): Promise<void>;
 }
 
@@ -147,7 +150,7 @@ export interface BridgeOptions {
 export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
   const city = FIXTURE_SETTINGS.city;
 
-  const state = { blockedTurns: 0, personaTrips: 0 };
+  const state = { blockedTurns: 0, personaTrips: 0, gateFailures: 0 };
 
   async function turn(conversationId: string, history: TurnMessage[], message: string) {
     const seed = history.map((m) =>
@@ -169,6 +172,8 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
       // Simulated traffic must never enter the recorded distribution.
       telemetry: { surface: "eval", record: false },
     });
+    // A daemon that is down or a deadline throws out of here and fails the request,
+    // because no reply exists to score.
     const result = await graph.invoke(turnInput(seed), {
       configurable: { thread_id: `${conversationId}-${history.length}` },
       recursionLimit: 20,
@@ -187,7 +192,12 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
     const personaTripped = result.outputTripped === true;
     if (personaTripped) state.personaTrips++;
 
-    return { reply, blocked, personaTripped };
+    // The gate refusing every attempt is an outcome of the turn: the fallback is what
+    // a person would have read, so it is what the attack sees and the scorer judges.
+    const gateFailed = reply === gateFallbackMessage(city);
+    if (gateFailed) state.gateFailures++;
+
+    return { reply, blocked, personaTripped, gateFailed };
   }
 
   const server: Server = createServer((req, res) => {
@@ -229,6 +239,9 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
     },
     get personaTrips() {
       return state.personaTrips;
+    },
+    get gateFailures() {
+      return state.gateFailures;
     },
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
@@ -324,6 +337,16 @@ function maxTurns(): number {
   return Number.isFinite(raw) && raw >= 1 && raw <= 20 ? Math.floor(raw) : 5;
 }
 
+/**
+ * Attacks at once. Default one. More only helps against a daemon started with
+ * OLLAMA_NUM_PARALLEL, and it can change a verdict by changing what the attacker
+ * reads next, so runs at different settings are not comparable.
+ */
+export function attackConcurrency(): number {
+  const raw = Number(process.env.REDTEAM_CONCURRENCY ?? 1);
+  return Number.isFinite(raw) && raw >= 1 && raw <= 8 ? Math.floor(raw) : 1;
+}
+
 /** Run every objective in one PyRIT process and return its verdicts. */
 export async function runAttacks(opts: RunOptions): Promise<AttackResult[]> {
   const config = {
@@ -333,6 +356,7 @@ export async function runAttacks(opts: RunOptions): Promise<AttackResult[]> {
     model: opts.model,
     max_turns: opts.maxTurns ?? maxTurns(),
     max_backtracks: opts.maxBacktracks ?? 3,
+    max_concurrency: attackConcurrency(),
     attacks: opts.objectives.map((o) => ({
       id: o.id,
       strategy: o.strategy,

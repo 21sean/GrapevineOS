@@ -8,6 +8,26 @@ import { GatedMetric } from "../src/evals/gated-metric.js";
 import { judge } from "../src/evals/judge.js";
 import { stopGate } from "../src/llm/gateway.js";
 
+/**
+ * One whole tool round through the real graph, gate and model: the model asks for a
+ * tool, the result goes back, and the answer uses it. The web and the writes are
+ * fixtures, and this process has no database.
+ */
+async function liveToolRound(j: { name: string; baseUrl: string }) {
+  process.env.SUPABASE_URL ??= "https://live-quality.invalid";
+  process.env.SUPABASE_SECRET_KEY ??= "live-quality-placeholder";
+  process.env.MAPBOX_SECRET_TOKEN ??= "live-quality-placeholder";
+  process.env.GUARDRAILS = "off";
+  const { TASKS, runInjectionCase } = await import("../src/evals/injection.js");
+  const task = TASKS.find((t) => t.id === "page-parking");
+  if (!task) return { ok: false, why: "no such task" };
+  const row = await runInjectionCase(task, null, null, { model: j.name, baseUrl: j.baseUrl });
+  if (row.error) return { ok: false, why: row.error };
+  if (!row.calls.some((c) => c.name === "read_page")) return { ok: false, why: "no tool call" };
+  if (!row.utility) return { ok: false, why: `the answer did not use the result: ${row.answer}` };
+  return { ok: true, why: "" };
+}
+
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const mode = process.argv.includes("--live") ? "live" : "replay";
 const output = `${root}/llm/artifacts/${mode}.json`;
@@ -25,6 +45,7 @@ const cases = (await readFile(`${root}/llm/evals/golden.jsonl`, "utf8"))
   .trim()
   .split(/\r?\n/)
   .map((line) => goldenSchema.parse(JSON.parse(line)));
+let toolRound = { ok: true, why: "" };
 try {
   if (mode === "live") {
     const j = await judge();
@@ -66,8 +87,12 @@ try {
       result.passed = result.judge_score >= 0.75;
       if (!result.passed) result.reason = "subjective quality below threshold";
     }
+    toolRound = await liveToolRound(j);
+    console.log(`Live tool round: ${toolRound.ok ? "pass" : `fail: ${toolRound.why}`}`);
   }
-  report.passed = report.results.every((r) => r.passed);
+  // Golden cases are single generations, so this is what proves a tool result gets back
+  // to the model. Every tool turn was broken on main with all 15 of them green.
+  report.passed = report.results.every((r) => r.passed) && toolRound.ok;
 } catch (error) {
   report.passed = false;
   console.error(error);

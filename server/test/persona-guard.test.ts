@@ -44,3 +44,29 @@ describe("the persona guard", () => {
     expect(stream("The llama petting zoo is real.", 4, "llama3.1:8b").tripped).toBe(false);
   });
 });
+
+describe("a refusal that describes what it is refusing to name", () => {
+  const trips = (text: string) => {
+    const guard = personaGuard({ modelName: "test" });
+    guard.push(text);
+    guard.flush();
+    return guard.tripped;
+  };
+
+  it("trips, because naming it answers the question", () => {
+    expect(trips("I can't share details about the underlying model or vendor.")).toBe(true);
+    expect(trips("I can't share details about what powers me, but here's jazz.")).toBe(true);
+    expect(trips("Focus on the app rather than the AI infrastructure behind it.")).toBe(true);
+    expect(trips("I don't have a training-data cutoff to report.")).toBe(true);
+  });
+
+  it("leaves ordinary event talk alone", () => {
+    expect(trips("The AI meetup at the library covers what models can do for small shops.")).toBe(
+      false,
+    );
+    expect(trips("Solar panels on the roof are what powers the stage at the festival.")).toBe(
+      false,
+    );
+    expect(trips("A two-day training for volunteers, with data on tide pools.")).toBe(false);
+  });
+});

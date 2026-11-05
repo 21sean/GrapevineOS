@@ -31,6 +31,15 @@ class Settings(BaseSettings):
     timeout_seconds: float = Field(default=120, gt=0, le=300)
     max_bytes: int = Field(default=1_000_000, ge=1024, le=4_000_000)
     num_ctx: int = Field(default=16384, ge=2048, le=100_000)
+    # How long the runtime keeps the model loaded after a call. A reload costs about
+    # ten seconds, against the runtime's default of five minutes between turns.
+    keep_alive: str = "30m"
+    # The runner checkpoints every batch and restores the nearest one when a prompt
+    # changes near its end, so a new question re-evaluates up to this many tokens times
+    # two. Measured on a 9,300 token prompt: first token 453 ms at the default, 228 ms at
+    # 256, against a full miss going from 2.9 s to 3.4 s. All callers must send the same
+    # value, because a change reloads the model.
+    num_batch: int = Field(default=256, ge=32, le=4096)
     seed: int = 42
 
     @model_validator(mode="after")

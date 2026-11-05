@@ -211,6 +211,16 @@ export interface ChatUsage {
   costUSD?: number;
   /** The model the CLI actually billed (its resolved id, not our request). */
   model?: string;
+  /** Request sent to the runtime until its first generated token. */
+  modelTtftMs?: number;
+  /** Request sent to the runtime until the first word of the answer text. */
+  modelAnswerTtftMs?: number;
+  /** Request sent to the runtime until its first reasoning token, when it reasons. */
+  modelReasoningTtftMs?: number;
+  /** Time per output token after the first. */
+  tpotMs?: number;
+  /** POST /api/agent/chat until the first answer text left the server. */
+  visibleTtftMs?: number;
 }
 
 /**
@@ -920,6 +930,7 @@ export interface AgentCapabilities {
 export type AgentAction =
   | { kind: "highlight"; eventIds: string[]; fit?: boolean }
   | { kind: "proposeCalendar"; eventIds: string[]; note?: string }
+  | { kind: "proposeRarity"; eventId: string; rarity: CityEvent["rarity"] }
   /** propose_watch: a card that schedules a recurring web-discovery search the user owns. */
   | { kind: "proposeWatch"; query: string; cadenceHours: number; note?: string }
   /** The agent edited an event server-side (set_rarity); the client swaps in

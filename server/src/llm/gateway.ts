@@ -6,6 +6,8 @@ import {
   outputSchemas,
   requestSchema,
   result_envelopeSchema,
+  stream_frameSchema,
+  type LlmStats,
   type Output,
   type Task,
   type ValidationContext,
@@ -32,11 +34,33 @@ const python =
       import.meta.url,
     ),
   );
-type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void };
+type Pending = {
+  resolve: (v: unknown) => void;
+  reject: (e: Error) => void;
+  onStats?: (stats: LlmStats) => void;
+  onDelta?: (text: string) => void;
+  onReset?: () => void;
+};
 let worker: ChildProcessWithoutNullStreams | null = null;
 let buffer = "";
 const pending = new Map<string, Pending>();
 let idle: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * How long the worker outlives its last request. Python takes about two seconds to
+ * import the gate, and a person reads an answer for longer than a second, so a short
+ * idle spends those two seconds on nearly every chat turn.
+ */
+const WORKER_IDLE_MS = Number(process.env.GRAPEVINE_LLM_WORKER_IDLE_MS) || 600_000;
+
+/** An idle worker must not keep a script alive, and a busy one must. */
+function holdProcess(child: ChildProcessWithoutNullStreams, hold: boolean): void {
+  const method = hold ? "ref" : "unref";
+  child[method]();
+  for (const stream of [child.stdin, child.stdout, child.stderr]) {
+    (stream as unknown as Record<string, (() => void) | undefined>)[method]?.();
+  }
+}
 
 export function stopGate(reason = new LlmGateError("unavailable", "LLM gate stopped")): void {
   const previous = worker;
@@ -49,7 +73,10 @@ export function stopGate(reason = new LlmGateError("unavailable", "LLM gate stop
 }
 function start(): ChildProcessWithoutNullStreams {
   clearTimeout(idle);
-  if (worker) return worker;
+  if (worker) {
+    holdProcess(worker, true);
+    return worker;
+  }
   const child = spawn(python, ["-m", "grapevine_llm.worker"], {
     cwd: `${root}/llm`,
     windowsHide: true,
@@ -83,16 +110,30 @@ function start(): ChildProcessWithoutNullStreams {
       const line = buffer.slice(0, end);
       buffer = buffer.slice(end + 1);
       try {
-        const reply = envelope.parse(JSON.parse(line));
+        const parsed: unknown = JSON.parse(line);
+        // Answer text on its way to the person. The Result still follows.
+        const frame = stream_frameSchema.safeParse(parsed);
+        if (frame.success) {
+          const p = pending.get(frame.data.id);
+          if (!p) throw new Error("unexpected frame");
+          if (frame.data.delta) p.onDelta?.(frame.data.delta);
+          if (frame.data.reset) p.onReset?.();
+          continue;
+        }
+        const reply = envelope.parse(parsed);
         const p = pending.get(reply.id);
         if (!p) throw new Error("unexpected reply");
         pending.delete(reply.id);
+        p.onStats?.(reply.stats);
         if (reply.ok) p.resolve(reply.output);
         else
           p.reject(
             new LlmGateError(reply.code ?? "protocol", reply.message ?? "Generation failed"),
           );
-        if (!pending.size) idle = setTimeout(() => stopGate(), 1000).unref();
+        if (!pending.size) {
+          holdProcess(child, false);
+          idle = setTimeout(() => stopGate(), WORKER_IDLE_MS).unref();
+        }
       } catch {
         stopGate(new LlmGateError("protocol", "Invalid gate reply"));
         return;
@@ -102,6 +143,17 @@ function start(): ChildProcessWithoutNullStreams {
   return child;
 }
 
+/** Start the worker before the first request needs it. */
+export function warmGate(): void {
+  try {
+    const child = start();
+    holdProcess(child, false);
+    idle = setTimeout(() => stopGate(), WORKER_IDLE_MS).unref();
+  } catch {
+    /* the first real request reports what is wrong */
+  }
+}
+
 export async function generateTyped<T extends Task>(opts: {
   task: T;
   messages: { role: "system" | "user" | "assistant"; content: string }[];
@@ -109,6 +161,15 @@ export async function generateTyped<T extends Task>(opts: {
   model?: string;
   baseUrl?: string;
   signal?: AbortSignal;
+  /** How the generation went, success or not. Telemetry: must not throw. */
+  onStats?: (stats: LlmStats) => void;
+  /**
+   * Answer text as it generates, before validation: for display only. The promise
+   * resolving is what says the whole answer passed. See onReset.
+   */
+  onDelta?: (text: string) => void;
+  /** The gate rejected what onDelta has sent so far and is trying again. */
+  onReset?: () => void;
 }): Promise<Output<T>> {
   opts.signal?.throwIfAborted();
   if (pending.size >= 16) throw new LlmGateError("busy", "LLM gate queue is full");
@@ -123,6 +184,7 @@ export async function generateTyped<T extends Task>(opts: {
         context: opts.context ?? {},
         model: opts.model,
         base_url: opts.baseUrl,
+        ...(opts.onDelta && { stream_answer: true }),
       }),
     ) + "\n";
   if (Buffer.byteLength(line) > 1_000_000)
@@ -139,6 +201,9 @@ export async function generateTyped<T extends Task>(opts: {
       opts.signal?.removeEventListener("abort", abort);
     };
     pending.set(id, {
+      onStats: opts.onStats,
+      onDelta: opts.onDelta,
+      onReset: opts.onReset,
       resolve: (value) => {
         clean();
         resolve(value);

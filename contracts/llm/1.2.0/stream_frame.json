@@ -1,0 +1,43 @@
+{
+  "$id": "urn:grapevine:llm:1.2.0:stream_frame",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A piece of unvalidated answer text on its way to the person, or the order to\ntake back what was sent because the gate rejected it and is trying again. These\nframes carry prose for display and nothing downstream may act on them: tool\ncalls, citations and every other task still arrive only in the validated Result.",
+  "properties": {
+    "delta": {
+      "anyOf": [
+        {
+          "maxLength": 200000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Delta"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "reset": {
+      "anyOf": [
+        {
+          "const": true,
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reset"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "title": "StreamFrame",
+  "type": "object"
+}

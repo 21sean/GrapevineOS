@@ -87,6 +87,18 @@ export function useAgentChat() {
             },
           ],
         }))
+      } else if (a.kind === "proposeRarity") {
+        patchLast((it) => ({
+          proposals: [
+            ...it.proposals,
+            {
+              kind: "rarity",
+              eventId: a.eventId,
+              rarity: a.rarity,
+              state: "pending",
+            },
+          ],
+        }))
       } else if (a.kind === "proposeWatch") {
         patchLast((it) => ({
           proposals: [
@@ -108,8 +120,8 @@ export function useAgentChat() {
           ],
         }))
       } else if (a.kind === "eventPatched") {
-        // Server already committed the edit (e.g. set_rarity): swap the fresh
-        // copy in so badges and filters reflect it immediately.
+        // Server already committed the edit: swap the fresh copy in so badges
+        // and filters reflect it immediately.
         useGrapevine.getState().upsertEvent(a.event)
       } else if (a.kind === "eventsRefresh") {
         // The agent added web-discovered events to the catalog: refetch so

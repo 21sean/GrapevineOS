@@ -51,10 +51,16 @@ jobs:
   model-quality:
     # Runner holds only local public models. Outside contributors require approval.
     # Never use pull_request_target to execute a contributor's checkout.
+    # Main requires strict, up-to-date PR checks, so a merged tree has already passed
+    # this job. Rerunning it on the push only collides with other work on this GPU.
+    if: github.event_name != 'push'
     runs-on: [self-hosted, Windows, X64, grapevine-llm]
     timeout-minutes: 30
     env:
       GRAPEVINE_LLM_BASE_URL: http://127.0.0.1:11435
+      # This runner shares its GPU. The app's 30 minute default would hold the model
+      # long after the job ended.
+      GRAPEVINE_LLM_KEEP_ALIVE: "1m"
       PYTHONUTF8: "1"
       ONNXRUNTIME_NODE_INSTALL: skip
     steps:

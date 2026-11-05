@@ -38,6 +38,8 @@ export interface ToolContract<S extends z.ZodObject = z.ZodObject> {
   name: string;
   /** One paragraph for the model and the MCP client alike. */
   description: string;
+  /** What the chat model reads instead, when the graph treats the call differently. */
+  graphDescription?: string;
   schema: S;
   surfaces: readonly Surface[];
   effect: Effect;
@@ -153,6 +155,8 @@ export const CONTRACTS = {
     name: "discover_events",
     description:
       "Search the open web for local events and add verified ones to the catalog (the user's list and map). Every candidate is verified against the page it came from (dates, venue, a supporting quote) before anything is written; unverified candidates come back with the rejection reason. Slow: several pages are read and cross-checked. Defaults to a dry run that reports what it found; call again with dry_run:false once the user asks for the events to be added.",
+    graphDescription:
+      "Search the open web for local events and add verified ones to the catalog (the user's list and map). Every candidate is verified against the page it came from before anything is written. Slow: several pages are read and cross-checked. Defaults to a dry run that reports what it found. dry_run:false writes only when the person's own message asks for events to be added; otherwise it stays a dry run.",
     schema: toolSchemas.discover_events,
     surfaces: ["graph", "mcp", "rest"],
     effect: "write",
@@ -214,7 +218,7 @@ export const CONTRACTS = {
   save_calendar: contract({
     name: "save_calendar",
     description:
-      "Save events to the user's calendar right now (Google Calendar too when connected). Only after the user clearly asked to save; otherwise use propose_calendar and let them confirm.",
+      "Save events to the user's calendar right now (Google Calendar too when connected). Only after the user clearly asked to save; otherwise use propose_calendar and let them confirm. An event the person's own message did not ask for gets a confirm card instead of being saved.",
     schema: toolSchemas.save_calendar,
     surfaces: ["graph"],
     effect: "write",
@@ -255,6 +259,8 @@ export const CONTRACTS = {
     name: "set_rarity",
     description:
       "Correct an event's rarity in the database (applies immediately, no confirmation). rare = one-off or annual specials (parades, fireworks, races, big festivals); notable = uncommon but repeats; common = weekly or regular. Rarity drives the app's Rare finds filter, so fix events that are clearly mislabeled and leave the rest alone.",
+    graphDescription:
+      "Suggest correcting an event's rarity. Shows the person a card to confirm; nothing changes until they do. rare = one-off or annual specials (parades, fireworks, races, big festivals); notable = uncommon but repeats; common = weekly or regular. Suggest it only for events that are clearly mislabeled.",
     schema: toolSchemas.set_rarity,
     surfaces: ["graph", "mcp", "rest"],
     effect: "write",

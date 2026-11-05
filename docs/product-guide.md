@@ -167,7 +167,9 @@ walkthrough and the steps for adding a tool.
 - **Streaming bridge.** `graph.stream()` is translated into an NDJSON
   protocol (token deltas, tool status, actions, guardrail verdicts, usage).
   The frame types live in `shared/types.ts`, so an unhandled frame is a
-  compile error.
+  compile error. Answer text reaches the browser as the model generates it and
+  validates whole at the end. A failed answer is retracted with a `replace`
+  frame; a closed tab stops the generation and records nothing.
 - **Failure handling.** Ollama being down or having no model shows a notice
   instead of a 500. A 120s deadline and client-disconnect abort stop a
   closed tab from keeping the GPU busy. On SIGTERM the server stops its
@@ -217,6 +219,13 @@ in-process on CPU.
   Admin → Monitoring. The measured scores are bimodal with a gap in the
   middle, which is why the 0.8 threshold stays where it is: more test
   coverage helps more than tuning it.
+
+The multi-turn red team needs PyRIT and its own model tag, the same weights at
+the agent's context size: install `server/redteam/requirements.txt`, run
+`ollama create qwen3.8-redteam:27b -f server/redteam/Modelfile`, and set
+`REDTEAM_MODEL=qwen3.8-redteam:27b` before
+`npm run evals -- --suite guardrails-redteam`. `npm run redteam:report -w server`
+turns saved runs into attack success rates.
 
 A red-team smoke test, including the persona break above, ships with the
 repo (the first run downloads the classifier):
