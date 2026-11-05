@@ -58,3 +58,16 @@ def test_eta_alias_survives_complete_wire_envelope():
     wire = json.loads(result.model_dump_json())
     assert wire["output"]["tool_calls"][0]["args"]["from"] == "-118,33"
     Draft202012Validator(ResultEnvelope.model_json_schema()).validate(wire)
+
+
+def test_every_call_sends_the_same_runner_options():
+    """A change to either reloads the model, so nothing may vary them per task."""
+    seen = []
+
+    def send(payload, _remaining):
+        seen.append(payload)
+        return json.dumps({"rating": 4, "rationale": "local", "promoted": False})
+    generate(request(), Settings(), transport=send)
+    assert seen[0]["options"]["num_ctx"] == 16384
+    assert seen[0]["options"]["num_batch"] == 256
+    assert seen[0]["keep_alive"] == "30m"
