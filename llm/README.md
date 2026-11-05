@@ -174,10 +174,12 @@ Copy a case, give it a unique matching request ID, and add exact field checks.
 `responses` drives deterministic replay, not the live run. Set `live: true` for
 model cases and add an explicit `rubric` only for subjective criteria.
 
-The live run also drives one whole tool round through the real graph, gate and model:
-the model asks for a tool, the result goes back, and the answer has to use it. Golden
-cases are single generations and cannot see that path, and on 2026-11-04 it turned out
-every tool turn had been failing since v0.7.0 with all of them green.
+The live run also drives whole turns through the real graph, gate and model. One is a
+tool round: the model asks for a tool, the result goes back, and the answer has to use
+it. Golden cases are single generations and cannot see that path, and on 2026-11-04 it
+turned out every tool turn had been failing since v0.7.0 with all of them green. Five are
+ordinary questions the concierge once deflected, two of them with injected text, so a
+prompt that answers "I'm Grapevine" in place of the answer fails the gate.
 
 Deterministic failures stop the run before judging. DeepEval applies local typed
 judges with explicit score anchors. RAG answers additionally receive groundedness
