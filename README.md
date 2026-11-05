@@ -6,15 +6,15 @@
 [![Release](https://img.shields.io/github/v/release/21sean/GrapevineOS)](https://github.com/21sean/GrapevineOS/releases/latest)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-0b3b2e)](LICENSE)
 
-[AI/ML checklist](#aiml-engineering-checklist) · [Screenshots](#screenshots) · [Quick start](#quick-start) · [Architecture](#how-it-works) · [Documentation](#documentation)
+[Capability checklist](#capability-checklist) · [Quick start](#quick-start) · [Architecture](#how-it-works) · [Documentation](#documentation)
 
 Grapevine turns local newsletters and verified web discoveries into a map of
 City events. Browse by date, category, and drive time, learn what is on
-nearby, or ask grapevine agent to help plan your day within your connected calendar. 
+nearby, or ask grapevine agent to help plan your day within your connected calendar.
 
 The engineering focus is the boundary between model output and application behavior:
 local inference, strict response contracts, evidence checks, bounded tool use,
-and repeatable evaluations that run before changes merge. Deepeval judges focus on answer relevance and groundedness. 
+and repeatable evaluations that run before changes merge. Deepeval judges focus on answer relevance and groundedness.
 
 ![Grapevine in dark mode, looking across the Star of India and the Embarcadero toward San Diego's 3D skyline](docs/images/downtown-san-diego-3d.png)
 
@@ -68,7 +68,7 @@ The evidence column links to the code, tests, or workflow that a reviewer can in
   structured-output boundary fails closed for everything that can act on the world.
 
 See the [quality guide](llm/README.md) for reproducing the gates and the
-[README review](docs/readme-review.md) 
+[README review](docs/readme-review.md)
 
 ## Explore the city
 
@@ -123,7 +123,6 @@ cp web/.env.example web/.env.local
 | ---------------- | ------------------------------------------------------------------------- |
 | `server/.env`    | `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `MAPBOX_SECRET_TOKEN`              |
 | `web/.env.local` | `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_MAPBOX_TOKEN` |
-
 
 Link your Supabase project and apply the migrations with its CLI:
 
@@ -249,4 +248,4 @@ and reviewed baselines. Existing offline and red-team suites remain available.
 | `supabase/`             | Database migrations                                                        |
 | `docs/`                 | Setup, architecture, product guide, and UI screenshots                     |
 
-Licensed under [Apache-2.0](LICENSE). 
+Licensed under [Apache-2.0](LICENSE).
