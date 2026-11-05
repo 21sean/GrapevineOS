@@ -71,3 +71,20 @@ def test_every_call_sends_the_same_runner_options():
     assert seen[0]["options"]["num_ctx"] == 16384
     assert seen[0]["options"]["num_batch"] == 256
     assert seen[0]["keep_alive"] == "30m"
+
+
+def test_an_empty_assistant_turn_reaches_the_runtime_as_text():
+    """Instructor turns "" into [], and Ollama answers that with a 400 on every tool round."""
+    seen = []
+
+    def send(payload, _remaining):
+        seen.append(payload["messages"])
+        return json.dumps({"rating": 4, "rationale": "local", "promoted": False})
+    req = Request(id="t", task="rating", messages=[
+        Message(role="user", content="Read the page"),
+        Message(role="assistant", content=""),
+        Message(role="user", content="Result: hello"),
+    ])
+    assert generate(req, Settings(), transport=send).ok
+    assert all(isinstance(m["content"], str) for m in seen[0])
+    assert [m["content"] for m in seen[0][1:]] == ["Read the page", "", "Result: hello"]

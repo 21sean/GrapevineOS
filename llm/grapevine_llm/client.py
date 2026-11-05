@@ -230,6 +230,19 @@ def vllm_transport(base: str, max_bytes: int,
 TRANSPORTS = {"ollama": ollama_transport, "vllm": vllm_transport}
 
 
+def plain_messages(messages: list[dict]) -> list[dict]:
+    """
+    Instructor hands back empty content as an empty list, and the runtime answers that
+    with a 400. The transcript has an empty assistant turn after every tool call, so
+    without this no turn that used a tool could get a second generation.
+    """
+    def text(content) -> str:
+        if isinstance(content, str):
+            return content
+        return "".join(part.get("text", "") for part in content or [] if isinstance(part, dict))
+    return [{**message, "content": text(message["content"])} for message in messages]
+
+
 def _generate(request: Request, settings: Settings, *, transport: Transport | None = None,
              observer: Observer | None = None, on_frame: FrameSink | None = None) -> Result:
     started = time.perf_counter()
@@ -325,7 +338,7 @@ def _generate(request: Request, settings: Settings, *, transport: Transport | No
                     "format": schema,
                     "options": {"temperature": 0, "seed": effective.seed, "num_ctx": effective.num_ctx,
                                 "num_batch": effective.num_batch, "num_predict": 4096},
-                    "messages": kwargs["messages"]}, max(0.001, deadline-time.perf_counter()))
+                    "messages": plain_messages(kwargs["messages"])}, max(0.001, deadline-time.perf_counter()))
             finally:
                 model_ms += (time.perf_counter()-model_started)*1000
                 record_generation()
