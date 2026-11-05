@@ -148,7 +148,7 @@ const THREADS: DemoThread[] = [
   {
     slug: "tacos-before-casbah",
     agoHours: 98,
-    provider: "claude",
+    provider: "ollama",
     turns: [
       [
         "best tacos walkable from the Casbah before a 9pm show?",
