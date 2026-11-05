@@ -5,6 +5,9 @@ are listed on [GitHub](https://github.com/21sean/GrapevineOS/releases).
 
 ## Unreleased
 
+- Redraw the agent and guardrail diagrams with the contract gate and write gate and without
+  the hosted CLI path, and rewrite the guides to match: chat and extraction generate only
+  on the local runtime, and the model nodes have an idle timeout but no retry policy.
 - Fix over-deflection caused by the prompt work below. It lowered utility under attack in the
   injection suite from 94.4% to 69.4%, because ordinary event questions got "I'm Grapevine" in
   place of an answer, one of them with nothing injected. The attack success rate was 0 of 108

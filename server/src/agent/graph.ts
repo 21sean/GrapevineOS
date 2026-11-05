@@ -21,7 +21,7 @@ import { generateTyped, LlmGateError } from "../llm/gateway.js";
  * decision rather than an early `return`, and (most of the value)
  * every web-facing tool is covered by one rail instead of each tool
  * remembering to call the classifier itself. The next tool that fetches
- * something is protected by existing, not by someone noticing.
+ * something joins WEB_FACING_TOOLS and railToolResult.
  *
  * The third rail, the deterministic persona scrubber on the answer, is not a
  * node but lives inside `invokeModel`: every model call the graph makes is
@@ -63,8 +63,9 @@ import { generateTyped, LlmGateError } from "../llm/gateway.js";
  *   failure skips the fold and the turn proceeds.
  * - `agent` calls the model with the toolbox bound; the system prompt is
  *   rebuilt every request so the event digest and clock stay fresh, and is
- *   never persisted into thread state. Local Ollama responses pass through
- *   the Python contract gate before text or tool calls leave this node.
+ *   never persisted into thread state. Replies from the local runtime pass
+ *   through the Python contract gate: answer text streams early and stays
+ *   provisional, and tool calls leave this node only after it validates them.
  * - `tools` executes the model's tool calls, streaming start/done frames to
  *   the browser via the custom-stream writer (UI tools additionally emit
  *   "action" frames from inside the tool, see tools.ts).
@@ -73,17 +74,14 @@ import { generateTyped, LlmGateError } from "../llm/gateway.js";
  *   so a looping model can't spin forever.
  *
  * Node policies (model nodes only):
- * - `timeout.idleTimeout`: token callbacks refresh the idle timer, so long
- *   answers stream freely while a stalled Ollama generation fails in ~45s
- *   instead of eating the whole 120s HTTP deadline. CLI turns get a longer
- *   leash: their tool phases (MCP calls inside the CLI process) are silent.
- * - `retryPolicy.retryOn`: retries connection-establishment failures only.
- *   Those happen before the first token, so a retry can't duplicate streamed
- *   text; mid-stream failures (ECONNRESET, idle timeout) are deliberately not
- *   retried for the same reason. CLI models have no retry at all (a re-run
- *   spends real subscription tokens), and neither do the tools node (a re-run
- *   would re-emit UI action frames) or the rails (a retried scan would
- *   record the same decision twice and double-count it in the distribution).
+ * - `timeout.idleTimeout`: frames written to the stream refresh the idle timer,
+ *   so long answers stream freely while a stalled generation fails in ~45s
+ *   instead of eating the whole 120s HTTP deadline.
+ * - No node retries. The only retry is the gate's bounded repair of a reply
+ *   that fails validation; a transport failure ends the turn. Neither the tools
+ *   node (a re-run would re-emit UI action frames) nor the rails (a retried scan
+ *   would record the same decision twice and double-count it in the
+ *   distribution) ever re-run.
  *
  * Conversation memory is a LangGraph checkpointer keyed by thread_id: the
  * client sends only the new user message and the graph replays the rest.
@@ -145,12 +143,6 @@ export const SUMMARY_STRIDE = 8;
  *  worse than a lost detail. On abort the fold is skipped, never the turn. */
 const SUMMARY_TIMEOUT_MS = 25_000;
 
-/**
- * Connection-establishment failures only (Ollama restarting, socket refused).
- * These surface before any token streams, so retrying is invisible to the
- * browser. Mid-stream errors must not match; see the header comment. How
- * many attempts comes from the one LLM policy in budget.ts.
- */
 /**
  * Strips <think>…</think> spans from streamed text, holding back partial tags
  * that split across chunk boundaries. Some models emit these even with the
@@ -286,9 +278,9 @@ export interface GraphDeps {
   ephemeral?: boolean;
   /** What the tools act on. Evals pass a fixture; everything else gets the live one. */
   effects?: ToolEffects;
-  /** Set to route the turn through a subscription CLI instead of Ollama. */
+  /** Hosted generation is disabled: setting this makes buildAgentGraph throw. */
   provider?: CliProviderId;
-  /** Per-turn Claude Code overrides (ignored by the other CLIs). */
+  /** Left from the hosted CLI path; nothing reads these. */
   cliModel?: string;
   cliEffort?: ChatEffort;
   /**
@@ -795,10 +787,8 @@ export function buildAgentGraph(deps: GraphDeps) {
   /**
    * Recall. When more than SUMMARY_STRIDE messages have scrolled out of the
    * history window since the last fold, compress them into the running
-   * summary so windowed() stops meaning "forgotten". Skipped for CLI
-   * providers (a hidden generation there spends real subscription tokens)
-   * and skipped on any failure: memory compression is a nicety, the turn is
-   * not.
+   * summary so windowed() stops meaning "forgotten". Skipped on any failure:
+   * memory compression is a nicety, the turn is not.
    */
   async function recallNode(state: State, config: LangGraphRunnableConfig) {
     const overflow = recallOverflow(state.messages.length, state.summarized);
@@ -985,9 +975,8 @@ export function buildAgentGraph(deps: GraphDeps) {
     return replacements.length ? { messages: replacements } : {};
   }
 
-  // One policy per provider (budget.ts): CLI models get a longer idle leash
-  // (their tool phases stream nothing) and no retry (a re-run spends real
-  // subscription tokens on a duplicate turn).
+  // The local runtime's idle timeout (budget.ts). A provider never gets this
+  // far: it threw at the top of this function.
   const policy = llmPolicy(deps.provider ?? "ollama");
   const modelNodePolicy = { timeout: { idleTimeout: policy.idleTimeoutMs } };
 

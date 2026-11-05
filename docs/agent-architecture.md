@@ -6,10 +6,11 @@ architecture section and is the page to open before changing anything under
 `server/src/agent/`.
 
 The short version: one LangGraph state graph answers every chat turn. The
-guardrails are nodes in that graph, the model behind it is swappable without
-touching it, its memory is a durable checkpointer in Postgres, and every tool
-it can call is declared once in a contract table that the graph, the MCP
-server, the REST API and the generated skill file all derive from.
+classifier rails are nodes in that graph, every model call goes through a
+validating gate to a local runtime, its memory is a durable checkpointer in
+Postgres, and every tool it can call is declared once in a contract table that
+the graph, the MCP server, the REST API and the generated skill file all derive
+from.
 
 ## The graph
 
@@ -53,13 +54,15 @@ Routing reads typed state, not message history: `routeAfterAgent` looks for
 tool calls on the last message and `routeAfterRail` compares `toolRounds` with
 the budget. Both are exported and unit tested.
 
-Node policies apply to the model nodes only. They retry connection failures,
-which happen before the first token so a retry cannot duplicate output, and
-they fail a stalled generation through an idle timeout that healthy token
-streams keep refreshing (about 45 seconds for Ollama, longer for a CLI whose
-tool phases are silent). The tools node never retries, because a re-run would
-re-emit UI frames, and the rails never retry, because a repeated scan would be
-recorded twice.
+Node policies apply to the model nodes only, and the one they set is an idle
+timeout of about 45 seconds, so a stalled generation fails instead of spending
+the turn's 120-second deadline. Answer text on its way to the browser refreshes
+the timer; a generation with no text yet, such as one asking for tools, gets the
+45 seconds whole. No node retries. The only retry is inside the gate, where a
+reply that fails validation gets a bounded repair and a transport failure ends
+the turn. The tools node never retries, because a re-run would re-emit UI
+frames, and the rails never retry, because a repeated scan would be recorded
+twice.
 
 ## State
 
@@ -121,6 +124,10 @@ the rest of the stream, and the refusal is what the graph records. Every consume
 of the graph (the chat bridge, the red-team bridge, a test) therefore gets the
 same output rail without applying it by hand.
 
+Two gates sit beside the rails. The contract gate validates what the model says
+([One graph, local models](#one-graph-local-models)), and the write gate checks
+what it asks to change ([Who can ask for a write](#who-can-ask-for-a-write)).
+
 ## Streaming and retraction
 
 The answer reaches the person as it generates. The gate runs the model with its
@@ -168,22 +175,31 @@ and it can be wrong in the safe direction: a phrasing it does not recognize cost
 never a silent write. It covers the chat graph. MCP and REST callers are their own
 principals and keep their direct `set_rarity`.
 
-## One graph, every provider
+## One graph, local models
 
-The `agent` and `finalize` nodes call whatever `invokeModel` is given. By
-default that is `ChatOllama` with the graph toolbox bound. When Admin →
-Providers selects a subscription CLI, it is `CliChatModel`
-(`server/src/agent/cli-model.ts`), a LangChain chat model that shells out to
-Claude Code, Codex, Gemini or Copilot and streams the answer back through the
-same graph, so the CLI gets the same rails, the same memory and the same
-traces as Ollama.
+The `agent` and `finalize` nodes call `invokeModel`, and `recall` calls the gate
+directly. All three reach the model the same way: `generateTyped` in
+`server/src/llm/gateway.ts` sends the request to a Python worker
+(`llm/grapevine_llm/`), which generates on Ollama, or on vLLM with
+`GRAPEVINE_LLM_RUNTIME=vllm`, using JSON Schema constrained decoding. The worker
+validates the complete reply against a strict Pydantic contract: a tool call has
+to name an enabled tool and known event ids, and citations have to come from the
+evidence it was given. A reply that fails goes back for repair with the
+validation errors, three attempts in all by default, and then fails closed with
+a typed error. Zod checks the result again at the Node boundary.
 
-Tools differ by provider. Ollama models that support tool calling get the
-graph toolbox. Claude Code brings its own toolbox by connecting back to this
-server's MCP endpoint, so it drives the same executors from inside its own
-process. The other CLIs get a text note, built from the contracts at run
-time, describing what the server can do. The capabilities endpoint tells the
-browser which of these it is looking at.
+Hosted CLI generation is disabled. `server/src/agent/chat.ts` answers a turn with
+an error frame before generation when `chatProvider` is anything but `ollama`,
+`buildAgentGraph` throws `unsupported_provider` if it is handed a provider anyway,
+and `generateJSON` in `server/src/llm.ts` refuses extraction the same way.
+`server/src/providers.ts` keeps the CLI metadata and detection only for settings
+compatibility.
+
+A model that supports tool calling gets the graph toolbox, and one that does not
+answers from the event digest with a notice saying so. Claude Code, Claude Desktop
+and other external assistants are clients here, not engines: they connect to this
+server's MCP endpoint, drive the same executors, and answer in their own sessions.
+The capabilities endpoint tells the browser which tools the chat has.
 
 ## The frame protocol
 
@@ -338,12 +354,14 @@ server/src/agent/
   tools.ts        graph executors bound to the "graph" contracts
   chat.ts         the NDJSON bridge behind POST /api/agent/chat
   ext.ts          the external REST API behind /api/ext/v1
-  cli-model.ts    CliChatModel: Claude Code, Codex, Gemini, Copilot as a chat model
   guardrails.ts   the classifier rails and their recording
   refusals.ts     the in-character refusals the rails answer with
   context.ts      the system prompt and the event digest
   websearch.ts    SearXNG or DuckDuckGo search, Readability page reads, the SSRF guard
   telemetry.ts    Langfuse spans and scores
+llm/grapevine_llm/           the contract gate: Pydantic contracts, validation, repair
+server/src/llm/gateway.ts    generateTyped, the Node side of the gate
+server/src/providers.ts      CLI metadata and detection, for settings compatibility
 server/src/checkpointer.ts   SupabaseSaver
 server/src/mcp.ts            the FastMCP server over the "mcp" contracts
 server/src/routes/capabilities.ts   GET /api/agent/capabilities

@@ -110,31 +110,34 @@ Ollama model as ingestion; pick a model that supports tool calls, such as
 - **Drives the map.** Recommended events are highlighted and the camera fits
   them, even when current filters would hide them.
 - **Tools**: event search, traffic-aware ETAs, day plans with a
-  save-to-calendar card, watches, and interest changes. Calendar saves,
-  watches and interest changes are always proposed as cards you confirm,
-  with Undo.
+  save-to-calendar card, watches, and interest changes. Watches and interest
+  changes are proposed as cards you confirm, with Undo. A calendar save goes
+  straight through only for events you named, or ones the last reply offered
+  when you say yes; anything else on the call becomes a card.
 - **Transparent.** A popover next to the composer shows which provider is
   answering, which tools it has, whether the guardrails are on, and the MCP
   endpoint (`GET /api/agent/capabilities` returns the same thing).
 
-**Admin → Providers** can hand chat, newsletter extraction, or both to a
-subscription CLI instead: Claude Code (`claude -p`), OpenAI Codex, Gemini
-CLI, or GitHub Copilot CLI. Each uses the account it is signed in with, so
-the server holds no API keys. Claude Code also connects back to Grapevine's
-MCP endpoint for live event search and ETAs. Account → Claude has the
-connector URL and two prompts for running a routine from your own Claude
-account.
+Chat and newsletter extraction generate only on the local runtime.
+**Admin → Providers** still lists Claude Code, OpenAI Codex, Gemini CLI and
+GitHub Copilot CLI with their sign-in state, but hosted CLI generation is
+disabled: a CLI selected for chat gets an error before generation that asks
+you to select Ollama, and one selected for extraction is refused the same
+way. Claude Code and other assistants can still connect to Grapevine's MCP
+endpoint as clients, for live event search and ETAs in their own sessions
+(see [Agent interoperability](#agent-interoperability-mcp-and-rest)).
+Account → Claude has the connector URL and two prompts for running a routine
+from your own Claude account.
 
 ### Agent architecture
 
-The agent is a LangGraph `StateGraph` with the guardrails as nodes.
-`ChatOllama` is the default model; Admin → Providers can swap in a
-subscription CLI wrapped as a LangChain chat model without changing the
-graph. [docs/agent-architecture.md](agent-architecture.md) has the full
-walkthrough and the steps for adding a tool.
+The agent is a LangGraph `StateGraph` with the classifier rails as nodes.
+Every model call goes through the Python contract gate to the local runtime,
+Ollama by default or vLLM. [docs/agent-architecture.md](agent-architecture.md)
+has the full walkthrough and the steps for adding a tool.
 
 <p align="center">
-  <img src="images/ask-grapevine.png" width="900" alt="The Ask Grapevine agent as a LangGraph state graph with its guardrails as nodes: a user message (Cmd-K) enters the input rail (Llama Prompt Guard 2), which ends a blocked turn before it touches memory; a clean turn passes recall, which folds turns beyond the 24-message window into a running summary, then the agent node, the chat model with the toolbox bound (ChatOllama by default, or CliChatModel wrapping Claude Code, Codex, Gemini or Copilot) and a system prompt rebuilt each turn; tool calls run in the tools node and their results pass the content rail before the agent reads them, while the typed toolRounds counter is under six, after which a finalize node answers with no tools; every model call streams through the deterministic persona rail inside invokeModel; state (messages, toolRounds, summary) is checkpointed by the durable SupabaseSaver in Postgres keyed by thread id, so threads survive restarts; and the same executors serve the MCP server and the REST API through one contract table.">
+  <img src="images/ask-grapevine.png" width="900" alt="The Ask Grapevine agent as a LangGraph state graph: a user message (Cmd-K) enters the input rail (Llama Prompt Guard 2), which ends a blocked turn with a refusal before its text touches memory; a clean turn passes recall, which folds turns beyond the 24-message window into a running summary, then the agent node, with a system prompt rebuilt each turn; every agent and finalize call goes through invokeModel, where the Python contract gate generates on Ollama or vLLM with JSON Schema decoding and validates the whole reply with Pydantic, up to three attempts and then an in-character fallback, and answer text streams through the deterministic persona rail; validated tool calls run in the tools node, where a write gate checks save_calendar, discover_events and set_rarity against what the person typed, and their results pass the content rail before the agent reads them, while the typed toolRounds counter is under six, after which a finalize node answers with no tools; state (messages, toolRounds, summary) is checkpointed by the durable SupabaseSaver in Postgres keyed by thread id, so threads survive restarts; a hosted CLI selected as the chat provider gets an error before generation; and the same executors serve the MCP server and the REST API through one contract table.">
 </p>
 
 - **Typed graph state** (LangGraph `StateSchema`, Zod 4): the transcript
@@ -142,25 +145,28 @@ walkthrough and the steps for adding a tool.
   turn resets. After six tool rounds a `finalize` node answers without
   tools, so a looping model stops.
 - **Guardrails as nodes.** The input rail classifies the user's turn and
-  ends a blocked one before it is stored. The content rail scans every tool
-  result before the model reads it, which covers new tools automatically.
-  The output filter wraps every model call. The classifier rails fail open
-  and log it; the output filter fails closed.
-- **Retries only where safe.** Model nodes retry connection failures, which
-  happen before the first token, and give up on stalled generations after an
-  idle timeout. The tools node never retries, since a rerun would repeat UI
-  actions.
+  ends a blocked one before it is stored. The content rail scans what
+  `search_web` and `read_page` fetched before the model reads it. The output
+  filter wraps every model call. The classifier rails fail open and log it;
+  the output filter fails closed.
+- **Retries only where safe.** The contract gate is the only place that
+  retries: a reply that fails validation is taken back and repaired, up to
+  three attempts by default. A transport failure ends the turn, and a stalled
+  generation gives up after an idle timeout. The tools node never retries,
+  since a rerun would repeat UI actions.
 - **Durable memory.** A Supabase-backed LangGraph checkpointer (over
   PostgREST, keyed by `thread_id`) stores each thread, so the browser only
   sends the new message and threads survive restarts. The user's turn only
   enters the checkpointer after the input rail passes it. A `recall` node
   folds turns beyond the history window into a running summary.
-- **One graph for every provider.** The subscription CLIs run as a LangChain
-  chat model inside the same graph and get the same guardrails, memory and
-  traces as Ollama.
+- **One validated path for every model call.** Generation runs on Ollama or
+  vLLM through the Python contract gate, which validates the whole reply
+  against a strict contract and either repairs it or fails closed. Hosted CLI
+  generation is disabled.
 - **Tools from one contract table**, in two kinds: data tools run on the
   server; UI tools emit action frames that the browser renders as map pins
-  and confirmation cards. Every write is proposed first, on every surface.
+  and confirmation cards. A write from the chat has to match what the person
+  typed, or it becomes a card.
 - **Keyless web search**: a self-hosted SearXNG instance when configured,
   otherwise DuckDuckGo. Pages are read with Mozilla's Readability behind an
   SSRF guard. Web facts are shown as citation links.
@@ -191,30 +197,32 @@ walkthrough and the steps for adding a tool.
 Local open-weights models are easy to talk out of character; ours once
 answered _"I am Qwen, a large language model developed by Alibaba..."_ after
 a few tries. Grapevine wraps the model in small, fast checks that run
-in-process on CPU.
+locally on CPU.
 
 [![classifier: Llama Prompt Guard 2 (86M)](https://img.shields.io/badge/classifier-Llama_Prompt_Guard_2_·_86M-7b1e3c)](https://huggingface.co/meta-llama/Llama-Prompt-Guard-2-86M)
 [![runtime: Transformers.js (ONNX)](https://img.shields.io/badge/runtime-Transformers.js_·_ONNX-1f2937)](https://github.com/huggingface/transformers.js)
 &nbsp;![local · no paid APIs](https://img.shields.io/badge/local-no_paid_APIs-0b3b2e)
 
 <p align="center">
-  <img src="images/guardrails.png" width="900" alt="Guardrails, defense in depth: a user message passes an input rail (Llama Prompt Guard 2, 86M ONNX) that blocks on malicious ≥ 0.80 before either engine runs; benign messages enter the engine, a LangGraph agent on Ollama or a CLI provider (Claude Code, Codex, Gemini, Copilot), with the same rails bracketing both paths; a content rail re-checks the agent's search_web and read_page text and withholds indirect-injection hits (web discovery has its own verify gate); a deterministic output persona guard, keyed to the active model or CLI provider, replaces identity leaks before the reply reaches the browser. Every rail fails safe.">
+  <img src="images/guardrails.png" width="900" alt="Guardrails, defense in depth: a user message passes an input rail (Llama Prompt Guard 2, 86M ONNX) that blocks on malicious ≥ 0.80 before the agent runs; benign messages enter a LangGraph agent on a local model, Ollama or vLLM, under a pinned system prompt; every reply passes a contract gate, where Pydantic checks tools, event ids and citations, a failed attempt is taken back and repaired, and three failures become an in-character fallback; validated tool calls pass a write gate that checks save_calendar, discover_events and set_rarity against what the person typed, so anything else becomes a card or a dry run; a content rail re-checks search_web and read_page text and withholds indirect-injection hits before the model reads them (web discovery has its own verify gate); a deterministic output persona guard, keyed to the active model, replaces identity leaks before the reply reaches the browser. A non-Ollama chat provider gets an error before generation. The classifier rails fail open and the deterministic gates fail closed.">
 </p>
 
-| Layer                | Catches                                                                                                             | Engine                                                                                         | Latency         | On failure                                           |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | --------------- | ---------------------------------------------------- |
-| **Input rail**       | Jailbreaks and prompt injection in the user's message, blocked before the graph so they never enter thread history  | [Llama Prompt Guard 2](https://huggingface.co/meta-llama/Llama-Prompt-Guard-2-86M) (86M, ONNX) | ~15 to 90 ms    | **open**: a failed download logs once and chat works |
-| **Content rail**     | Injection hidden in fetched pages and search snippets, before it reaches the model                                  | same classifier                                                                                | ~15 ms / window | **open**                                             |
-| **Output filter**    | The model naming its vendor (_"I am Qwen..."_) or disclosing its system prompt, replaced with an in-character reply | deterministic regex with a streaming hold-back                                                 | ~0              | **closed**: always on, even with the classifier off  |
-| **Prompt hardening** | Keeps the model in character under social pressure                                                                  | pinned system prompt                                                                           | n/a             | n/a                                                  |
+| Layer                | Catches                                                                                                                 | Engine                                                                                         | Latency                                        | On failure                                                           |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------- |
+| **Input rail**       | Jailbreaks and prompt injection in the user's message, blocked before the agent runs so they never enter thread history | [Llama Prompt Guard 2](https://huggingface.co/meta-llama/Llama-Prompt-Guard-2-86M) (86M, ONNX) | ~15 to 90 ms                                   | **open**: a failed download logs once and chat works                 |
+| **Content rail**     | Injection hidden in fetched pages and search snippets, before it reaches the model                                      | same classifier                                                                                | ~15 ms / window                                | **open**                                                             |
+| **Contract gate**    | Replies that break the contract: tools that are not enabled, unknown event ids, citations outside the evidence          | Pydantic v2 over JSON Schema constrained decoding, in a local Python worker                    | none on a pass; a repair is another generation | **closed**: three attempts by default, then an in-character fallback |
+| **Write gate**       | Tool calls that change stored data without the person asking for it in their own words                                  | deterministic wording rules over this turn's message                                           | ~0                                             | **closed**: a phrasing it misses costs a card, never a silent write  |
+| **Output filter**    | The model naming its vendor (_"I am Qwen..."_) or disclosing its system prompt, replaced with an in-character reply     | deterministic regex with a streaming hold-back                                                 | ~0                                             | **closed**: always on, even with the classifier off                  |
+| **Prompt hardening** | Keeps the model in character under social pressure                                                                      | pinned system prompt                                                                           | n/a                                            | n/a                                                                  |
 
-- **Tool results are screened too.** A web page or event listing that tells
+- **Tool results are screened too.** A web page or search snippet that tells
   the model to "ignore your instructions" is caught as content, not only as
   a user message.
 - **The output filter is deterministic** because the failure that matters
   most, the model naming its vendor, should never get through. It holds back
   64 characters of the stream so a leak split across chunks is still
-  caught, and it is keyed to the active model or CLI provider.
+  caught, and it is keyed to the active model.
 - **Every decision is recorded** in `guardrail_scans` and shown in
   Admin → Monitoring. The measured scores are bimodal with a gap in the
   middle, which is why the 0.8 threshold stays where it is: more test
@@ -355,11 +363,12 @@ web/       Vite + React 19 + TS + Tailwind v4 + shadcn/ui (dark only)
            src/lib/chatReducer.ts (the frame reducer), score.ts · test/
 server/    Express 5 + tsx · supabase-js data layer (src/store.ts)
            LangGraph agent (src/agent/: graph, contracts, tools, NDJSON
-           bridge, CLI model, guardrails) · durable checkpointer
+           bridge, write gate, guardrails) · durable checkpointer
            (src/checkpointer.ts) · MCP server (src/mcp.ts)
            routes/ (one router per surface) · lifecycle, health, logging
            eval runner and suites (src/evals/, scripts/evals.ts) · test/
            openclaw/ (generated skill for the external agent API)
+llm/       Python contract gate and quality gates (grapevine_llm/, evals/)
 shared/    logic both tiers need: types and the frame protocol,
            recurrence, opening hours, tag affinity, timezone day math
 workers/   email-ingest Cloudflare Email Worker → Supabase raw_emails
