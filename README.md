@@ -6,15 +6,15 @@
 [![Release](https://img.shields.io/github/v/release/21sean/GrapevineOS)](https://github.com/21sean/GrapevineOS/releases/latest)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-0b3b2e)](LICENSE)
 
-[AI/ML checklist](#aiml-engineering-checklist) · [Screenshots](#screenshots) · [Quick start](#quick-start) · [Architecture](#how-it-works) · [Documentation](#documentation)
+[Capability checklist](#capability-checklist) · [Quick start](#quick-start) · [Architecture](#how-it-works) · [Documentation](#documentation)
 
 Grapevine turns local newsletters and verified web discoveries into a map of
-San Diego events. Browse by date, category, and drive time, learn what is on
-nearby, or ask the concierge to help plan your day.
+City events. Browse by date, category, and drive time, learn what is on
+nearby, or ask grapevine agent to help plan your day within your connected calendar.
 
 The engineering focus is the boundary between model output and application behavior:
 local inference, strict response contracts, evidence checks, bounded tool use,
-and repeatable evaluations that run before changes merge.
+and repeatable evaluations that run before changes merge. Deepeval judges focus on answer relevance and groundedness.
 
 ![Grapevine in dark mode, looking across the Star of India and the Embarcadero toward San Diego's 3D skyline](docs/images/downtown-san-diego-3d.png)
 
@@ -24,10 +24,9 @@ Extra map labels, walking paths, transit, and traffic are off. Real application 
 **Stack:** React / TypeScript / Mapbox · Node / LangGraph · Python / Pydantic /
 Instructor · Ollama or vLLM · Supabase · DeepEval / Ragas / OpenTelemetry.
 
-## AI/ML engineering checklist
+## capability checklist
 
-Each checkmark means the capability is implemented in this repository. The evidence
-column links to the code, tests, or workflow that a reviewer can inspect.
+The evidence column links to the code, tests, or workflow that a reviewer can inspect.
 
 | Status | Capability                                    | Implementation and evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | ------ | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -69,7 +68,7 @@ column links to the code, tests, or workflow that a reviewer can inspect.
   structured-output boundary fails closed for everything that can act on the world.
 
 See the [quality guide](llm/README.md) for reproducing the gates and the
-[README review](docs/readme-review.md) for the hiring-manager audit and remaining evidence gaps.
+[README review](docs/readme-review.md)
 
 ## Explore the city
 
@@ -87,12 +86,6 @@ Supabase stores events and account data, and Mapbox supplies the map and locatio
 services. Optional integrations add newsletter delivery, Google Calendar sync,
 push reminders, and tracing.
 
-## Screenshots
-
-Desktop and phone captures use the same dark waterfront view, with 3D buildings
-enabled and optional map clutter hidden. The phone layout keeps the skyline
-visible above the event list and detail sheet.
-
 <p align="center">
   <img src="docs/images/mobile-event-list.png" width="320" alt="Mobile Grapevine event list below San Diego's illuminated 3D waterfront skyline">
   <img src="docs/images/mobile-event-details.png" width="320" alt="Mobile event detail sheet with the dark San Diego waterfront map above it">
@@ -103,7 +96,7 @@ recorded in the [screenshot guide](docs/screenshots.md)._
 
 ## Quick start
 
-You need **Node 22.23.3** (pinned in [.nvmrc](.nvmrc)), a **Supabase project**,
+You need **Node 22.23.3** (pinned in [.nvmrc](.nvmrc)), a free **Supabase project** or local postgres (in progress),
 a **Mapbox account**, **Python 3.12 + uv**, and a **local Ollama model**.
 See [setup and operations](docs/setup.md) for supported Node versions and the
 full configuration walkthrough.
@@ -131,9 +124,6 @@ cp web/.env.example web/.env.local
 | `server/.env`    | `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `MAPBOX_SECRET_TOKEN`              |
 | `web/.env.local` | `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_MAPBOX_TOKEN` |
 
-On Windows, use `Copy-Item` in place of `cp` if needed. Keep secret keys in the
-server environment. The browser uses publishable and public tokens.
-
 Link your Supabase project and apply the migrations with its CLI:
 
 ```bash
@@ -141,11 +131,9 @@ supabase link --project-ref <your-project-ref>
 supabase db push
 ```
 
-Install Ollama and select a local model for both chat and extraction.
-The quality baseline pins `qwen3.8:27b` and Ollama 0.40.8. vLLM 0.33.0 is an optional
+Claude, ChatGPT API support included. Local models also supported: Install Ollama or vllm and select a local model for both chat and extraction. vLLM 0.33.0 is an optional
 runtime beside it. Follow the [structured inference guide](llm/README.md) for setup,
 the vLLM option, and offline operation.
-Hosted subscription CLI generation is disabled in this profile.
 
 ### 3. Run and add events
 
@@ -154,18 +142,10 @@ npm run doctor
 npm run dev
 ```
 
-Open **http://localhost:5174**. The API listens on **http://localhost:8787**.
-On Windows, `./scripts/dev-local.ps1` starts both services with a supported
-Node runtime, using Codex's bundled runtime if the Node on your PATH is too old.
-A fresh database starts empty. Paste a newsletter into **Admin → Ingest**, or
-use **Admin → Discover** to review and add verified events.
-
-Press **Ctrl K** on Windows and Linux, or **⌘K** on macOS, to open Ask Grapevine.
-
 ## How it works
 
 Newsletter or discovery text → schema-gated extraction and verification → stored
-events → map and ranking. The concierge reads event context and tool results,
+events → map and ranking. The agent reads event context and tool results,
 validates its next action or complete answer, and exposes proposals through the UI.
 
 <details>
@@ -202,7 +182,7 @@ for you to confirm.
 
 ### Guardrails
 
-Input and fetched content pass through classifier checks. A separate output
+Input and fetched content pass through classifier checks (llama guard). A separate output
 filter checks the validated answer before display. The
 [technical guide](docs/product-guide.md#guardrails) explains the checks and
 their failure behavior.
@@ -268,6 +248,4 @@ and reviewed baselines. Existing offline and red-team suites remain available.
 | `supabase/`             | Database migrations                                                        |
 | `docs/`                 | Setup, architecture, product guide, and UI screenshots                     |
 
-Licensed under [Apache-2.0](LICENSE). See the
-[third-party notices](docs/THIRD_PARTY_NOTICES.md) and
-[code of conduct](.github/CODE_OF_CONDUCT.md).
+Licensed under [Apache-2.0](LICENSE).
