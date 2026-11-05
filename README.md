@@ -1,6 +1,4 @@
-# Grapevine
-
-**Local events worth going to, on a 3D map. Built with a validated local AI agent.**
+# GrapevineOS
 
 [![CI](https://github.com/21sean/GrapevineOS/actions/workflows/ci.yml/badge.svg)](https://github.com/21sean/GrapevineOS/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/21sean/GrapevineOS)](https://github.com/21sean/GrapevineOS/releases/latest)
@@ -131,7 +129,7 @@ supabase link --project-ref <your-project-ref>
 supabase db push
 ```
 
-Claude, ChatGPT API support included. Local models also supported: Install Ollama or vllm and select a local model for both chat and extraction. vLLM 0.33.0 is an optional
+Claude, ChatGPT API support included (using your claude sub with claude -p). Local models also supported: Install Ollama or vllm and select a local model for both chat and extraction. vLLM 0.33.0 is an optional
 runtime beside it. Follow the [structured inference guide](llm/README.md) for setup,
 the vLLM option, and offline operation.
 
