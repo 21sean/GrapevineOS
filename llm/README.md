@@ -147,6 +147,47 @@ last partial block.
 On vLLM, `empty-retrieval` needed three attempts where Ollama's baseline needed one, so
 vLLM does not pass this gate yet. The gate is unchanged, and Ollama's baseline still applies.
 
+## Agent turn latency
+
+Measured against MLPerf's interactive latency limits: p99 TTFT at or under 500 ms and p99
+TPOT at or under 30 ms, the limits of its Llama 3.1 8B interactive scenario. These are local
+measurements on one RTX 5090 with an i7-14700KF, not an MLPerf submission. `npm run
+bench:ttft -w server` drives the real route, graph, rails and gate one request at a time,
+warm, with a 1.5 s gap between turns. The store is a fixture, so a deployment's database
+round trip is not in the visible numbers.
+
+Model TTFT is the request sent to the runtime until its first generated token. Visible TTFT
+is the POST until the first `delta` frame reaches the client. Times are in ms.
+
+Ollama 0.40.8, `qwen3.8:27b`, on 24addce. The long prompt holds 120 events and is p50/p95/p99;
+the short one is p50/p95:
+
+| Turn           | Prompt tokens | n   | Model TTFT  | Visible TTFT | Model TPOT | Visible TPOT | End to end    | Output tok/s | Cache hit |
+| -------------- | ------------- | --- | ----------- | ------------ | ---------- | ------------ | ------------- | ------------ | --------- |
+| Long, no tool  | 10575         | 105 | 294/311/337 | 555/685/703  | 7/8/8      | 13/15/18     | 818/1180/1190 | 82/93/93     | 97.6%     |
+| Short, no tool | 7808          | 30  | 293/309     | 539/663      | 7/8        | 13/18        | 776/1406      | 80/98        | 96.9%     |
+
+On the long prompt, model TTFT and both TPOT measures are inside the limits. Visible TTFT is
+outside them, already at p50. The JSON envelope comes first, which puts the model's first answer
+word at p99 491 ms. The persona filter then holds back 64 characters, so an answer shorter than
+that shows nothing until it finishes. Cold, with a model load, model TTFT was about 9.4 s long
+and 8.4 s short (n=3 each). A prompt cache miss is not in these runs.
+
+There is no before number to compare with. The baseline run on the old code timed out, and its
+no-tool turns returned errors, so nothing here claims an improvement.
+
+Measured one commit earlier, on c4ec9b7, before the prompt gained about 170 tokens and a restated
+question after each tool result. p50/p95, smaller samples, so treat these as rough:
+
+| Turn                        | Prompt tokens | n   | Model TTFT | Visible TTFT | Model TPOT | Visible TPOT | End to end | Output tok/s | Cache hit |
+| --------------------------- | ------------- | --- | ---------- | ------------ | ---------- | ------------ | ---------- | ------------ | --------- |
+| Ollama, short, tool first   | 7731          | 7   | 219/245    | 1331/2023    | 6/7        | 8/13         | 2263/3771  | 89/97        | 98.7%     |
+| vLLM 0.33.0, short, no tool | 7653          | 24  | 412/426    | 1067/1289    | 13/14      | 21/36        | 1505/4123  | 40/46        | n/a       |
+| vLLM 0.33.0, long, no tool  | 10400         | 26  | 297/308    | 964/1337     | 14/14      | 21/32        | 1542/3922  | 45/52        | n/a       |
+
+On vLLM, 8 of 56 turns retracted text and showed a repaired answer, against 0 of 213 on Ollama at
+that commit. Tool-first p95 is close to a maximum at n=7.
+
 ## Add or change a schema
 
 1. Define a strict `Contract` in `grapevine_llm/contracts.py`; register outputs in
@@ -174,10 +215,12 @@ Copy a case, give it a unique matching request ID, and add exact field checks.
 `responses` drives deterministic replay, not the live run. Set `live: true` for
 model cases and add an explicit `rubric` only for subjective criteria.
 
-The live run also drives one whole tool round through the real graph, gate and model:
-the model asks for a tool, the result goes back, and the answer has to use it. Golden
-cases are single generations and cannot see that path, and on 2026-11-04 it turned out
-every tool turn had been failing since v0.7.0 with all of them green.
+The live run also drives whole turns through the real graph, gate and model. One is a
+tool round: the model asks for a tool, the result goes back, and the answer has to use
+it. Golden cases are single generations and cannot see that path, and on 2026-11-04 it
+turned out every tool turn had been failing since v0.7.0 with all of them green. Five are
+ordinary questions the concierge once deflected, two of them with injected text, so a
+prompt that answers "I'm Grapevine" in place of the answer fails the gate.
 
 Deterministic failures stop the run before judging. DeepEval applies local typed
 judges with explicit score anchors. RAG answers additionally receive groundedness

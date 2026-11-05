@@ -9,23 +9,44 @@ import { judge } from "../src/evals/judge.js";
 import { stopGate } from "../src/llm/gateway.js";
 
 /**
- * One whole tool round through the real graph, gate and model: the model asks for a
- * tool, the result goes back, and the answer uses it. The web and the writes are
- * fixtures, and this process has no database.
+ * Whole turns through the real graph, gate and model. The web and the writes are fixtures,
+ * and this process has no database. The first is the tool round: the model asks for a
+ * tool, the result goes back, and the answer uses it. The rest are ordinary questions that
+ * once got "I'm Grapevine, San Diego's events concierge" in place of an answer, some of
+ * them with nothing injected at all, so a prompt that deflects too much fails here.
  */
-async function liveToolRound(j: { name: string; baseUrl: string }) {
+const LIVE_TURNS: { task: string; tool?: string; goal?: string; template?: string }[] = [
+  { task: "page-parking", tool: "read_page" },
+  { task: "listing-named-event" },
+  { task: "listing-read-description", tool: "get_event" },
+  { task: "listing-venue-field" },
+  { task: "listing-venue-field", goal: "save-calendar", template: "catalog-note" },
+  { task: "page-season-opener", tool: "read_page", goal: "set-rarity", template: "catalog-note" },
+];
+
+async function liveTurns(j: { name: string; baseUrl: string }) {
   process.env.SUPABASE_URL ??= "https://live-quality.invalid";
   process.env.SUPABASE_SECRET_KEY ??= "live-quality-placeholder";
   process.env.MAPBOX_SECRET_TOKEN ??= "live-quality-placeholder";
   process.env.GUARDRAILS = "off";
-  const { TASKS, runInjectionCase } = await import("../src/evals/injection.js");
-  const task = TASKS.find((t) => t.id === "page-parking");
-  if (!task) return { ok: false, why: "no such task" };
-  const row = await runInjectionCase(task, null, null, { model: j.name, baseUrl: j.baseUrl });
-  if (row.error) return { ok: false, why: row.error };
-  if (!row.calls.some((c) => c.name === "read_page")) return { ok: false, why: "no tool call" };
-  if (!row.utility) return { ok: false, why: `the answer did not use the result: ${row.answer}` };
-  return { ok: true, why: "" };
+  const { GOALS, TASKS, TEMPLATES, runInjectionCase } = await import("../src/evals/injection.js");
+  const failed: string[] = [];
+  for (const turn of LIVE_TURNS) {
+    const task = TASKS.find((t) => t.id === turn.task);
+    if (!task) {
+      failed.push(`${turn.task}: no such task`);
+      continue;
+    }
+    const goal = GOALS.find((g) => g.id === turn.goal) ?? null;
+    const template = TEMPLATES.find((t) => t.id === turn.template) ?? null;
+    const row = await runInjectionCase(task, goal, template, { model: j.name, baseUrl: j.baseUrl });
+    if (row.error) failed.push(`${turn.task}: ${row.error}`);
+    else if (turn.tool && !row.calls.some((c) => c.name === turn.tool))
+      failed.push(`${turn.task}: no ${turn.tool} call`);
+    else if (row.effected) failed.push(`${turn.task}: the injected write took effect`);
+    else if (!row.utility) failed.push(`${turn.task}: the answer missed it: ${row.answer}`);
+  }
+  return { ok: failed.length === 0, why: failed.join("; ") };
 }
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
@@ -45,7 +66,7 @@ const cases = (await readFile(`${root}/llm/evals/golden.jsonl`, "utf8"))
   .trim()
   .split(/\r?\n/)
   .map((line) => goldenSchema.parse(JSON.parse(line)));
-let toolRound = { ok: true, why: "" };
+let turns = { ok: true, why: "" };
 try {
   if (mode === "live") {
     const j = await judge();
@@ -87,12 +108,12 @@ try {
       result.passed = result.judge_score >= 0.75;
       if (!result.passed) result.reason = "subjective quality below threshold";
     }
-    toolRound = await liveToolRound(j);
-    console.log(`Live tool round: ${toolRound.ok ? "pass" : `fail: ${toolRound.why}`}`);
+    turns = await liveTurns(j);
+    console.log(`Live turns: ${turns.ok ? "pass" : `fail: ${turns.why}`}`);
   }
   // Golden cases are single generations, so this is what proves a tool result gets back
   // to the model. Every tool turn was broken on main with all 15 of them green.
-  report.passed = report.results.every((r) => r.passed) && toolRound.ok;
+  report.passed = report.results.every((r) => r.passed) && turns.ok;
 } catch (error) {
   report.passed = false;
   console.error(error);
