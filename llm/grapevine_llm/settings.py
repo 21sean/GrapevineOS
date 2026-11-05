@@ -36,8 +36,8 @@ class Settings(BaseSettings):
     keep_alive: str = "30m"
     # The runner checkpoints every batch and restores the nearest one when a prompt
     # changes near its end, so a new question re-evaluates up to this many tokens times
-    # two. Measured on a 9,300 token prompt: first token 479 ms at the default, 232 ms at
-    # 256, against a full miss going from 2.9 s to 3.5 s. All callers must send the same
+    # two. Measured on a 9,300 token prompt: first token 453 ms at the default, 228 ms at
+    # 256, against a full miss going from 2.9 s to 3.4 s. All callers must send the same
     # value, because a change reloads the model.
     num_batch: int = Field(default=256, ge=32, le=4096)
     seed: int = 42
