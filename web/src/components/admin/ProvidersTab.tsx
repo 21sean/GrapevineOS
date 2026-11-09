@@ -10,17 +10,16 @@ import { api } from "@/lib/api"
 import { useGrapevine } from "@/lib/store"
 import {
   CLI_PROVIDER_NAMES,
+  isSupportedProvider,
+  type HostedProviderId,
+  type HostedProviderStatus,
+  type LlmProviderId,
   type LocalRuntimeStatus,
   type McpInfo,
 } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
-/**
- * Admin → Providers: the local runtime chat and extraction generate on, and
- * wiring Claude up to this app's tools over MCP. Hosted CLI generation is gone,
- * so there is nothing to pick here. The one action is the way back from a CLI
- * saved before v0.7.0, which still loads and which chat and extraction refuse.
- */
+/** Admin setup for validated local and subscription-backed generation. */
 export function ProvidersTab() {
   const settings = useGrapevine((s) => s.settings)
   const setSettings = useGrapevine((s) => s.setSettings)
@@ -30,14 +29,32 @@ export function ProvidersTab() {
   const [mcp, setMcp] = useState<McpInfo | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [switching, setSwitching] = useState(false)
+  const [hosted, setHosted] = useState<HostedProviderStatus[]>([])
+  const [providerError, setProviderError] = useState("")
+  const [testing, setTesting] = useState<HostedProviderId | null>(null)
+  const [tested, setTested] = useState<
+    Partial<Record<HostedProviderId, string>>
+  >({})
 
   const refresh = useCallback(() => {
     setRefreshing(true)
-    api
-      .runtime()
-      .then(setRuntime)
-      .catch(() => setRuntime(null))
-      .finally(() => setRefreshing(false))
+    setProviderError("")
+    setTested({})
+    Promise.all([
+      api
+        .runtime()
+        .then(setRuntime)
+        .catch(() => setRuntime(null)),
+      api
+        .providers()
+        .then(setHosted)
+        .catch(() => {
+          setHosted([])
+          setProviderError(
+            "Provider checks failed. Wait for active requests and refresh. If this persists, check the API logs and install the Python environment with uv sync --locked --project llm."
+          )
+        }),
+    ]).finally(() => setRefreshing(false))
   }, [])
 
   useEffect(() => {
@@ -50,7 +67,45 @@ export function ProvidersTab() {
 
   const chatProvider = settings?.chatProvider ?? "ollama"
   const extractProvider = settings?.extractProvider ?? "ollama"
-  const onLocal = chatProvider === "ollama" && extractProvider === "ollama"
+
+  async function selectProvider(
+    role: "chatProvider" | "extractProvider",
+    value: LlmProviderId
+  ) {
+    setSwitching(true)
+    try {
+      setSettings(await api.saveSettings({ [role]: value }))
+      toast.success("Provider updated")
+    } catch (err) {
+      toast.error("Couldn't update provider", {
+        description: String(err).slice(0, 180),
+      })
+    } finally {
+      setSwitching(false)
+    }
+  }
+
+  async function testProvider(id: HostedProviderId) {
+    setTesting(id)
+    setTested((previous) => ({
+      ...previous,
+      [id]: "Testing a validated response…",
+    }))
+    try {
+      await api.testProvider(id)
+      setTested((previous) => ({
+        ...previous,
+        [id]: "Connected · structured response validated",
+      }))
+    } catch (err) {
+      setTested((previous) => ({
+        ...previous,
+        [id]: String(err).slice(0, 250),
+      }))
+    } finally {
+      setTesting(null)
+    }
+  }
 
   async function switchToLocal() {
     setSwitching(true)
@@ -76,14 +131,14 @@ export function ProvidersTab() {
         <div className="flex flex-col gap-1">
           <h3 className="font-heading text-base font-semibold">Providers</h3>
           <p className="text-sm text-muted-foreground">
-            Ask Grapevine, newsletter extraction and buzz ratings all run on the
-            local runtime.
+            Choose who answers Ask Grapevine and who processes newsletters and
+            buzz ratings.
           </p>
         </div>
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="Check the runtime again"
+          aria-label="Refresh provider status"
           onClick={refresh}
           disabled={refreshing}
         >
@@ -91,16 +146,136 @@ export function ProvidersTab() {
         </Button>
       </div>
 
+      <div className="grid gap-3 sm:grid-cols-2">
+        {(
+          [
+            ["chatProvider", "Ask Grapevine", chatProvider],
+            ["extractProvider", "Extraction and ratings", extractProvider],
+          ] as const
+        ).map(([role, label, value]) => (
+          <label key={role} className="flex flex-col gap-1.5 text-sm">
+            {label}
+            <select
+              className="rounded-md border bg-background px-3 py-2"
+              value={value}
+              disabled={!settings || switching}
+              onChange={(event) =>
+                selectProvider(role, event.target.value as LlmProviderId)
+              }
+            >
+              <option value="ollama">Local runtime</option>
+              <option value="codex">ChatGPT / Codex</option>
+              <option value="claude">Claude Code</option>
+              {!isSupportedProvider(value) && (
+                <option value={value} disabled>
+                  {CLI_PROVIDER_NAMES[value]} (unsupported)
+                </option>
+              )}
+            </select>
+          </label>
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Hosted providers send the selected workload's messages, event context
+        and newsletter text to OpenAI or Anthropic. They use the account signed
+        in on the API server and its plan limits or API billing, shared across
+        this deployment.
+      </p>
+      {providerError && (
+        <p role="alert" className="text-sm text-destructive">
+          {providerError}
+        </p>
+      )}
+      {(["codex", "claude"] as const).map((id) => {
+        const status = hosted.find((entry) => entry.id === id)
+        return (
+          <div
+            key={id}
+            className={cn(
+              "flex flex-col gap-2 rounded-lg border px-3 py-2.5",
+              (chatProvider === id || extractProvider === id) &&
+                "border-wine/60"
+            )}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="text-sm font-medium">
+                {id === "codex" ? "ChatGPT / Codex" : "Claude Code"}
+              </h4>
+              <Badge variant="outline">
+                {status?.ready
+                  ? "Ready to test"
+                  : refreshing
+                    ? "Checking…"
+                    : "Setup needed"}
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {status?.message ??
+                "Install and sign in on the machine running the API server."}
+            </p>
+            {status && (
+              <p className="font-mono text-xs text-muted-foreground">
+                {status.version ?? "Not installed"} · {status.model}
+              </p>
+            )}
+            <SnippetLabel>
+              {id === "codex"
+                ? "Install or update"
+                : "Install (Windows, macOS or Linux)"}
+            </SnippetLabel>
+            <Snippet
+              text={
+                id === "codex"
+                  ? "npm install -g @openai/codex@latest"
+                  : "npm install -g @anthropic-ai/claude-code@latest"
+              }
+            />
+            <SnippetLabel>
+              {id === "codex" ? "Sign in with ChatGPT" : "Sign in with Claude"}
+            </SnippetLabel>
+            <Snippet
+              text={id === "codex" ? "codex login" : "claude auth login"}
+            />
+            <p className="text-xs text-muted-foreground">
+              {id === "codex"
+                ? "On a remote server, use codex login --device-auth. Sign-in opens the official OpenAI flow; Grapevine never asks for your password."
+                : "Already signed in to Claude Code? Refresh to use that session. The best model may use separately billed Fable credits. Set GRAPEVINE_CLAUDE_MODEL=opus on the server to use latest Opus instead."}{" "}
+              Run these as the same operating-system user that starts Grapevine,
+              then refresh.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="self-start"
+              disabled={!!testing || !status?.ready}
+              onClick={() => testProvider(id)}
+            >
+              Test {id === "codex" ? "ChatGPT" : "Claude"} connection
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              The connection test makes one small model request and uses your
+              plan allowance.
+            </p>
+            {tested[id] && (
+              <p role="status" className="text-sm">
+                {tested[id]}
+              </p>
+            )}
+          </div>
+        )
+      })}
+
       {/* The way back from a CLI saved before hosted generation was removed */}
-      {!onLocal && (
+      {(!isSupportedProvider(chatProvider) ||
+        !isSupportedProvider(extractProvider)) && (
         <div className="flex flex-col gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5 text-sm">
-          {chatProvider !== "ollama" && (
+          {!isSupportedProvider(chatProvider) && (
             <p>
               Ask Grapevine is still set to {CLI_PROVIDER_NAMES[chatProvider]},
               so chat answers with an error.
             </p>
           )}
-          {extractProvider !== "ollama" && (
+          {!isSupportedProvider(extractProvider) && (
             <p>
               Newsletter extraction is still set to{" "}
               {CLI_PROVIDER_NAMES[extractProvider]}, so extraction and buzz
@@ -108,7 +283,8 @@ export function ProvidersTab() {
             </p>
           )}
           <p className="text-xs text-muted-foreground">
-            Hosted CLI generation was removed in v0.7.0.
+            This saved provider is unsupported. Choose a supported provider
+            above.
           </p>
           <Button
             size="sm"
@@ -182,8 +358,8 @@ export function ProvidersTab() {
         <p className="text-sm text-muted-foreground">
           Give Claude Code or Claude Desktop this app's tools (event search,
           details, ETAs, calendar saves, interests) over the Model Context
-          Protocol. They answer in their own sessions; nothing here generates
-          through them.
+          Protocol. These external sessions are separate from the provider
+          selected above.
         </p>
       </div>
 

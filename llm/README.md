@@ -37,8 +37,11 @@ should be set when starting Ollama. The separate Windows runtime uses port 11435
 the ordinary installation can continue on 11434.
 
 The application reads the Ollama URL and model from its settings, with `OLLAMA_URL`
-as the URL fallback. Configure both chat and extraction to use Ollama. Hosted
-subscription CLI generation fails closed. `GRAPEVINE_LLM_PYTHON` can override the
+as the URL fallback. For local inference, select Local for chat and extraction.
+[ChatGPT / Codex and Claude Code](../docs/hosted-providers.md) are optional hosted
+transports through the same validation gate; they emit answers after validation
+and use isolated workers. Offline evals continue to require the local provider.
+`GRAPEVINE_LLM_PYTHON` can override the
 worker interpreter; otherwise it uses `llm/.venv`. Pydantic Settings also accepts
 `GRAPEVINE_LLM_MAX_ATTEMPTS` (1–5), `GRAPEVINE_LLM_TIMEOUT_SECONDS` (up to 300), and
 `GRAPEVINE_LLM_NUM_CTX`; the Node call deadline remains 125 seconds.

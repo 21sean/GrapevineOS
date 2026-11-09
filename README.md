@@ -133,7 +133,8 @@ supabase db push
 ```
 
 Install Ollama and select a local model for both chat and extraction. vLLM 0.33.0 is an optional
-runtime beside it. Hosted CLI generation is disabled. Follow the [structured inference guide](llm/README.md) for setup,
+runtime beside it, or select [ChatGPT / Codex or Claude Code](docs/hosted-providers.md)
+in Admin → Providers. Follow the [structured inference guide](llm/README.md) for setup,
 the vLLM option, and offline operation.
 
 ### 3. Run and add events

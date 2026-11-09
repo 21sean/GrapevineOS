@@ -25,9 +25,10 @@ const ctx: AgentCtx = {
     guardThreshold: 0.8,
   },
 };
-function graph() {
+function graph(provider?: "codex" | "claude") {
   return buildAgentGraph({
     ctx,
+    provider,
     chat: {},
     baseUrl: "http://127.0.0.1:11434",
     model: "test",
@@ -40,7 +41,30 @@ function graph() {
 }
 
 describe("validated chat boundary", () => {
-  it("refuses a hosted provider before it builds anything", () => {
+  it.each(["codex", "claude"] as const)(
+    "routes %s through the gate with evidence context",
+    async (provider) => {
+      gate.generateTyped.mockResolvedValueOnce({
+        kind: "insufficient_evidence",
+        answer: "No events found.",
+        citations: [],
+        tool_calls: [],
+      });
+      const stream = await graph(provider).stream(turnInput(), {
+        streamMode: "custom",
+        configurable: { thread_id: provider },
+      });
+      const frames: AgentFrame[] = [];
+      for await (const frame of stream) frames.push(frame);
+      expect(gate.generateTyped.mock.calls.at(-1)?.[0]).toMatchObject({
+        provider,
+        task: "agent",
+        context: { require_citations: true, allowed_tools: [] },
+      });
+      expect(frames.some((frame) => frame.type === "delta")).toBe(true);
+    },
+  );
+  it("refuses unsupported legacy providers before it builds anything", () => {
     expect(() =>
       buildAgentGraph({
         ctx,
@@ -51,7 +75,7 @@ describe("validated chat boundary", () => {
         city: "Testville",
         userText: "",
         ephemeral: true,
-        provider: "claude",
+        provider: "gemini",
       }),
     ).toThrow(expect.objectContaining({ code: "unsupported_provider" }));
   });

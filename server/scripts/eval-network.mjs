@@ -2,6 +2,7 @@
 import net from "node:net";
 import dns from "node:dns";
 import { syncBuiltinESMExports } from "node:module";
+process.env.GRAPEVINE_LLM_OFFLINE = "1";
 const allowed = (host) =>
   host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]";
 const connect = net.Socket.prototype.connect;

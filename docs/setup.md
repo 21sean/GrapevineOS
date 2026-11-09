@@ -20,8 +20,10 @@ Requirements:
 - **Node 22.23.3** (`.nvmrc` pins the tested version; `nvm use` reads it). Node 24.15+ and 26+ are also supported by the dependencies.
 - **[Ollama](https://ollama.com)** running locally with at least one chat
   model (`ollama pull qwen3:8b` works fine; pick it in Admin → Models).
-  The structured-output profile requires a local runtime; hosted subscription CLI
-  generation is disabled. See [LLM setup and quality gates](../llm/README.md).
+  Alternatively, use **ChatGPT / Codex** or **Claude Code** without a local
+  generation model: follow [hosted provider setup](hosted-providers.md), then
+  select chat and extraction in Admin → Providers. All providers use the
+  [structured-output validation gate](../llm/README.md).
 - **vLLM, optional**: set `GRAPEVINE_LLM_RUNTIME=vllm` in `server/.env` to serve chat
   and extraction from vLLM 0.33.0 instead of Ollama. It needs Linux or WSL2 and about
   25 GB of free VRAM, and it holds that memory while it runs. See

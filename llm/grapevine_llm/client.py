@@ -16,6 +16,7 @@ from .contracts import OUTPUTS, VERSION, Context, Contract, RuleError, request_s
 from .settings import Settings, local_endpoint
 from .streaming import AnswerStream, GenerationLog
 from .telemetry import sample, tracer
+from .cli import CliError, cli_transport
 
 # Instructor logs exception strings with rejected values. Our observer records
 # bounded error codes instead, without private prompt/output content.
@@ -285,8 +286,10 @@ def _generate(request: Request, settings: Settings, *, transport: Transport | No
     try:
         effective = Settings(**{**settings.model_dump(),
             "model": request.model or settings.model, "base_url": request.base_url or settings.base_url})
-        send = transport or TRANSPORTS[effective.runtime](effective.base_url, effective.max_bytes,
-                                                          lambda: generation)
+        send = transport or (cli_transport(effective.provider, effective.max_bytes, lambda: generation)
+                             if effective.provider != "ollama" else
+                             TRANSPORTS[effective.runtime](effective.base_url, effective.max_bytes,
+                                                          lambda: generation))
     except ValueError:
         return fail("configuration", "Local model configuration rejected")
 
@@ -375,7 +378,11 @@ def _generate(request: Request, settings: Settings, *, transport: Transport | No
             return fail("transport", "Local model transport failed")
         except Exception as exc:
             while exc.__cause__ is not None:
+                if isinstance(exc, CliError):
+                    break
                 exc = exc.__cause__
+            if isinstance(exc, CliError):
+                return fail("transport", str(exc))
             if isinstance(exc, (TimeoutError, httpx.TimeoutException)):
                 return fail("timeout", "Generation deadline exceeded")
             if isinstance(exc, httpx.HTTPError):

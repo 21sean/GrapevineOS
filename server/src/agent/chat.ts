@@ -43,6 +43,8 @@ import { rateLimit, singleFlight } from "../rate-limit.js";
 import { currentRequestId } from "../request-id.js";
 import { store } from "../store.js";
 import { type AgentFrame, type ChatUsage } from "../types.js";
+import { isHostedProvider, isSupportedProvider } from "../types.js";
+import { hostedModel } from "../llm/hosted.js";
 import { buildCtx, coercePos, type ChatContext } from "./context.js";
 import { buildAgentGraph, forgetThread, turnInput } from "./graph.js";
 import { turnFailureText } from "./refusals.js";
@@ -113,7 +115,8 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
     if (threadOwner && !ownsThread) threadId = crypto.randomUUID();
 
     /** Persist the finished exchange for signed-in users (fire-and-forget). */
-    const model = llmModel(settings.model);
+    const hosted = isHostedProvider(settings.chatProvider) ? settings.chatProvider : undefined;
+    const model = hosted ? hostedModel(hosted) : llmModel(settings.model);
     const providerLabel = model || llmRuntime();
     const persist = (assistantText: string) => {
       if (!user || !assistantText.trim()) return;
@@ -131,12 +134,11 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
       return res.end();
     }
 
-    // A CLI saved before v0.7.0 still loads from settings, but it cannot answer:
-    // this profile requires validated local inference.
-    if (settings.chatProvider !== "ollama") {
+    // Old unsupported providers still load so Admin can offer a replacement.
+    if (!isSupportedProvider(settings.chatProvider)) {
       send({
         type: "error",
-        message: "Chat runs only on the local runtime. Switch back to it in Admin → Providers.",
+        message: "Choose Local, ChatGPT / Codex, or Claude in Admin → Providers.",
       });
       return done();
     }
@@ -148,8 +150,8 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
       });
       return done();
     }
-    const baseUrl = await llmBase();
-    if ((await runtimeVersion(baseUrl)) === null) {
+    const baseUrl = hosted ? "" : await llmBase();
+    if (!hosted && (await runtimeVersion(baseUrl)) === null) {
       send({
         type: "notice",
         code: "ollama-down",
@@ -157,7 +159,7 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
       });
       return done();
     }
-    const toolsOk = await runtimeSupportsTools(model);
+    const toolsOk = hosted ? true : await runtimeSupportsTools(model);
     if (!toolsOk) {
       send({
         type: "notice",
@@ -172,6 +174,7 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
     const chatCtx: ChatContext = { ...(body.context ?? {}), sessionUser: user ?? undefined };
     const ctx = await buildCtx(coercePos(chatCtx.userPos));
     const graph = buildAgentGraph({
+      provider: hosted,
       ctx,
       chat: chatCtx,
       baseUrl,

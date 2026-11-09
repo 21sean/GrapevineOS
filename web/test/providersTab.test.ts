@@ -8,6 +8,8 @@ const calls = vi.hoisted(() => ({
   mcpInfo: vi.fn(),
   saveSettings: vi.fn(),
   providerLogo: vi.fn(),
+  providers: vi.fn(),
+  testProvider: vi.fn(),
 }))
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api")>()),
@@ -63,6 +65,22 @@ beforeEach(() => {
     connectorUrl: "http://localhost:8787/mcp",
   })
   calls.providerLogo.mockResolvedValue("")
+  calls.providers.mockResolvedValue([
+    {
+      id: "codex",
+      ready: true,
+      version: "0.167.0",
+      model: "gpt-6-astra",
+      message: "Signed in on the API server",
+    },
+    {
+      id: "claude",
+      ready: true,
+      version: "2.1.312",
+      model: "best",
+      message: "Signed in on the API server",
+    },
+  ])
   host = document.createElement("div")
   root = createRoot(host)
 })
@@ -72,35 +90,29 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-it("offers no provider to pick when everything is on the local runtime", async () => {
+it("offers independent providers with official login commands and diagnostics", async () => {
   await render("ollama", "ollama")
   const text = host.textContent ?? ""
   expect(text).toContain("Ollama (local)")
   expect(text).toContain("v0.20.0 · test-model")
   expect(switchBack()).toBeUndefined()
-  for (const gone of [
-    "Use for",
-    "Who answers",
-    "not signed in",
-    "subscription",
-  ])
-    expect(text).not.toContain(gone)
-  for (const cli of ["Codex", "Gemini", "Copilot"])
-    expect(text).not.toContain(cli)
-  // Claude stays only as an MCP client of this app.
+  expect(host.querySelectorAll("select")).toHaveLength(2)
+  expect(text).toContain("codex login")
+  expect(text).toContain("claude auth login")
+  expect(text).toContain("gpt-6-astra")
+  expect(text).toContain("Signed in on the API server")
   expect(text).toContain("Connect Claude to Grapevine (MCP)")
-  expect(text).toContain("nothing here generates through them")
 })
 
 it("names a saved CLI, says what it breaks, and switches back in one click", async () => {
   calls.saveSettings.mockResolvedValue(settings("ollama", "ollama"))
-  await render("claude", "codex")
+  await render("copilot", "gemini")
   const text = host.textContent ?? ""
   expect(text).toContain(
-    "Ask Grapevine is still set to Claude Code, so chat answers with an error."
+    "Ask Grapevine is still set to Copilot CLI, so chat answers with an error."
   )
-  expect(text).toContain("Newsletter extraction is still set to Codex CLI")
-  expect(text).toContain("Hosted CLI generation was removed in v0.7.0.")
+  expect(text).toContain("Newsletter extraction is still set to Gemini CLI")
+  expect(text).toContain("This saved provider is unsupported.")
 
   await act(async () =>
     switchBack()!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
@@ -147,4 +159,39 @@ it("says the runtime is unreachable when it does not answer", async () => {
   })
   await render("ollama", "ollama")
   expect(host.textContent).toContain("unreachable · no model picked")
+})
+
+it("saves just the changed role and keeps the local model", async () => {
+  calls.saveSettings.mockResolvedValue(settings("codex", "ollama"))
+  await render("ollama", "ollama")
+  const select = host.querySelector("select")!
+  await act(async () => {
+    select.value = "codex"
+    select.dispatchEvent(new Event("change", { bubbles: true }))
+  })
+  expect(calls.saveSettings).toHaveBeenCalledWith({ chatProvider: "codex" })
+  expect(useGrapevine.getState().settings?.model).toBe("test-model")
+  expect(switchBack()).toBeUndefined()
+})
+
+it("runs an explicit connection test and displays its result", async () => {
+  calls.testProvider.mockResolvedValue({ ok: true })
+  await render("codex", "claude")
+  const test = [...host.querySelectorAll("button")].find(
+    (b) => b.textContent === "Test ChatGPT connection"
+  )!
+  await act(async () =>
+    test.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+  )
+  expect(calls.testProvider).toHaveBeenCalledWith("codex")
+  expect(host.textContent).toContain("structured response validated")
+})
+
+it("keeps setup instructions visible when provider diagnostics fail", async () => {
+  calls.providers.mockRejectedValue(new Error("down"))
+  await render("ollama", "ollama")
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+    "Provider checks failed"
+  )
+  expect(host.textContent).toContain("codex login")
 })

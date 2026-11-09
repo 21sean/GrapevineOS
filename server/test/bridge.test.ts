@@ -137,18 +137,26 @@ async function chatLines(
 }
 
 describe("POST /api/agent/chat", () => {
-  it("refuses a CLI saved in settings before anything can generate", async () => {
-    seen.chatProvider = "claude";
+  it("refuses an unsupported CLI before anything can generate", async () => {
+    seen.chatProvider = "gemini";
     frames.push({ type: "delta", text: "never sent" });
     const { status, lines } = await chatLines({ threadId: "thread-abcdefgh", message: "hi" });
     expect(status).toBe(200);
     expect(lines.map((f) => f.type)).toEqual(["error", "done"]);
     const refusal = lines[0];
     expect(refusal.type === "error" && refusal.message).toBe(
-      "Chat runs only on the local runtime. Switch back to it in Admin → Providers.",
+      "Choose Local, ChatGPT / Codex, or Claude in Admin → Providers.",
     );
     expect(seen.graphs).toBe(0);
     expect(seen.appended).toEqual([]);
+  });
+  it.each(["codex", "claude"])("runs %s chat through the graph", async (provider) => {
+    seen.chatProvider = provider;
+    frames.push({ type: "delta", text: "Hello from the validated graph" });
+    const { lines } = await chatLines({ message: "hi" });
+    expect(seen.graphs).toBe(1);
+    expect(lines.some((f) => f.type === "delta")).toBe(true);
+    expect(lines.some((f) => f.type === "error")).toBe(false);
   });
 
   it("relays the graph's frames in order and ends with done carrying the ids", async () => {
