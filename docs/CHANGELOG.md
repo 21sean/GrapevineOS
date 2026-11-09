@@ -3,7 +3,16 @@
 Release notes and earlier development history, newest first. Tagged releases
 are listed on [GitHub](https://github.com/21sean/GrapevineOS/releases).
 
-## Unreleased
+## v0.8.0: reliable local tools, streaming, and security updates (2026-11-08)
+
+- Refresh JavaScript dependencies, align the LangChain override with its consumers,
+  and pin patched MCP SDK, redirect handling, and glob matching dependencies.
+  Remove the unused shadcn CLI dependency while retaining its stylesheet locally.
+- Upgrade pytest past its temporary-directory advisory. Document the two unpatched
+  Python evaluation dependency advisories and their unused code paths in
+  [the dependency security review](dependency-security.md).
+- Rename the README heading to GrapevineOS and correct the quick-start runtime
+  instructions to describe local generation.
 
 - Stop offering hosted CLI generation, which has been disabled since v0.7.0. Admin → Providers
   shows the local runtime and the MCP help, and no longer lists CLIs or their sign-in state; a

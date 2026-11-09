@@ -1,7 +1,7 @@
 {
   "name": "grapevine",
   "private": true,
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Grapevine: a real-time map of the local events actually worth going to, with an agent built in",
   "license": "Apache-2.0",
   "engines": {
@@ -26,16 +26,17 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "concurrently": "^10.0.5",
-    "eslint": "^10.11.0",
-    "globals": "^17.12.0",
-    "prettier": "^3.9.9",
+    "concurrently": "^10.0.6",
+    "eslint": "^10.14.0",
+    "globals": "^17.14.0",
+    "prettier": "^3.9.10",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.71.0",
-    "vitest": "^5.0.2"
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.0.5",
+    "jsdom": "^30.1.3"
   },
   "overrides": {
-    "@langchain/core": "1.2.13",
+    "@langchain/core": "1.3.4",
     "deepeval": {
       "@opentelemetry/exporter-trace-otlp-grpc": "0.222.0",
       "@opentelemetry/exporter-trace-otlp-proto": "0.222.0",
@@ -43,6 +44,9 @@
       "@opentelemetry/sdk-trace-base": "2.11.0",
       "@opentelemetry/sdk-trace-node": "2.11.0",
       "uuid": "11.1.1"
-    }
+    },
+    "minimatch": "11.0.5",
+    "@modelcontextprotocol/sdk": "1.32.0",
+    "follow-redirects": "1.16.2"
   }
 }
