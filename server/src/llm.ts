@@ -1,5 +1,7 @@
 import { store } from "./store.js";
 import type { LlmProviderId } from "./types.js";
+import { isHostedProvider, isSupportedProvider } from "./types.js";
+import { hostedModel } from "./llm/hosted.js";
 import { generateTyped, LlmGateError } from "./llm/gateway.js";
 import { llmBase, llmModel } from "./llm/runtime.js";
 import type { Output, Task, ValidationContext } from "./llm/generated.js";
@@ -15,14 +17,21 @@ export async function generateJSON<T extends Task>(opts: {
   model?: string;
   context?: ValidationContext;
 }): Promise<Output<T>> {
-  if ((await activeProvider(opts.model)) !== "ollama") {
-    throw new LlmGateError("unsupported_provider", "Structured inference requires a local runtime");
+  const provider = await activeProvider(opts.model);
+  if (!isSupportedProvider(provider)) {
+    throw new LlmGateError(
+      "unsupported_provider",
+      "Choose a supported provider in Admin → Providers",
+    );
   }
   return generateTyped({
     task: opts.task,
     context: opts.context,
-    model: llmModel(opts.model || (await store.settings()).model),
-    baseUrl: await llmBase(),
+    provider: isHostedProvider(provider) ? provider : undefined,
+    model: isHostedProvider(provider)
+      ? hostedModel(provider)
+      : llmModel(opts.model || (await store.settings()).model),
+    baseUrl: isHostedProvider(provider) ? undefined : await llmBase(),
     messages: [
       { role: "system", content: opts.system },
       { role: "user", content: opts.user },

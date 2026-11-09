@@ -188,18 +188,17 @@ evidence it was given. A reply that fails goes back for repair with the
 validation errors, three attempts in all by default, and then fails closed with
 a typed error. Zod checks the result again at the Node boundary.
 
-Hosted CLI generation is disabled. `server/src/agent/chat.ts` answers a turn with
-an error frame before generation when `chatProvider` is anything but `ollama`,
-`buildAgentGraph` throws `unsupported_provider` if it is handed a provider anyway,
-and `generateJSON` in `server/src/llm.ts` refuses extraction the same way.
-`PUT /api/settings` accepts only `ollama` for either provider. `shared/types.ts`
-keeps the CLI ids and names only so that a value saved before v0.7.0 still loads:
-Admin → Providers names it and has a button that switches back, and the capabilities
-endpoint reports it with no tools.
+`ollama`, `codex` and `claude` can be selected independently for chat and
+extraction. Hosted transports run in isolated Python workers through the same
+Pydantic, evidence and Zod validation gates. Codex uses `exec --output-schema`;
+Claude uses `-p --json-schema`. Native tools are disabled, and validated tool
+requests return to the graph's normal executors and confirmation rules. Hosted
+answers are displayed only after validation. See [setup and runtime details](hosted-providers.md).
+Legacy Gemini/Copilot values remain readable but cannot be selected or generate.
 
 A model that supports tool calling gets the graph toolbox, and one that does not
 answers from the event digest with a notice saying so. Claude Code, Claude Desktop
-and other external assistants are clients here, not engines: they connect to this
+and other external assistants can also act as MCP clients: they connect to this
 server's MCP endpoint, drive the same executors, and answer in their own sessions.
 The capabilities endpoint tells the browser which tools the chat has.
 

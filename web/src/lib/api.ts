@@ -26,6 +26,8 @@ import type {
   IngestRecord,
   Interests,
   LocalRuntimeStatus,
+  HostedProviderId,
+  HostedProviderStatus,
   McpInfo,
   Reaction,
   Settings,
@@ -244,6 +246,12 @@ export const api = {
 
   /** The local runtime chat and extraction generate on. */
   runtime: () => fetch("/api/runtime").then((r) => json<LocalRuntimeStatus>(r)),
+  providers: () =>
+    fetch("/api/providers").then((r) => json<HostedProviderStatus[]>(r)),
+  testProvider: (id: HostedProviderId) =>
+    fetch(`/api/providers/${id}/test`, { method: "POST" }).then((r) =>
+      json<{ ok: true }>(r)
+    ),
 
   /** models.dev provider logo as raw SVG text (inlined to inherit currentColor). */
   providerLogo: (id: string) =>

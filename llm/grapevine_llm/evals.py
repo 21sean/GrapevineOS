@@ -110,6 +110,8 @@ def run_case(case: GoldenCase, mode: str, settings: Settings) -> CaseResult:
 
 
 def run(mode: Literal["replay", "live"], settings: Settings, path: Path = DATA) -> Report:
+    if settings.provider != "ollama":
+        raise ValueError("Offline quality evaluations require a local provider")
     if mode == "live":
         from .pins import verify, verify_vllm
         pins = verify_vllm(settings.base_url, settings.num_ctx) if settings.runtime == "vllm" else verify(settings.base_url)

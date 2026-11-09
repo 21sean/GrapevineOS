@@ -1,6 +1,8 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { runHostedWorker } from "./hosted.js";
+import type { HostedProviderId } from "../types.js";
 import {
   CONTRACT_VERSION,
   outputSchemas,
@@ -81,7 +83,12 @@ function start(): ChildProcessWithoutNullStreams {
     cwd: `${root}/llm`,
     windowsHide: true,
     stdio: "pipe",
-    env: { ...process.env, PYTHONUNBUFFERED: "1", PYTHONUTF8: "1" },
+    env: {
+      ...process.env,
+      GRAPEVINE_LLM_PROVIDER: "ollama",
+      PYTHONUNBUFFERED: "1",
+      PYTHONUTF8: "1",
+    },
   });
   worker = child;
   child.stderr.on("data", () => {
@@ -155,6 +162,7 @@ export function warmGate(): void {
 }
 
 export async function generateTyped<T extends Task>(opts: {
+  provider?: HostedProviderId;
   task: T;
   messages: { role: "system" | "user" | "assistant"; content: string }[];
   context?: ValidationContext;
@@ -184,11 +192,27 @@ export async function generateTyped<T extends Task>(opts: {
         context: opts.context ?? {},
         model: opts.model,
         base_url: opts.baseUrl,
-        ...(opts.onDelta && { stream_answer: true }),
+        ...(opts.onDelta && !opts.provider && { stream_answer: true }),
       }),
     ) + "\n";
   if (Buffer.byteLength(line) > 1_000_000)
     throw new LlmGateError("input", "LLM input exceeds byte limit");
+  if (opts.provider) {
+    // Hosted text is emitted only after the complete schema/evidence validation.
+    const reply = envelope.parse(
+      JSON.parse(
+        await runHostedWorker({
+          provider: opts.provider,
+          input: line,
+          signal: opts.signal,
+        }),
+      ),
+    );
+    if (reply.id !== id) throw new LlmGateError("protocol", "Unexpected hosted reply");
+    opts.onStats?.(reply.stats);
+    if (!reply.ok) throw new LlmGateError(reply.code, reply.message);
+    return outputSchemas[opts.task].parse(reply.output) as Output<T>;
+  }
   const child = start();
   const output = await new Promise<unknown>((resolve, reject) => {
     const timeout = setTimeout(

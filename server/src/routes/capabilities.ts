@@ -14,19 +14,22 @@ import { llmModel, runtimeSupportsTools } from "../llm/runtime.js";
 import { store } from "../store.js";
 import type { AgentCapabilities } from "../types.js";
 import { apiOrigin } from "../urls.js";
+import { isHostedProvider } from "../types.js";
+import { hostedModel } from "../llm/hosted.js";
 
 export const capabilities = Router();
 
 capabilities.get("/api/agent/capabilities", async (_req, res) => {
   const [settings, guard] = await Promise.all([store.settings(), guardConfig()]);
   const provider = settings.chatProvider;
-  const model = llmModel(settings.model);
-  // A saved CLI is refused before generation (chat.ts), so it has no tools.
+  const model = isHostedProvider(provider) ? hostedModel(provider) : llmModel(settings.model);
+  // Hosted models use the same schema-constrained graph toolbox.
   const tools =
-    provider === "ollama" && model ? await runtimeSupportsTools(model).catch(() => false) : false;
+    isHostedProvider(provider) ||
+    (provider === "ollama" && !!model && (await runtimeSupportsTools(model).catch(() => false)));
   const body: AgentCapabilities = {
     provider,
-    model: provider === "ollama" ? model : "",
+    model,
     tools,
     toolbox: tools
       ? toolsFor("graph").map((c) => ({

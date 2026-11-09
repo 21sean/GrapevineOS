@@ -71,15 +71,28 @@ export const REACTIONS: Reaction[] = ["going", "went", "not_for_me"];
 
 /**
  * What a saved chat or extraction provider can hold. "ollama" means the local
- * runtime, Ollama or vLLM. The rest are hosted CLIs that could be selected
- * before v0.7.0: a saved row may still name one, so it loads and the app can
- * say which, but nothing generates through it and nothing new can select it.
+ * runtime, Ollama or vLLM. Codex and Claude are supported hosted transports;
+ * Gemini and Copilot remain readable only for migrating legacy settings.
  */
 const LLM_PROVIDER_IDS = ["ollama", "claude", "codex", "gemini", "copilot"] as const;
 
 export type LlmProviderId = (typeof LLM_PROVIDER_IDS)[number];
 
 export type CliProviderId = Exclude<LlmProviderId, "ollama">;
+export type HostedProviderId = "codex" | "claude";
+export function isHostedProvider(v: unknown): v is HostedProviderId {
+  return v === "codex" || v === "claude";
+}
+export function isSupportedProvider(v: unknown): v is "ollama" | HostedProviderId {
+  return v === "ollama" || isHostedProvider(v);
+}
+export interface HostedProviderStatus {
+  id: HostedProviderId;
+  ready: boolean;
+  version: string | null;
+  message: string;
+  model: string;
+}
 
 export const CLI_PROVIDER_NAMES: Record<CliProviderId, string> = {
   claude: "Claude Code",
@@ -98,9 +111,9 @@ export interface Settings {
   tz: string;
   model: string;
   ollamaUrl: string;
-  /** Who answers chat. Anything but "ollama" is a saved CLI, and chat refuses it. */
+  /** Who answers chat: local runtime, Codex or Claude Code. */
   chatProvider: LlmProviderId;
-  /** Who runs extraction and buzz ratings. Anything but "ollama" is refused the same way. */
+  /** Who runs extraction and buzz ratings; selected independently from chat. */
   extractProvider: LlmProviderId;
   /** What the injection rails do with a message at or over the threshold. */
   guardMode: GuardrailMode;

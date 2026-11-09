@@ -1,4 +1,5 @@
 import { generateTyped, LlmGateError } from "../llm/gateway.js";
+import { isHostedProvider } from "../types.js";
 /**
  * The concierge as a LangGraph StateGraph, with the guardrails inside it:
  *
@@ -567,8 +568,11 @@ export function buildAgentGraph(deps: GraphDeps) {
     (text) => new SystemMessage(text),
   );
 
-  if (deps.provider)
-    throw new LlmGateError("unsupported_provider", "Chat requires the validated local provider");
+  if (deps.provider && !isHostedProvider(deps.provider))
+    throw new LlmGateError(
+      "unsupported_provider",
+      "Choose a supported provider in Admin → Providers",
+    );
   /** The reply before this turn's message, for the write gate's "yes, book those". */
   let priorAnswer = "";
   const tools = makeTools(
@@ -612,6 +616,7 @@ export function buildAgentGraph(deps: GraphDeps) {
     let result;
     try {
       result = await generateTyped({
+        provider: isHostedProvider(deps.provider) ? deps.provider : undefined,
         task: "agent",
         model,
         baseUrl,
@@ -803,6 +808,7 @@ export function buildAgentGraph(deps: GraphDeps) {
       const signals = [AbortSignal.timeout(SUMMARY_TIMEOUT_MS)];
       if (config.signal) signals.push(config.signal);
       const res = await generateTyped({
+        provider: isHostedProvider(deps.provider) ? deps.provider : undefined,
         task: "summary",
         model,
         baseUrl,

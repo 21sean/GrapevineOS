@@ -25,6 +25,7 @@ def local_endpoint(value: str) -> str:
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="GRAPEVINE_LLM_", extra="forbid")
     runtime: Literal["ollama", "vllm"] = "ollama"
+    provider: Literal["ollama", "codex", "claude"] = "ollama"
     base_url: str = "http://127.0.0.1:11434"
     model: str = "qwen3.8:27b"
     max_attempts: int = Field(default=3, ge=1, le=5)
@@ -44,6 +45,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def offline(self):
+        if self.provider != "ollama":
+            return self
         if self.runtime == "vllm":
             # Ollama's defaults mean nothing to vLLM; an explicit value still wins.
             if "base_url" not in self.model_fields_set:
