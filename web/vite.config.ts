@@ -37,7 +37,7 @@ const whileApiBoots: ProxyOptions["configure"] = (proxy) => {
 }
 
 const api: ProxyOptions = {
-  target: "http://localhost:8787",
+  target: process.env.GRAPEVINE_API_URL || "http://localhost:8787",
   configure: whileApiBoots,
 }
 

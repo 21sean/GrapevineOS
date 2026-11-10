@@ -28,6 +28,10 @@ The ten-minute path in the [README](../README.md) covers the env files;
 `npm run demo:seed` to refresh demo dates. `npm run test:setup` verifies local
 target restrictions and environment preservation.
 
+`npm run smoke:local` checks the real local database, API, web proxy and chat
+checkpoint persistence. The separate `Clean install` CI job starts from an empty
+database, runs setup twice, and runs this smoke check without model or hosted keys.
+
 From the root:
 
 | Script                             | Does                                                                 |

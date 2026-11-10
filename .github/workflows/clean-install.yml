@@ -1,0 +1,36 @@
+name: Clean install
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: clean-install-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  clean-install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run test:setup
+      - name: Bootstrap an empty local database
+        run: npm run setup
+      - name: Verify repeatable setup and seeding
+        run: npm run setup
+      - run: npm run smoke:local
+      - name: Stop the local database
+        if: always()
+        run: npx --no-install supabase stop
