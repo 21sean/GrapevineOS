@@ -6,16 +6,53 @@ is built, see the [README](../README.md); for the agent's design, see
 
 ## Quick start
 
-The README's [quick start](../README.md#quick-start) is the short version. In full:
+The default path runs Supabase locally. Install the Node version in `.nvmrc`
+and start Docker Desktop (or a Docker-compatible daemon), then:
 
 ```bash
-npm install          # one install for the server, the web app and the worker
-npm run doctor       # says exactly what is missing, and how to fix it
+npm ci               # one lockfile for all workspaces, including the pinned CLI
+npm run setup        # local database, migrations, configuration and demo data
 npm run dev          # api  -> http://localhost:8787
                      # web  -> http://localhost:5174
 ```
 
-Requirements:
+The setup command works on Windows, macOS and Linux. The first run needs network
+access for container images. It binds the local stack to loopback, creates
+`server/.env` and `web/.env.local`, and preserves custom settings. It refuses
+hosted database URLs and production mode. It does not reset an existing database.
+
+Seven events marked `[Demo]` use fictional descriptions, fixed venue coordinates,
+and dates over the next seven days. `npm run demo:seed` refreshes only those demo
+rows; existing settings and real events stay intact. It refuses remote databases.
+`npm run setup -- --no-demo` skips seeding. The older `seed:supabase` script is a
+legacy import, not the onboarding seed.
+
+Browse the list without model downloads or API accounts. Add a public Mapbox token
+to enable the map. Chat/extraction need the Python environment and a local model;
+Google/GitHub sign-in needs OAuth configuration. Local Supabase includes services
+beyond Postgres; a standalone Postgres backend is not implemented.
+
+Use `npm run doctor -- --browse` for browsing checks and `npm run doctor` for the
+full configuration. The doctor probes `app_settings`; it does not certify every
+migration. Stop with `npx supabase stop`. Rerun setup to resume and apply new migrations.
+
+## Hosted Supabase
+
+Run `npm run setup -- --hosted` to create missing templates without changing
+existing files. Fill in the credentials below, then use the pinned CLI:
+
+```bash
+npx supabase login
+npx supabase link --project-ref <your-project-ref>
+npx supabase db push --remote
+npm run doctor
+npm run dev
+```
+
+CLI v3 targets local databases by default. Keep `--remote` on hosted migration
+commands. Hosted setup does not seed demo data or apply migrations automatically.
+
+Full feature configuration:
 
 - **Node 22.23.3** (`.nvmrc` pins the tested version; `nvm use` reads it). Node 24.15+ and 26+ are also supported by the dependencies.
 - **[Ollama](https://ollama.com)** running locally with at least one chat
@@ -32,8 +69,8 @@ Requirements:
   `SUPABASE_URL` and `SUPABASE_SECRET_KEY` from your project's dashboard
   (Settings → API); copy `web/.env.example` to `web/.env.local` and set
   `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` there. Apply the
-  schema with the Supabase CLI (`supabase link --project-ref <ref>`, then
-  `supabase db push`). For sign-in, enable the Google/GitHub providers (see
+  schema with the Supabase CLI (`npx supabase link --project-ref <ref>`, then
+  `npx supabase db push --remote`). For sign-in, enable the Google/GitHub providers (see
   **Auth** below)
 - **Mapbox**: a scoped public token (`pk.`, styles/tiles/fonts only) as
   `VITE_MAPBOX_TOKEN` in `web/.env.local`, and a secret token (`sk.`) as
@@ -42,9 +79,8 @@ Requirements:
   event panel; without it everything else still works and the card is omitted.
   See [mapbox-places.md](mapbox-places.md) for the preview quota
 
-`npm run doctor` checks all of the above, plus whether the schema reached the
-project and whether the two ports are free, and prints the fix for anything
-missing. A fresh database has no events: paste a newsletter into
+`npm run doctor` checks configuration, database access, and whether the two ports
+are free, and prints the fix for anything missing. A fresh hosted database has no events: paste a newsletter into
 Admin → Ingest or run a search in Admin → Discover to fill the map.
 
 ## The email worker
@@ -112,7 +148,7 @@ agent's durable memory), `guardrail_scans`, `conversation_evals`,
 planning and not read by the app yet.
 
 - **Schema** is tracked in `supabase/migrations/` and applied with
-  `supabase db push`; [CONTRIBUTING.md](../.github/CONTRIBUTING.md) has the rule that
+  `npx supabase db push` locally or `npx supabase db push --remote` when hosted; [CONTRIBUTING.md](../.github/CONTRIBUTING.md) has the rule that
   keeps the folder and the database in step.
 - **Access model**: RLS is enabled on every table with no policies and the
   Data API roles have no grants, so the posture is deny-all. Only the server
@@ -130,9 +166,9 @@ planning and not read by the app yet.
   past events and chat checkpoints (`EVENT_RETENTION_DAYS`,
   `CHAT_CHECKPOINT_RETENTION_DAYS`).
 - **Types**: `server/src/db-types.ts` is generated. Regenerate after schema
-  changes with `npm run db:types -w server`; it reads the project ref from
-  `SUPABASE_URL` and needs the CLI signed in (`supabase login`, or
-  `SUPABASE_ACCESS_TOKEN` in the environment).
+  changes with `npm run db:types -w server`; a localhost `SUPABASE_URL` uses
+  the local stack. A hosted URL uses its project ref and needs the CLI signed
+  in (`npx supabase login`, or `SUPABASE_ACCESS_TOKEN` in the environment).
 
 ## Auth (Supabase Auth: Google + GitHub)
 
