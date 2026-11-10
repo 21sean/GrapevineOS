@@ -97,10 +97,9 @@ recorded in the [screenshot guide](docs/screenshots.md)._
 
 ## Quick start
 
-You need **Node 22.23.3** (pinned in [.nvmrc](.nvmrc)), a free **Supabase project** or local postgres (in progress),
-a **Mapbox account**, **Python 3.12 + uv**, and a **local Ollama model**.
-See [setup and operations](docs/setup.md) for supported Node versions and the
-full configuration walkthrough.
+Start with **Node 22.23.3** (pinned in [.nvmrc](.nvmrc)) and **Docker** running.
+Local setup needs no Supabase account or model. It runs Supabase's Postgres,
+Auth, REST API, and Realtime locally and adds seven fictional demo events.
 
 ### 1. Install
 
@@ -108,40 +107,31 @@ full configuration walkthrough.
 git clone https://github.com/21sean/GrapevineOS.git
 cd GrapevineOS
 npm ci
-uv sync --directory llm --frozen --group eval
-```
-
-### 2. Configure
-
-Copy the templates and fill in your credentials:
-
-```bash
-cp server/.env.example server/.env
-cp web/.env.example web/.env.local
-```
-
-| File             | Required configuration                                                    |
-| ---------------- | ------------------------------------------------------------------------- |
-| `server/.env`    | `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `MAPBOX_SECRET_TOKEN`              |
-| `web/.env.local` | `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_MAPBOX_TOKEN` |
-
-Link your Supabase project and apply the migrations with its CLI:
-
-```bash
-supabase link --project-ref <your-project-ref>
-supabase db push
-```
-
-Install Ollama and select a local model for both chat and extraction. vLLM 0.33.0 is an optional
-runtime beside it. Hosted CLI generation is disabled. Follow the [structured inference guide](llm/README.md) for setup,
-the vLLM option, and offline operation.
-
-### 3. Run and add events
-
-```bash
-npm run doctor
+npm run setup
 npm run dev
 ```
+
+Open **http://localhost:5174**. The API listens on **http://localhost:8787**.
+The first setup downloads container images, applies migrations, and writes
+local credentials to the ignored environment files. Rerunning it preserves
+your settings and refreshes demo dates without duplicating events. It refuses
+to replace hosted database configuration. Use `--no-demo` to skip sample data.
+
+### 2. Enable the features you need
+
+- **Map:** add a public Mapbox token as `VITE_MAPBOX_TOKEN` in `web/.env.local`.
+  Without it, you can browse the event list. Location services also use
+  `MAPBOX_SECRET_TOKEN` in `server/.env`.
+- **Chat and extraction:** install Python 3.12, uv, and a local inference runtime.
+  Follow the [structured inference guide](llm/README.md), then select a model.
+- **Sign-in:** configure Google/GitHub OAuth separately. Browsing demo events
+  does not need an account.
+- **Hosted Supabase:** run `npm run setup -- --hosted` to create missing templates,
+  then follow [setup and operations](docs/setup.md#hosted-supabase).
+
+`npm run doctor -- --browse` checks the browsing prerequisites. `npm run doctor`
+also checks the map and model prerequisites. Stop local Supabase with
+`npx supabase stop`; `npm run setup` starts it again without resetting data.
 
 ## How it works
 

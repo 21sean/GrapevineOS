@@ -12,6 +12,7 @@
     "contracts:gen": "tsx scripts/contracts-gen.ts",
     "contracts:check": "tsx scripts/contracts-gen.ts --check",
     "seed:supabase": "tsx scripts/seed-supabase.ts",
+    "seed:demo": "tsx scripts/seed-demo.ts",
     "catalog:refresh": "tsx scripts/refresh-catalog.ts",
     "seed:convos": "tsx scripts/seed-conversations.ts",
     "evals": "tsx scripts/evals.ts",

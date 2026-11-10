@@ -14,8 +14,8 @@ eslint and one prettier live there too.
 ## Getting set up
 
 ```bash
-npm install          # every workspace, one lockfile
-npm run doctor       # what is missing, and how to fix it
+npm ci               # every workspace, one lockfile
+npm run setup        # local Supabase and current demo events (Docker required)
 npm run dev          # api on :8787, web on :5174
 ```
 
@@ -23,6 +23,10 @@ The ten-minute path in the [README](../README.md) covers the env files;
 [docs/setup.md](../docs/setup.md) covers everything optional.
 
 ## Scripts
+
+`npm run setup` starts the local stack and seeds fictional events. Rerun
+`npm run demo:seed` to refresh demo dates. `npm run test:setup` verifies local
+target restrictions and environment preservation.
 
 From the root:
 
@@ -105,8 +109,10 @@ The rule that keeps them matched is to apply migrations with the Supabase CLI,
 so the filename is the version:
 
 ```bash
-supabase link --project-ref <ref>   # once per clone
-supabase db push
+npx supabase db push               # local stack
+# Hosted projects only:
+npx supabase link --project-ref <ref>
+npx supabase db push --remote
 ```
 
 Do not apply a migration file through the Supabase MCP tool or the dashboard

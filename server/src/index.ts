@@ -39,6 +39,7 @@ import { providers } from "./routes/providers.js";
 import { settings } from "./routes/settings.js";
 import { watches } from "./routes/watches.js";
 import { validateSecrets } from "./secrets.js";
+import { store } from "./store.js";
 import { VERSION } from "./version.js";
 
 const log = logger("server");
@@ -104,7 +105,7 @@ app.use(notFound);
 app.use(errorHandler);
 
 const port = Number(process.env.PORT ?? 8787);
-const server = app.listen(port, () => {
+const server = app.listen({ port, ...(process.env.HOST ? { host: process.env.HOST } : {}) }, () => {
   log.info(
     { version: VERSION.version, release: VERSION.release, commit: VERSION.commit },
     `api listening on http://localhost:${port}`,
@@ -120,8 +121,16 @@ const server = app.listen(port, () => {
   startDiscoveryScheduler();
   startRetentionSweep();
   startEvalSweep();
-  warmupGuardrails();
-  warmGate();
+  // A fresh browsing-only setup should not download classifiers or start Python.
+  // Both paths also initialize lazily when a model is selected later.
+  void store
+    .settings()
+    .then((settings) => {
+      if (!settings.model && process.env.GRAPEVINE_LLM_RUNTIME !== "vllm") return;
+      warmupGuardrails();
+      warmGate();
+    })
+    .catch((err) => log.warn({ err: String(err) }, "model warmup skipped: settings unavailable"));
   startMcpServer().catch((err) =>
     log.error({ err: String(err).slice(0, 300) }, "mcp failed to start"),
   );

@@ -14,6 +14,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const browseOnly = process.argv.includes("--browse");
 const results = [];
 const ok = (text) => results.push({ level: "ok", text });
 const warn = (text, fix) => results.push({ level: "warn", text, fix });
@@ -45,6 +46,11 @@ const isSet = (value) => Boolean(value) && !PLACEHOLDER.test(value);
 
 function required(env, file, key, hint) {
   if (isSet(env[key])) ok(`${file}: ${key} is set`);
+  else if (browseOnly && key.includes("MAPBOX"))
+    warn(
+      `${file}: ${key} is not set`,
+      "optional for event-list browsing; add a token to enable maps/location services",
+    );
   else fail(`${file}: ${key} is not set`, hint);
 }
 
@@ -139,7 +145,7 @@ if (serverEnv && isSet(serverEnv.SUPABASE_URL) && isSet(serverEnv.SUPABASE_SECRE
     const res = await get(`${base}/rest/v1/app_settings?select=id&limit=1`, {
       headers: { apikey: key, Authorization: `Bearer ${key}` },
     });
-    if (res.ok) ok("Supabase answers and the schema is applied");
+    if (res.ok) ok("Supabase answers and app_settings is accessible (not a full migration check)");
     else if (res.status === 401 || res.status === 403) {
       fail(
         "Supabase rejected SUPABASE_SECRET_KEY",
@@ -148,7 +154,7 @@ if (serverEnv && isSet(serverEnv.SUPABASE_URL) && isSet(serverEnv.SUPABASE_SECRE
     } else if (res.status === 404 || res.status === 400) {
       fail(
         "Supabase answers but the schema is not applied",
-        "supabase link --project-ref <ref>, then supabase db push",
+        "npm run setup for local development; npx supabase db push --remote for hosted projects",
       );
     } else warn(`Supabase answered ${res.status}`, "check the project is not paused");
   } catch {
@@ -176,6 +182,11 @@ try {
   if (models.length) {
     const shown = models.slice(0, 4).join(", ") + (models.length > 4 ? ", ..." : "");
     ok(`Ollama at ${ollamaUrl} with ${models.length} model(s): ${shown}`);
+  } else if (browseOnly) {
+    warn(
+      "No local model is reachable",
+      "event browsing works; follow llm/README.md for chat and extraction",
+    );
   } else {
     warn(
       `Ollama at ${ollamaUrl} has no models`,
@@ -184,9 +195,11 @@ try {
   }
 } catch {
   // vLLM serves its own model, so Ollama is optional on that runtime.
-  (onVllm ? warn : fail)(
+  (onVllm || browseOnly ? warn : fail)(
     `Ollama not reachable at ${ollamaUrl}`,
-    "install Ollama (ollama.com), then: ollama pull qwen3:8b",
+    browseOnly
+      ? "event browsing works; follow llm/README.md for chat and extraction"
+      : "install Ollama (ollama.com), then: ollama pull qwen3:8b",
   );
 }
 
