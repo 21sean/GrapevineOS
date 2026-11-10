@@ -36,6 +36,14 @@ Use `npm run doctor -- --browse` for browsing checks and `npm run doctor` for th
 full configuration. The doctor probes `app_settings`; it does not certify every
 migration. Stop with `npx supabase stop`. Rerun setup to resume and apply new migrations.
 
+`npm run smoke:local` starts temporary API and web processes on available loopback
+ports. It checks readiness, seven upcoming demo events, a checkpoint and pending
+writes across separate processes and an API restart, and the web API proxy.
+It removes only its temporary checkpoint. It does not call a model or verify
+OAuth/Mapbox. The `Clean install` workflow runs this against a fresh database after
+running setup twice. `GRAPEVINE_API_URL` optionally changes Vite's development
+proxy target; normal development defaults to `http://localhost:8787`.
+
 ## Hosted Supabase
 
 Run `npm run setup -- --hosted` to create missing templates without changing

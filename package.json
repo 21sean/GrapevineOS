@@ -25,7 +25,8 @@
     "doctor": "node scripts/doctor.mjs",
     "setup": "node scripts/setup.mjs",
     "demo:seed": "npm run seed:demo -w server",
-    "test:setup": "node --test scripts/local-tools.test.mjs"
+    "test:setup": "node --test scripts/local-tools.test.mjs",
+    "smoke:local": "node scripts/smoke-local.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
