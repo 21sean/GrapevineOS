@@ -1,6 +1,6 @@
 # GrapevineOS
 
-[![Animated preview of Grapevine: explore local events, filter the list, ask for a plan, and save it to your calendar](docs/images/demo-preview.gif)](https://github.com/21sean/GrapevineOS/releases/download/v0.8.1/Grapevine-demo-v0.8.1-1080p.mp4)
+[![Grapevine product demo: find local events](docs/images/demo-poster.jpg)](https://github.com/21sean/GrapevineOS/releases/download/v0.8.1/Grapevine-demo-v0.8.1-1080p.mp4)
 
 **[Full demo: 60 seconds, 1080p MP4](https://github.com/21sean/GrapevineOS/releases/download/v0.8.1/Grapevine-demo-v0.8.1-1080p.mp4)**
 · Real app UI with sample events and an illustrative AI response. Edited for pacing.

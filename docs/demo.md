@@ -6,8 +6,9 @@ The updated video was made on November 12, 2026 using the v0.8.1 application.
 
 ![Grapevine product demo opening: Find local events](images/demo-poster.jpg)
 
-The README includes an 11-second animated preview. Select the preview or the
-full-demo link for the complete 1080p MP4.
+The README uses a still poster so visitors can read it without an autoplaying
+loop. Select the poster or the full-demo link for the complete 60-second 1080p
+MP4 at its intended pace.
 
 ## Scenes and captions
 
