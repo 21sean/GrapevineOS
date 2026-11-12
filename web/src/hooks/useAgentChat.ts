@@ -1,6 +1,7 @@
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { api } from "@/lib/api"
+import { createChatDeltaBuffer } from "@/lib/chatDeltaBuffer"
 import {
   emptyAssistant,
   reduceFrame,
@@ -36,9 +37,21 @@ export function useAgentChat() {
   // side-effecting inside a state updater (StrictMode double-invokes those).
   const itemsRef = useRef<ChatItem[]>(items)
   const abortRef = useRef<AbortController | null>(null)
+  const deltasRef = useRef<ReturnType<typeof createChatDeltaBuffer> | null>(
+    null
+  )
   const loadSeq = useRef(0)
   // One server-side conversation per mount; the checkpointer replays history.
   const threadIdRef = useRef<string>(crypto.randomUUID())
+
+  useEffect(
+    () => () => {
+      abortRef.current?.abort()
+      abortRef.current = null
+      deltasRef.current?.discard()
+    },
+    []
+  )
 
   const update = useCallback((fn: (prev: ChatItem[]) => ChatItem[]) => {
     itemsRef.current = fn(itemsRef.current)
@@ -160,6 +173,7 @@ export function useAgentChat() {
       if (!trimmed) return
 
       loadSeq.current++
+      deltasRef.current?.flush()
       abortRef.current?.abort()
       const ac = new AbortController()
       abortRef.current = ac
@@ -175,6 +189,10 @@ export function useAgentChat() {
         emptyAssistant(),
       ])
       const current = () => abortRef.current === ac
+      const deltas = createChatDeltaBuffer((text) => {
+        if (current()) onFrame({ type: "delta", text })
+      })
+      deltasRef.current = deltas
 
       const s = useGrapevine.getState()
       api
@@ -190,12 +208,21 @@ export function useAgentChat() {
             },
           },
           (frame) => {
-            if (current()) onFrame(frame)
+            if (!current() || ac.signal.aborted) return
+            if (frame.type === "delta") deltas.push(frame.text)
+            else {
+              deltas.flush()
+              onFrame(frame)
+            }
           },
           ac.signal
         )
+        .then(() => {
+          if (current()) deltas.flush()
+        })
         .catch((err) => {
           if (!current()) return
+          deltas.flush()
           if (ac.signal.aborted) {
             patchLast(() => ({ streaming: false, status: undefined }))
           } else {
@@ -211,12 +238,15 @@ export function useAgentChat() {
   )
 
   const stop = useCallback(() => {
+    deltasRef.current?.flush()
     abortRef.current?.abort()
-  }, [])
+    patchLast(() => ({ streaming: false, status: undefined }))
+  }, [patchLast])
 
   /** Start over: abort any stream, drop the transcript, mint a fresh thread. */
   const reset = useCallback(() => {
     loadSeq.current++
+    deltasRef.current?.discard()
     abortRef.current?.abort()
     abortRef.current = null
     threadIdRef.current = crypto.randomUUID()
@@ -229,6 +259,7 @@ export function useAgentChat() {
   const loadThread = useCallback(async (id: string) => {
     // Picking thread A then B: whichever answers last must not win.
     const seq = ++loadSeq.current
+    deltasRef.current?.discard()
     abortRef.current?.abort()
     abortRef.current = null
     const detail = await api.chatThread(id)

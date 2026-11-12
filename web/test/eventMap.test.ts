@@ -10,6 +10,7 @@ vi.mock("@/lib/supabase", () => ({ supabase: null }))
 const { markers, maps, FakeMarker, FakeMap } = vi.hoisted(() => {
   class FakeMap {
     container: HTMLElement
+    config: Record<string, unknown>
     offset = 0
     sources = new Map<string, { setData: ReturnType<typeof vi.fn> }>()
     layers = new Map<string, object>()
@@ -19,12 +20,26 @@ const { markers, maps, FakeMarker, FakeMap } = vi.hoisted(() => {
     setFilter = vi.fn()
     queryRenderedFeatures = vi.fn(() => [] as { properties: { key: string } }[])
     listeners = new Map<string, ((event: object) => void)[]>()
-    constructor({ container }: { container: HTMLElement }) {
+    constructor({
+      container,
+      config,
+    }: {
+      container: HTMLElement
+      config: { basemap: Record<string, unknown> }
+    }) {
       this.container = container
+      this.config = { ...config.basemap }
       maps.push(this)
     }
     addControl() {}
-    setConfigProperty() {}
+    getConfigProperty(_import: string, key: string) {
+      return this.config[key]
+    }
+    setConfigProperty = vi.fn(
+      (_import: string, key: string, value: unknown) => {
+        this.config[key] = value
+      }
+    )
     on(name: string, callback: (event: object) => void) {
       this.listeners.set(name, [...(this.listeners.get(name) ?? []), callback])
     }
@@ -162,6 +177,41 @@ afterEach(() => {
 })
 
 describe("map marker updates", () => {
+  it("passes persisted lighting and visibility into the initial map style", () => {
+    act(() => root.unmount())
+    useGrapevine.setState({
+      mapTheme: "dark",
+      mapLayers: { ...useGrapevine.getState().mapLayers, poiLabels: false },
+    })
+    root = createRoot(container)
+    act(() => root.render(createElement(EventMap)))
+    const map = maps.at(-1)!
+    expect(map.config.lightPreset).toBe("night")
+    expect(map.config.showPointOfInterestLabels).toBe(false)
+    map.fire("style.load")
+    expect(map.setConfigProperty).not.toHaveBeenCalled()
+  })
+
+  it("starts with saved basemap options and only updates changed settings", () => {
+    const map = maps[0]
+    expect(map.config.show3dObjects).toBe(true)
+    expect(map.config.showPointOfInterestLabels).toBe(true)
+    map.fire("style.load")
+    expect(map.setConfigProperty).not.toHaveBeenCalled()
+    act(() => useGrapevine.getState().setMapLayer("poiLabels", false))
+    expect(map.setConfigProperty.mock.calls).toEqual([
+      ["basemap", "showPointOfInterestLabels", false],
+    ])
+    map.setConfigProperty.mockClear()
+    map.fire("style.load")
+    expect(map.setConfigProperty).not.toHaveBeenCalled()
+    // A replacement style has lost the app's saved preferences.
+    map.config = {}
+    map.fire("style.load")
+    expect(map.config.showPointOfInterestLabels).toBe(false)
+    expect(map.config.show3dObjects).toBe(true)
+  })
+
   async function enableCanvas() {
     act(() => root.unmount())
     vi.stubGlobal(
@@ -254,7 +304,29 @@ describe("map marker updates", () => {
       map.addImage.mock.calls.filter(([id]) => id.startsWith("gv-dot-"))
     ).toHaveLength(1)
     act(() => useGrapevine.setState({ events: [event("b", { lng: -117.2 })] }))
+    map.fire("idle")
     expect(map.removeImage).not.toHaveBeenCalledWith(features[0].properties.dot)
+  })
+
+  it("retains old artwork until source processing finishes and preserves reused sprites", async () => {
+    const map = await enableCanvas()
+    const data = map.getSource("gv-event-locations")!.setData
+    const original = data.mock.lastCall?.[0].features[0].properties.dot
+    act(() => useGrapevine.setState({ events: [] }))
+    expect(map.removeImage).not.toHaveBeenCalled()
+    // Another update reuses the image before the worker finishes.
+    act(() => useGrapevine.setState({ events: [event("a")] }))
+    map.fire("idle")
+    expect(map.removeImage).not.toHaveBeenCalledWith(original)
+    map.removeImage.mockClear()
+    act(() => useGrapevine.setState({ events: [] }))
+    expect(map.removeImage).not.toHaveBeenCalled()
+    map.fire("idle")
+    expect(map.removeImage).toHaveBeenCalledWith(original)
+    map.removeImage.mockClear()
+    act(() => root.unmount())
+    map.fire("idle")
+    expect(map.removeImage).not.toHaveBeenCalled()
   })
 
   it("selects canvas pins, pages their faces, and recovers after a style reload", async () => {

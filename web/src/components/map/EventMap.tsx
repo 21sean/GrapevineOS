@@ -19,7 +19,7 @@ import {
   type Category,
   type CityEvent,
 } from "@/lib/types"
-import { BASEMAP_LAYERS } from "@/lib/mapLayers"
+import { basemapConfig, syncBasemapConfig } from "./basemapConfig"
 import {
   EventPinLayer,
   EVENT_PIN_LAYER,
@@ -284,18 +284,20 @@ function LiveMap() {
   // component doesn't re-render for it. Falls back to LA time until settings
   // arrive.
   const lightPreset = useGrapevine(selectLightPreset)
-  // Latest preset for the init/style.load handlers, which run outside render.
-  // Seeded from the mount-time value; kept current by the sync effect below.
-  const lightPresetRef = useRef(lightPreset)
 
   // --- init (once per mount; cleanup per mapbox-web-integration-patterns) ---
   useEffect(() => {
     if (!containerRef.current) return
+    const initial = useGrapevine.getState()
     const map = new mapboxgl.Map({
       container: containerRef.current,
       style: "mapbox://styles/mapbox/standard",
-      config: { basemap: { lightPreset: lightPresetRef.current } },
-      center: FALLBACK_CENTER,
+      // Apply persisted choices before style/tiles start loading. Reapplying
+      // every toggle after style.load wastes the first style evaluation.
+      config: {
+        basemap: basemapConfig(selectLightPreset(initial), initial.mapLayers),
+      },
+      center: initial.settings?.center ?? FALLBACK_CENTER,
       zoom: 11.8,
       // A gentler angle draws less distant geometry while keeping 3D depth.
       pitch: 40,
@@ -417,18 +419,11 @@ function LiveMap() {
 
     map.on("style.load", () => {
       styleReadyRef.current = true
-      map.setConfigProperty("basemap", "lightPreset", lightPresetRef.current)
       // Basemap layer toggles are persisted; a fresh style resets them to the
       // Standard defaults, so re-apply the stored visibility once it can take
       // config. (The [mapLayers] effect below is a no-op until this runs.)
       const st = useGrapevine.getState()
-      for (const l of BASEMAP_LAYERS) {
-        map.setConfigProperty(
-          "basemap",
-          l.config,
-          st.mapLayers[l.key] !== false
-        )
-      }
+      syncBasemapConfig(map, basemapConfig(selectLightPreset(st), st.mapLayers))
       // trafficOn is persisted; restore it once the style can take layers
       if (st.trafficOn) addTrafficLayer(map)
     })
@@ -448,13 +443,13 @@ function LiveMap() {
     }
   }, [select])
 
-  // --- keep basemap lighting in sync as the hour (or city timezone) changes ---
+  // Reconcile only changed properties. Toggling one label layer should not
+  // invalidate every other basemap option or reapply the lighting preset.
   useEffect(() => {
-    lightPresetRef.current = lightPreset
     const map = mapRef.current
     if (!map || !styleReadyRef.current) return
-    map.setConfigProperty("basemap", "lightPreset", lightPreset)
-  }, [lightPreset])
+    syncBasemapConfig(map, basemapConfig(lightPreset, mapLayers))
+  }, [lightPreset, mapLayers])
 
   // --- settings arrive after the map booted: recenter if nothing moved yet ---
   useEffect(() => {
@@ -731,18 +726,6 @@ function LiveMap() {
       map.setLayoutProperty(TRAFFIC_LAYER, "visibility", "none")
     }
   }, [trafficOn])
-
-  // --- basemap layer visibility (Standard-style config toggles) ---
-  // Runs on every mapLayers change; guarded until the style can take config,
-  // with style.load handling the first apply. mapLayers keeps its reference
-  // until setMapLayer swaps it, so unrelated re-renders don't re-apply.
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map || !styleReadyRef.current) return
-    for (const l of BASEMAP_LAYERS) {
-      map.setConfigProperty("basemap", l.config, mapLayers[l.key] !== false)
-    }
-  }, [mapLayers])
 
   // --- user position dot ---
   useEffect(() => {

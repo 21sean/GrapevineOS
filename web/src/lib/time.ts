@@ -65,10 +65,20 @@ function fmt(
   tz: string,
   opts: Intl.DateTimeFormatOptions
 ): string {
-  return new Intl.DateTimeFormat("en-US", { timeZone: tz, ...opts }).format(
-    new Date(iso)
-  )
+  // Chips and event lists repeat the same formats for hundreds of dates.
+  // Constructing Intl formatters per label is much costlier than formatting.
+  const key = JSON.stringify([tz, opts])
+  let formatter = formatters.get(key)
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("en-US", { timeZone: tz, ...opts })
+    if (formatters.size >= 64)
+      formatters.delete(formatters.keys().next().value!)
+    formatters.set(key, formatter)
+  }
+  return formatter.format(new Date(iso))
 }
+
+const formatters = new Map<string, Intl.DateTimeFormat>()
 
 export function fmtTime(iso: string, tz: string): string {
   return fmt(iso, tz, { hour: "numeric", minute: "2-digit" })
