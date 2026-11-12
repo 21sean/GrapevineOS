@@ -132,6 +132,7 @@ export class EventPinLayer {
   private disposed = false
   private pins: PinSnapshot[] = []
   private sprites = new Map<string, Sprite>()
+  private wantedSprites = new Set<string>()
   private glyphs = new Map<string, HTMLImageElement>()
   private glyphsReady = false
   private htmlKeys: string[] = []
@@ -149,6 +150,7 @@ export class EventPinLayer {
     this.map = map
     this.onReady = onReady
     map.on("style.load", this.install)
+    map.on("idle", this.pruneImages)
     void Promise.all(
       Object.entries(icons).map(async ([category, svg]) => {
         const img = new Image()
@@ -267,10 +269,19 @@ export class EventPinLayer {
         }
       }),
     }
+    this.wantedSprites = wanted
     ;(this.map.getSource(SOURCE) as GeoJSONSource).setData(data)
     this.dataSignature = signature
+  }
+
+  // setData is asynchronous: the worker and the current frame may still
+  // reference the previous artwork. Retire it only after the new source has
+  // finished loading and rendering. A newer update replaces wantedSprites,
+  // so an image reused before idle cannot be removed by an older update.
+  private pruneImages = () => {
+    if (this.disposed || !this.installed) return
     for (const id of this.sprites.keys()) {
-      if (wanted.has(id)) continue
+      if (this.wantedSprites.has(id)) continue
       this.map.removeImage(id)
       this.sprites.delete(id)
     }
@@ -299,6 +310,8 @@ export class EventPinLayer {
   dispose() {
     this.disposed = true
     this.map.off("style.load", this.install)
+    this.map.off("idle", this.pruneImages)
     this.sprites.clear()
+    this.wantedSprites.clear()
   }
 }

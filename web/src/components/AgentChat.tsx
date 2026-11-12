@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type FormEvent,
@@ -8,7 +9,6 @@ import {
 } from "react"
 import {
   ArrowUpIcon,
-  CheckIcon,
   HistoryIcon,
   MicIcon,
   SparklesIcon,
@@ -26,27 +26,14 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { Spinner } from "@/components/ui/spinner"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
+import { Hint } from "@/components/chat/Hint"
+import { Message } from "@/components/chat/Message"
 import { CapabilitiesPopover } from "@/components/chat/Capabilities"
-import { EventChip } from "@/components/chat/EventChip"
-import {
-  CalendarCard,
-  InterestsCard,
-  RarityCard,
-} from "@/components/chat/ProposalCards"
-import { WatchCard } from "@/components/chat/WatchCard"
-import { EVENT_LINK_RE, RichText } from "@/components/chat/RichText"
 import { ThreadHistory } from "@/components/chat/ThreadHistory"
-import { useAgentChat, type ChatItem } from "@/hooks/useAgentChat"
+import { useAgentChat } from "@/hooks/useAgentChat"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useSpeechInput } from "@/hooks/useSpeechInput"
 import { useGrapevine } from "@/lib/store"
-import type { ChatUsage } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 const SUGGESTIONS = [
@@ -55,26 +42,6 @@ const SUGGESTIONS = [
   "Free stuff this weekend",
   "Live music near me",
 ]
-
-/**
- * Label for an icon-only control, in the app's tooltip rather than the
- * browser's.
- *
- * The chat was the one surface still using the native `title` attribute:
- * half its buttons carried only an aria-label and so showed nothing at all
- * on hover, and the ones that did have a `title` waited out the OS delay and
- * then rendered an opaque system box over the glass. TopBar has used the
- * Radix tooltip since it was written; this is the same thing, so the two
- * surfaces behave identically.
- */
-function Hint({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
-  )
-}
 
 /**
  * "Ask Grapevine": the agent surface. One always-mounted component (the
@@ -88,6 +55,7 @@ export function AgentChat() {
   const setAskOpen = useGrapevine((s) => s.setAskOpen)
   const isMobile = useIsMobile()
   const chat = useAgentChat()
+  const close = useCallback(() => setAskOpen(false), [setAskOpen])
 
   // ⌘K / Ctrl+K toggles; Escape closes unless a Radix layer already ate it.
   useEffect(() => {
@@ -130,7 +98,7 @@ export function AgentChat() {
 
   if (!askOpen) return null
   return (
-    <DesktopPalette onClose={() => setAskOpen(false)}>
+    <DesktopPalette onClose={close}>
       <Conversation chat={chat} />
     </DesktopPalette>
   )
@@ -245,7 +213,7 @@ function Conversation({
     return () => el.removeEventListener("scroll", onScroll)
   }, [viewport])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = viewport()
     if (el && pinned.current) el.scrollTop = el.scrollHeight
   }, [items, viewport])
@@ -269,6 +237,10 @@ function Conversation({
   }
 
   const lastUserText = [...items].reverse().find((i) => i.kind === "user")?.text
+
+  const retry = useCallback(() => {
+    if (lastUserText) ask(lastUserText)
+  }, [lastUserText, ask])
 
   return (
     <div className={cn("flex min-h-0 flex-col", className)}>
@@ -296,8 +268,8 @@ function Conversation({
                 key={i}
                 item={item}
                 itemIdx={i}
-                chat={chat}
-                onRetry={lastUserText ? () => ask(lastUserText) : undefined}
+                setProposalState={chat.setProposalState}
+                onRetry={lastUserText ? retry : undefined}
               />
             ))}
           </div>
@@ -441,186 +413,5 @@ function EmptyState({ onPick }: { onPick: (q: string) => void }) {
         ))}
       </div>
     </div>
-  )
-}
-
-function Message({
-  item,
-  itemIdx,
-  chat,
-  onRetry,
-}: {
-  item: ChatItem
-  itemIdx: number
-  chat: ReturnType<typeof useAgentChat>
-  onRetry?: () => void
-}) {
-  const setAdminOpen = useGrapevine((s) => s.setAdminOpen)
-
-  if (item.kind === "user") {
-    return (
-      <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-sm bg-secondary px-3.5 py-2 text-sm">
-        {item.text}
-      </div>
-    )
-  }
-
-  const linked = new Set(
-    [...item.text.matchAll(EVENT_LINK_RE)].map((m) => m[2])
-  )
-  const chipRow = item.highlights.filter((id) => !linked.has(id))
-
-  return (
-    <div className="flex max-w-full flex-col gap-2">
-      {item.notices.map((n, i) => (
-        <div
-          key={i}
-          className="flex flex-wrap items-center gap-2 rounded-lg bg-card/60 px-3 py-2 text-xs text-muted-foreground"
-        >
-          <span className="min-w-0">{n.message}</span>
-          {["no-model", "ollama-down", "no-tools"].includes(n.code) && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-6 px-2 text-xs"
-              onClick={() => setAdminOpen(true)}
-            >
-              Open Admin
-            </Button>
-          )}
-        </div>
-      ))}
-
-      {item.tools.length > 0 && (
-        <div className="flex flex-col gap-1">
-          {item.tools.map((t, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground"
-            >
-              {t.done ? (
-                <CheckIcon className="size-3 text-live" />
-              ) : (
-                <Spinner className="size-3" />
-              )}
-              <span>
-                {t.label}
-                {t.detail ? ` · ${t.detail}` : ""}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {item.status && (
-        <div className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
-          <Spinner className="size-3" />
-          {item.status}
-        </div>
-      )}
-
-      {item.text && <RichText text={item.text} />}
-
-      {item.streaming &&
-        !item.text &&
-        !item.status &&
-        item.tools.length === 0 && (
-          <Spinner className="size-3.5 text-muted-foreground" />
-        )}
-
-      {chipRow.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {chipRow.map((id) => (
-            <EventChip key={id} id={id} label={id} />
-          ))}
-        </div>
-      )}
-
-      {item.proposals.map((p, i) =>
-        p.kind === "calendar" ? (
-          <CalendarCard
-            key={i}
-            proposal={p}
-            onState={(s) => chat.setProposalState(itemIdx, i, s)}
-          />
-        ) : p.kind === "rarity" ? (
-          <RarityCard
-            key={i}
-            proposal={p}
-            onState={(s) => chat.setProposalState(itemIdx, i, s)}
-          />
-        ) : p.kind === "watch" ? (
-          <WatchCard
-            key={i}
-            proposal={p}
-            onState={(s) => chat.setProposalState(itemIdx, i, s)}
-          />
-        ) : (
-          <InterestsCard
-            key={i}
-            proposal={p}
-            onState={(s) => chat.setProposalState(itemIdx, i, s)}
-          />
-        )
-      )}
-
-      {item.usage && !item.streaming && <UsageLine usage={item.usage} />}
-
-      {item.error && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs">
-          <span className="text-destructive-foreground/90 min-w-0">
-            {item.error}
-          </span>
-          {onRetry && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-6 px-2 text-xs"
-              onClick={onRetry}
-            >
-              Retry
-            </Button>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function fmtTokens(n: number): string {
-  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k`
-  return String(n)
-}
-
-/** Per-turn token footer under a reply. The input figure counts everything
- *  the turn read, cache included. */
-function UsageLine({ usage }: { usage: ChatUsage }) {
-  const parts: string[] = []
-  if (usage.model) parts.push(usage.model)
-  parts.push(`${fmtTokens(usage.inputTokens)} in`)
-  parts.push(`${fmtTokens(usage.outputTokens)} out`)
-  const cached = usage.cacheReadInputTokens ?? 0
-  return (
-    <Hint
-      label={[
-        cached
-          ? `This turn read ${fmtTokens(usage.inputTokens)} input tokens, ${fmtTokens(cached)} of them from cache.`
-          : "This turn's token usage.",
-        usage.visibleTtftMs
-          ? `First words after ${(usage.visibleTtftMs / 1000).toFixed(1)}s.`
-          : "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
-    >
-      {/* tabIndex so the explanation is reachable without a pointer; this is
-          the only place the cache split is written down. */}
-      <div
-        tabIndex={0}
-        className="font-mono text-[10px] text-muted-foreground/70"
-      >
-        {parts.join(" · ")}
-      </div>
-    </Hint>
   )
 }

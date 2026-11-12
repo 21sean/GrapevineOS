@@ -3,6 +3,23 @@
 Release notes and earlier development history, newest first. Tagged releases
 are listed on [GitHub](https://github.com/21sean/GrapevineOS/releases).
 
+## v0.8.1: smoother chat and map updates (2026-11-11)
+
+- Keep completed chat replies from rerendering for every incoming token. Batch
+  streamed text into animation frames and reuse event-time formatters, reducing
+  browser work as conversations grow.
+- Preserve streamed text and action ordering through completion, guardrail
+  replacements, Stop, new conversations, and history changes. Cancel pending
+  updates when the chat unmounts and follow pinned replies before the next paint.
+- Initialize Mapbox with saved lighting and layer preferences, then apply only
+  changed settings. Keep retired pin artwork until Mapbox finishes processing
+  updated event data, preventing missing pins during highlight and save changes.
+- Add regression coverage for chat rendering, stream cancellation and ordering,
+  persisted map settings, style reloads, and asynchronous pin updates.
+- Include the local setup improvements merged since v0.8.0: pinned Supabase CLI,
+  repeatable `npm run setup`, fictional demo events with relative dates, local
+  diagnostics, persistence smoke checks, and clean-install CI.
+
 ## v0.8.0: reliable local tools, streaming, and security updates (2026-11-08)
 
 - Refresh JavaScript dependencies, align the LangChain override with its consumers,
