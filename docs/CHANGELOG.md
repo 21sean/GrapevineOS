@@ -3,7 +3,7 @@
 Release notes and earlier development history, newest first. Tagged releases
 are listed on [GitHub](https://github.com/21sean/GrapevineOS/releases).
 
-## v0.8.1: smoother chat and map updates (2026-11-11)
+## v0.8.1: smoother chat and map updates (2026-11-12)
 
 - Keep completed chat replies from rerendering for every incoming token. Batch
   streamed text into animation frames and reuse event-time formatters, reducing
@@ -16,6 +16,8 @@ are listed on [GitHub](https://github.com/21sean/GrapevineOS/releases).
   updated event data, preventing missing pins during highlight and save changes.
 - Add regression coverage for chat rendering, stream cancellation and ordering,
   persisted map settings, style reloads, and asynchronous pin updates.
+- Add a refreshed 60-second product demo at the top of the README, with current
+  app captures, smoother map motion, and clearer chat and calendar transitions.
 - Include the local setup improvements merged since v0.8.0: pinned Supabase CLI,
   repeatable `npm run setup`, fictional demo events with relative dates, local
   diagnostics, persistence smoke checks, and clean-install CI.
