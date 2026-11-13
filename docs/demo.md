@@ -1,13 +1,20 @@
 # Product demo
 
-The 60-second demo linked at the top of the [README](../README.md) shows event discovery,
+The 60-second demo at the top of the [README](../README.md) shows event discovery,
 filters, interests, chat suggestions, calendar confirmation, and mobile details.
 The updated video was made on November 12, 2026 using the v0.8.1 application.
 
 ![Grapevine product demo opening: Find local events](images/demo-poster.jpg)
 
-The README includes an 11-second animated preview. Select the preview or the
-full-demo link for the complete 1080p MP4.
+The README uses GitHub's native attachment player for the complete 60-second,
+1080p video at normal speed, with play, pause, and seeking controls. It does not
+autoplay or loop. The original, higher-bitrate MP4 remains available as a release
+download.
+
+For future updates, upload the MP4 through GitHub's Markdown editor and put the
+generated attachment URL on its own line, with blank lines around it. This lets
+GitHub render its video player. Keep the file below 10 MB for compatibility with
+free-plan repositories; the current inline copy is approximately 7.3 MB.
 
 ## Scenes and captions
 
