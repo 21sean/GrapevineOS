@@ -1,10 +1,10 @@
 # GrapevineOS
 
-[![Grapevine product demo: find local events](docs/images/demo-poster.jpg)](https://github.com/21sean/GrapevineOS/releases/download/v0.8.1/Grapevine-demo-v0.8.1-1080p.mp4)
+https://github.com/user-attachments/assets/e0740e88-46f2-42f1-ad4c-7179e1aa9815
 
-**[Full demo: 60 seconds, 1080p MP4](https://github.com/21sean/GrapevineOS/releases/download/v0.8.1/Grapevine-demo-v0.8.1-1080p.mp4)**
-· Real app UI with sample events and an illustrative AI response. Edited for pacing.
-[Demo details](docs/demo.md).
+60-second demo. Real app UI with sample events and an illustrative AI response.
+Edited for pacing. [Download MP4](https://github.com/21sean/GrapevineOS/releases/download/v0.8.1/Grapevine-demo-v0.8.1-1080p.mp4)
+· [Demo details](docs/demo.md).
 
 **Local events worth going to, on a 3D map. Built with a validated local AI agent.**
 
