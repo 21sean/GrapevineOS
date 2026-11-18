@@ -3,6 +3,52 @@
 Release notes and earlier development history, newest first. Tagged releases
 are listed on [GitHub](https://github.com/21sean/GrapevineOS/releases).
 
+## v0.9.0: Triton runtime, GPU scheduling, and serving benchmarks (2026-11-18)
+
+- Add NVIDIA Triton Inference Server 2.75.0 as a third local runtime beside Ollama and
+  vLLM. Its vLLM backend serves the pinned INT4 checkpoint behind the same gate,
+  contracts and repair loop. `GRAPEVINE_LLM_RUNTIME=triton` selects it, and
+  `docker compose --profile triton up -d` starts it with CPU and memory limits and the
+  only GPU reservation in the file. The server version, image digest and model
+  repository are pinned and checked before a live run. TensorRT-LLM was evaluated and
+  not used, because it cannot enforce the agent's JSON Schema; the
+  [LLM guide](../llm/README.md#triton-runtime) has the reasons.
+- Replace the gate's single worker with a pool and a scheduler. Chat is interactive,
+  and extraction, discovery and eval judging are background. Interactive work starts
+  first, one slot is kept free of background work, and a chat turn that finds every
+  slot busy stops the newest background job, which runs again afterwards. Queues have
+  length and wait limits and fail with a typed `busy` error.
+- Hold background work while the runtime reports no headroom: requests waiting in its
+  own queue, a KV cache at 85% or more on vLLM, or too little free GPU memory for a
+  cold load on Ollama. `/readyz` reports the pool and the last reading under `gate`.
+- Add a daily token budget for chat, per account and per signed-out address, counted in
+  a new `llm_usage` table, and count the per-minute chat limit per account instead of
+  per address. Apply the migration with `npx supabase db push --remote`; until then the
+  budget is counted in the server process. The chat panel now shows a refused request's
+  message instead of raw JSON.
+- Add a serving benchmark, `python -m grapevine_llm.bench`, that drives each runtime
+  through the gate's own transports and agent contract at 1 to 32 streams and records
+  the model, quantization, weight source, GPU, driver and CUDA version with every
+  result. Results for all three runtimes are committed. CI fails when a committed
+  result is past its stored baseline, and a manual workflow measures on the GPU runner.
+  The slowest level was profiled with Nsight Systems and the PyTorch profiler; the
+  [numbers and what explains them](../llm/README.md#serving-numbers) are in the LLM guide.
+- Compare the deployment with the Qwen3.8 model cards and list where it departs from
+  them. The checkpoint card's speculative decoding flag was measured on vLLM and not
+  adopted. It nearly halves the time per token, but vLLM does not start with it at the
+  documented 65,536-token context on this card, and at 16 streams it delivers less. The
+  run is kept in `llm/bench/experiments`, outside the regression gate.
+- Upgrade Ragas to 0.4.4, which fixes its multimodal SSRF advisory, and extend the
+  Ragas pass from retrieval snapshots to the citations in each answer and to judged
+  faithfulness on the pinned local model. Add three golden cases: distractor evidence,
+  two relevant listings, and a retriever miss. The live gate now requires these
+  metrics and refuses a per-case drop in the citation scores. Faithfulness is held on
+  the suite average, because the judge did not repeat case by case across identical
+  runs.
+- Publish contracts 1.3.0 with the Triton manifest and benchmark report schemas. Model
+  records now state their quantization. 1.2.0 stays published unchanged.
+- Upgrade OpenTelemetry to 1.45.2, past CVE-2026-126360.
+
 ## v0.8.1: smoother chat and map updates (2026-11-12)
 
 - Keep completed chat replies from rerendering for every incoming token. Batch

@@ -1,0 +1,55 @@
+name: Serving benchmark
+
+# Measures one local runtime on the GPU runner and fails when a number is past
+# its stored baseline (llm/bench/baseline). Manual only: the run needs the GPU to
+# itself for ten to thirty minutes, and vLLM and Triton are not kept running on the
+# runner, so whoever starts this starts the runtime first (llm/README.md).
+#
+# The pull-request gate is separate and needs no GPU: the `contracts` job holds
+# the committed results under llm/bench/results to the same baselines.
+on:
+  workflow_dispatch:
+    inputs:
+      runtime:
+        description: The runtime that is running on the GPU host
+        type: choice
+        required: true
+        default: ollama
+        options: [ollama, vllm, triton]
+
+permissions:
+  contents: read
+
+concurrency:
+  # One benchmark at a time: two on one GPU measure each other.
+  group: serving-bench
+  cancel-in-progress: false
+
+jobs:
+  bench:
+    runs-on: [self-hosted, Windows, X64, grapevine-llm]
+    timeout-minutes: 45
+    env:
+      GRAPEVINE_LLM_RUNTIME: ${{ inputs.runtime }}
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install from preloaded offline caches
+        shell: pwsh
+        run: uv sync --directory llm --frozen --offline --group eval
+      - name: Measure
+        shell: pwsh
+        run: |
+          # The pinned Ollama on this runner listens beside the everyday one.
+          if ($env:GRAPEVINE_LLM_RUNTIME -eq 'ollama') { $env:GRAPEVINE_LLM_BASE_URL = 'http://127.0.0.1:11435' }
+          uv run --directory llm --no-sync python -m grapevine_llm.bench run --output "artifacts/bench-$($env:GRAPEVINE_LLM_RUNTIME).json"
+      - name: Compare with the stored baseline
+        shell: pwsh
+        run: uv run --directory llm --no-sync python -m grapevine_llm.bench compare --baseline "bench/baseline/$($env:GRAPEVINE_LLM_RUNTIME).json" --result "artifacts/bench-$($env:GRAPEVINE_LLM_RUNTIME).json"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: serving-bench-${{ inputs.runtime }}
+          path: llm/artifacts/bench-${{ inputs.runtime }}.json

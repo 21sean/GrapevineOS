@@ -1,0 +1,7 @@
+{
+  "model": "/models/RedHatAI/Qwen3.8-27B-INT4",
+  "max_model_len": 65536,
+  "gpu_memory_utilization": 0.78,
+  "max_num_seqs": 16,
+  "structured_outputs_config": { "backend": "guidance" }
+}

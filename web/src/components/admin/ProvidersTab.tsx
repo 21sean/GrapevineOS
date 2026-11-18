@@ -166,7 +166,7 @@ export function ProvidersTab() {
         <p className="text-xs text-muted-foreground">
           Chat gets the full toolbox (map pinning, ETAs, calendar proposals, web
           search), and extraction stays entirely on this machine.{" "}
-          {runtime?.id === "vllm"
+          {runtime && runtime.id !== "ollama"
             ? "It serves one pinned model, set with GRAPEVINE_LLM_MODEL."
             : "Pick the model in the Models tab."}
         </p>

@@ -180,13 +180,31 @@ principals and keep their direct `set_rarity`.
 The `agent` and `finalize` nodes call `invokeModel`, and `recall` calls the gate
 directly. All three reach the model the same way: `generateTyped` in
 `server/src/llm/gateway.ts` sends the request to a Python worker
-(`llm/grapevine_llm/`), which generates on Ollama, or on vLLM with
-`GRAPEVINE_LLM_RUNTIME=vllm`, using JSON Schema constrained decoding. The worker
+(`llm/grapevine_llm/`), which generates on Ollama, or on vLLM or NVIDIA Triton
+when `GRAPEVINE_LLM_RUNTIME` names one, using JSON Schema constrained decoding. The worker
 validates the complete reply against a strict Pydantic contract: a tool call has
 to name an enabled tool and known event ids, and citations have to come from the
 evidence it was given. A reply that fails goes back for repair with the
 validation errors, three attempts in all by default, and then fails closed with
 a typed error. Zod checks the result again at the Node boundary.
+
+The gate also decides who gets the GPU. It keeps a small pool of workers, one
+per generation in flight: one at a time on Ollama, four on vLLM and Triton, which
+batch. Every request is in one of two classes. A chat turn is interactive.
+Extraction from an inbox email, web discovery and eval judging are background.
+Interactive work always starts first, and background work may hold all but one
+slot, so a person never waits behind a full set of extractions. If every slot is
+busy anyway, the newest background job is stopped, the chat turn takes its place,
+and the stopped job runs again from the start; a job is stopped at most twice.
+Background work also waits when the runtime itself reports no headroom: requests
+already waiting in its queue, a KV cache past 85% on vLLM, or, on Ollama with the
+model not loaded, too little free GPU memory to load it. Each queue has a length
+limit and a wait limit, and past either the caller gets a typed `busy` error.
+`/readyz` reports the pool's state under `gate`. The policy is
+`server/src/llm/scheduler.ts`, the runtime readings are
+`server/src/llm/admission.ts`, and the limits on who may ask at all (turns a
+minute, tokens a day, one stream at a time, per account) are in
+`server/src/agent/chat.ts` and `server/src/quota.ts`.
 
 Hosted CLI generation is disabled. `server/src/agent/chat.ts` answers a turn with
 an error frame before generation when `chatProvider` is anything but `ollama`,
@@ -295,7 +313,8 @@ contract({
 | Threshold sweep     | the classifier     | on demand                                       | `npm run guardrails:calibrate -w server`        |
 | Red team            | Python with PyRIT  | nightly, or on demand                           | `npm run evals -- --suite guardrails-redteam`   |
 | Indirect injection  | Ollama, classifier | nightly, or on demand                           | `npm run evals -- --suite guardrails-injection` |
-| First-token bench   | Ollama or vLLM     | on demand                                       | `npm run bench:ttft -w server`                  |
+| First-token bench   | a local runtime    | on demand                                       | `npm run bench:ttft -w server`                  |
+| Serving benchmark   | a local runtime    | on demand; committed results gated in CI        | `python -m grapevine_llm.bench run`             |
 | Conversation judge  | the judge model    | in-app sweep of idle threads, off by default    | Admin → Monitoring                              |
 
 The unit tests fake the database and the graph, so `npm test` is green in a

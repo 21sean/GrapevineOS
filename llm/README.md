@@ -2,9 +2,10 @@
 
 Pydantic v2 is the contract source for model inputs, outputs, tool arguments,
 wire envelopes, and eval artifacts. The Node application calls one bounded Python
-worker through `server/src/llm/gateway.ts`. Ollama, or vLLM when selected, generates
-with the exported JSON Schema; Instructor and Pydantic validate the complete response before it reaches
-application code. Generated Zod schemas check the Node boundary again.
+worker pool through `server/src/llm/gateway.ts`. Ollama, or vLLM or NVIDIA Triton when
+selected, generates with the exported JSON Schema; Instructor and Pydantic validate the
+complete response before it reaches application code. Generated Zod schemas check the
+Node boundary again.
 
 Defaults are three total attempts, one 120-second deadline, temperature 0, seed
 42, and 16,384 context tokens. Repairs receive bounded validation errors. Failure
@@ -83,51 +84,218 @@ Known limits:
   Grapevine sends neither: tool requests travel inside the agent's JSON Schema.
 - vLLM reports no weight digest. The pin check compares the version, served name,
   source path, and context length. Check the weights by hand with `sha256sum`.
-- The Node gate runs one worker that handles one request at a time, so the app
-  does not use vLLM's concurrency yet.
+- The gate sends vLLM up to four generations at once by default. See
+  [Sharing the GPU](#sharing-the-gpu).
 - The required `model-quality` job stays on Ollama. Unit and worker tests cover the
   vLLM transport in CI, and the live vLLM run is manual.
 - Under WSL mirrored networking use `127.0.0.1`. Windows gets no answer on `::1`, so
   Python clients wait about 21 s per new connection when given `localhost`.
 
-### Serving numbers
+### Live gates on vLLM
 
-Measured against MLPerf's interactive latency limits: p99 TTFT at or under 500 ms and
-p99 TPOT at or under 30 ms, the limits of its Llama 3.1 8B interactive scenario. These
-are local measurements on one RTX 5090 (32 GB, WSL2 for vLLM, Windows for Ollama),
-not an MLPerf submission. The tool is `vllm bench serve` with temperature 0, thinking
-off, 128 output tokens, warm, and unique prompts of 61 or about 3,990 tokens.
+Measured at v0.8.1, on the 15 live cases the suite had then:
 
-- vLLM 0.33.0: INT4 weights, 65,536 max length, 16 sequences, no speculative decoding,
-  40 to 80 requests per row.
-- Ollama 0.40.13: Q4_K_M weights, `num_ctx` 100000, `OLLAMA_NUM_PARALLEL=1`, MTP drafts
-  on (`draft_num_predict` 4), 30 to 48 requests per row. It serves streams in turn.
+| Runtime         | Live cases | First pass | Judge scores  | Median model time | `checks quality`                     |
+| --------------- | ---------- | ---------- | ------------- | ----------------- | ------------------------------------ |
+| Ollama baseline | 15/15      | 15/15      | 1.0, 1.0, 1.0 | 1252 ms           | pass                                 |
+| vLLM            | 15/15      | 14/15      | 1.0, 1.0, 1.0 | 1419 ms           | fail: first-pass rate 93%, needs 95% |
 
-| Runtime | Prompt | Streams | TTFT p50/p95/p99 ms | TPOT p50/p95/p99 ms | End-to-end p50/p95/p99 ms | tok/s per stream | tok/s total |
-| ------- | ------ | ------- | ------------------- | ------------------- | ------------------------- | ---------------- | ----------- |
-| vLLM    | short  | 1       | 54/58/60            | 11.8/12.6/12.6      | 1556/1658/1658            | 85               | 81          |
-| vLLM    | short  | 4       | 110/118/118         | 13.0/13.1/13.1      | 1764/1773/1774            | 77               | 290         |
-| vLLM    | short  | 8       | 169/190/190         | 13.0/13.4/13.5      | 1822/1848/1849            | 77               | 566         |
-| vLLM    | short  | 16      | 293/322/322         | 14.4/15.3/15.6      | 2120/2219/2220            | 69               | 954         |
-| vLLM    | long   | 1       | 1041/1067/1117      | 12.5/12.7/12.7      | 2628/2682/2735            | 80               | 50          |
-| vLLM    | long   | 4       | 1569/1889/3094      | 34.4/38.1/38.8      | 5990/6425/7876            | 29               | 87          |
-| vLLM    | long   | 8       | 1583/5270/7097      | 62.2/66.0/66.8      | 9441/13329/15169          | 16               | 108         |
-| vLLM    | long   | 16      | 2429/11371/14860    | 118.1/122.4/123.3   | 17772/25911/29568         | 8                | 115         |
-| Ollama  | short  | 1       | 199/218/220         | 9.1/9.7/10.2        | 1351/1442/1519            | 110              | 96          |
-| Ollama  | short  | 4       | 3982/4312/4343      | 8.8/10.1/10.4       | 5084/5472/5502            | 113              | 99          |
-| Ollama  | short  | 8       | 9153/9586/9624      | 8.8/10.2/10.5       | 10330/10732/10856         | 113              | 98          |
-| Ollama  | short  | 16      | 20243/20952/21038   | 9.4/10.7/10.9       | 21484/22106/22217         | 107              | 95          |
-| Ollama  | long   | 1       | 1379/1460/1478      | 8.8/10.2/10.6       | 2500/2704/2750            | 114              | 52          |
-| Ollama  | long   | 4       | 8834/8998/9061      | 9.0/10.6/11.0       | 9972/10229/10305          | 112              | 52          |
-| Ollama  | long   | 8       | 19203/19860/19913   | 9.1/10.3/10.9       | 20355/21086/21164         | 110              | 51          |
-| Ollama  | long   | 16      | 39933/40475/40600   | 9.4/10.5/11.0       | 41078/41671/41839         | 106              | 50          |
+On vLLM, `empty-retrieval` needed three attempts where Ollama's baseline needed one, so
+vLLM does not pass this gate yet. The gate is unchanged, and Ollama's baseline still applies.
 
-Highest stream count within both limits, short prompt: vLLM 16 (the most tested),
-Ollama 1. Neither runtime meets the TTFT limit on a 4,000-token prompt without a cache
-hit; their best are 1117 ms (vLLM) and 1478 ms (Ollama) at one stream.
+## Triton runtime
+
+`GRAPEVINE_LLM_RUNTIME=triton` sends the same requests to NVIDIA Triton Inference
+Server 2.75.0 through its OpenAI-compatible frontend. Triton's vLLM backend serves the
+same INT4 checkpoint with the same engine arguments as the `vllm serve` command above,
+so the gate, the JSON Schema, the repair loop and the Pydantic and Zod checks do not
+change. [evals/models.triton.json](evals/models.triton.json) pins the server version,
+the image by digest, the vLLM build inside it, and a fingerprint of
+[docker/triton](../docker/triton), which holds the model repository and start script.
+
+```sh
+TRITON_MODELS=/path/to/models docker compose --profile triton up -d
+```
+
+`TRITON_MODELS` is the directory that contains `RedHatAI/Qwen3.8-27B-INT4`. The
+service needs Linux Docker with the NVIDIA Container Toolkit; on Windows that is Docker
+inside WSL2, not Docker Desktop's Windows engine. It publishes the OpenAI frontend on
+`127.0.0.1:9000` and KServe HTTP on `127.0.0.1:9001`, and nothing else. Set
+`GRAPEVINE_LLM_RUNTIME=triton` in `server/.env`; the URL and model default to the
+pinned record.
+
+What is different from plain vLLM, and why:
+
+- **The schema travels as a tool.** Triton's OpenAI frontend drops `response_format`
+  and rejects request fields it does not know. The one route by which it hands a JSON
+  Schema to the engine's constrained decoding is a named `tool_choice`, whose
+  `parameters` become the constraint. So the transport sends the contract as a single
+  tool, `grapevine_contract`, and reads the document from that call's arguments. Text
+  outside the tool call was never constrained, and the transport refuses it.
+- **Thinking is switched off in the template.** The frontend renders the chat template
+  itself and takes no template arguments per request, so `start.sh` prefixes the
+  checkpoint's template with two assignments: thinking off, and no tool list in the
+  prompt. The model then sees the same prompt it sees on vLLM, with the schema in the
+  system message.
+- **The pin check reads the repository.** Triton reports its version, the served name
+  and the backend, and neither the engine's arguments nor a weight digest. The check
+  takes the source path and context length from the reviewed model repository, which
+  the manifest fingerprints, and refuses to run if that directory was edited. That
+  proves what was reviewed, not what a differently started server is running.
+- **Admission sees less.** Triton's vLLM backend republishes vLLM's token and latency
+  histograms but not its queue and KV cache gauges. On Triton the gate reads
+  `nv_inference_pending_request_count` and nothing about the cache.
+
+TensorRT-LLM was the other backend considered, and it is not used. At review time
+(2026-11-18) Triton's TensorRT-LLM backend constrains output with XGrammar only, and
+XGrammar refuses the agent schema for the same reason the vLLM engine runs `guidance`.
+Release 26.11 also ships no TensorRT-LLM image, the model is not in TensorRT-LLM's
+support tables, and an RTX 5090 under WSL2 is not a listed platform. A backend that
+cannot enforce the contract would be a benchmark of a different product.
+
+The required `model-quality` job stays on Ollama. Unit and worker tests cover the
+Triton transport and pin check in CI, and live Triton runs are manual.
+
+## Serving numbers
+
+One harness measures all three runtimes the way the app uses them.
+`python -m grapevine_llm.bench run` sends the agent contract through the gate's own
+transport for the selected runtime, with schema-constrained decoding, temperature 0,
+seed 42, thinking off and at most 256 output tokens, and validates every answer against
+the contract. It is a closed loop: N streams stay in flight until 48 requests have
+finished, or three per stream if that is more. There are two prompts. Short is three
+event listings, about 436 prompt tokens on the INT4 tokenizer. Long is 35
+listings, about 4,058. Every request starts with a different request number, so
+nothing after the system message can be read from another request's prefix cache.
+These are cache-miss numbers, the worst case for a first token. TTFT is the request
+sent until the first generated token arrives, TPOT is the time per output token after
+the first, and percentiles are nearest rank, so each one is a value that was observed.
+
+Every file under [bench/results](bench/results) records what ran and on what:
+
+| Runtime | Version                                        | Model              | Quantization                                      | Source                | GPU                                 | Driver | CUDA | Commit    |
+| ------- | ---------------------------------------------- | ------------------ | ------------------------------------------------- | --------------------- | ----------------------------------- | ------ | ---- | --------- |
+| Ollama  | 0.40.8                                         | `qwen3.8:27b`      | Q4_K_M GGUF                                       | `4610da9d4ad7afb2acc` | NVIDIA GeForce RTX 5090 (32607 MiB) | 621.14 | 13.5 | `9c2fdc9` |
+| vLLM    | 0.33.0                                         | `qwen3.8-27b-int4` | W4A16 INT4 safetensors (AWQ + GPTQ), FP8 KV cache | `RedHatAI/Qwen3.8-27` | NVIDIA GeForce RTX 5090 (32607 MiB) | 621.14 | 13.5 | `0b8dd5f` |
+| Triton  | 2.75.0 (vllm 0.33.0+908da4f6.nv26.11.80607662) | `qwen3.8-27b-int4` | W4A16 INT4 safetensors (AWQ + GPTQ), FP8 KV cache | `RedHatAI/Qwen3.8-27` | NVIDIA GeForce RTX 5090 (32607 MiB) | 621.14 | 13.5 | `0b8dd5f` |
+
+The machine is an i7-14700KF with one RTX 5090 that also drives the desktop, which held
+about 4.7 GB of the card's memory during these runs. vLLM and Triton ran in WSL2
+(Ubuntu 24.04), Triton through the compose service with its limits, and Ollama on
+Windows. Each runtime had the GPU to itself. The two quantizations are different
+weights of the same base model, so Ollama's rows compare a runtime and a quantization
+together. Times are in ms; n is requests per row. No request failed and every answer
+validated, on every row.
+
+| Runtime | Prompt | Streams | n   | TTFT p50/p95/p99 ms | TPOT p50/p95/p99 ms | End-to-end p50/p95/p99 ms | tok/s per stream p50 | tok/s total | Errors | Invalid |
+| ------- | ------ | ------- | --- | ------------------- | ------------------- | ------------------------- | -------------------- | ----------- | ------ | ------- |
+| Ollama  | short  | 1       | 48  | 416/501/569         | 7.1/7.8/8.0         | 1319/1596/1668            | 140                  | 96          | 0      | 0       |
+| Ollama  | short  | 4       | 48  | 4349/4676/4731      | 7.1/7.5/7.9         | 5313/5658/5703            | 141                  | 100         | 0      | 0       |
+| Ollama  | short  | 8       | 48  | 9959/10230/10296    | 7.1/7.5/7.9         | 10953/11155/11217         | 141                  | 98          | 0      | 0       |
+| Ollama  | short  | 16      | 48  | 20747/21356/21536   | 7.1/7.5/7.8         | 21718/22374/22391         | 141                  | 98          | 0      | 0       |
+| Ollama  | short  | 32      | 96  | 41365/43392/43542   | 7.1/7.5/7.9         | 42257/44402/44534         | 140                  | 97          | 0      | 0       |
+| Ollama  | long   | 1       | 48  | 1832/1880/1890      | 6.1/6.5/6.7         | 2993/3092/3165            | 162                  | 64          | 0      | 0       |
+| Ollama  | long   | 4       | 48  | 10809/10936/10959   | 6.2/6.4/6.5         | 11970/12104/12164         | 162                  | 65          | 0      | 0       |
+| Ollama  | long   | 8       | 48  | 22922/23157/23223   | 6.3/6.6/6.7         | 24138/24389/24433         | 159                  | 64          | 0      | 0       |
+| Ollama  | long   | 16      | 48  | 46727/47126/47207   | 6.2/6.6/6.7         | 47914/48288/48383         | 162                  | 64          | 0      | 0       |
+| Ollama  | long   | 32      | 96  | 95031/95654/95768   | 6.2/6.6/6.7         | 96238/96814/96905         | 161                  | 64          | 0      | 0       |
+| vLLM    | short  | 1       | 48  | 148/157/158         | 12.0/12.0/12.0      | 1401/1542/1698            | 84                   | 75          | 0      | 0       |
+| vLLM    | short  | 4       | 48  | 178/449/451         | 16.4/16.9/17.4      | 1997/2188/2317            | 61                   | 221         | 0      | 0       |
+| vLLM    | short  | 8       | 48  | 348/881/883         | 17.8/20.4/23.3      | 2297/2906/3026            | 56                   | 374         | 0      | 0       |
+| vLLM    | short  | 16      | 48  | 515/1733/1734       | 23.7/31.0/32.3      | 3167/4626/4686            | 40                   | 516         | 0      | 0       |
+| vLLM    | short  | 32      | 96  | 3595/4686/5117      | 25.7/31.4/38.2      | 6639/7669/8318            | 39                   | 522         | 0      | 0       |
+| vLLM    | long   | 1       | 48  | 1052/1058/1071      | 12.0/12.0/12.0      | 3136/3329/3359            | 83                   | 55          | 0      | 0       |
+| vLLM    | long   | 4       | 48  | 1293/2299/4156      | 30.0/36.2/42.5      | 6451/7686/9540            | 33                   | 106         | 0      | 0       |
+| vLLM    | long   | 8       | 48  | 1325/6478/8345      | 51.6/61.7/65.2      | 10482/14650/17901         | 19                   | 131         | 0      | 0       |
+| vLLM    | long   | 16      | 48  | 3167/14895/18588    | 91.1/102.2/116.3    | 18785/31559/35601         | 11                   | 141         | 0      | 0       |
+| vLLM    | long   | 32      | 96  | 21984/31478/37583   | 91.0/102.6/106.7    | 37365/48297/53891         | 11                   | 143         | 0      | 0       |
+| Triton  | short  | 1       | 48  | 149/154/155         | 11.8/11.8/11.9      | 1381/1527/1675            | 85                   | 76          | 0      | 0       |
+| Triton  | short  | 4       | 48  | 173/424/425         | 15.6/16.2/16.8      | 1933/2107/2292            | 64                   | 229         | 0      | 0       |
+| Triton  | short  | 8       | 48  | 287/839/841         | 17.8/20.4/21.0      | 2315/2790/2881            | 56                   | 379         | 0      | 0       |
+| Triton  | short  | 16      | 48  | 712/3135/3262       | 23.2/27.1/27.8      | 3353/5791/6318            | 43                   | 471         | 0      | 0       |
+| Triton  | short  | 32      | 96  | 4063/6418/6631      | 23.8/27.3/29.5      | 6794/8925/9660            | 42                   | 474         | 0      | 0       |
+| Triton  | long   | 1       | 48  | 1032/1040/1042      | 11.9/11.9/11.9      | 3058/3168/3278            | 84                   | 56          | 0      | 0       |
+| Triton  | long   | 4       | 48  | 1086/3281/4085      | 29.6/35.1/35.9      | 6228/8270/9547            | 33                   | 107         | 0      | 0       |
+| Triton  | long   | 8       | 48  | 1304/6357/8188      | 51.0/58.7/62.0      | 10324/14195/16647         | 20                   | 132         | 0      | 0       |
+| Triton  | long   | 16      | 48  | 11480/16571/18452   | 51.1/63.0/69.3      | 19788/24822/27769         | 20                   | 132         | 0      | 0       |
+| Triton  | long   | 32      | 96  | 31853/35118/39072   | 52.4/58.7/63.5      | 40766/43738/48450         | 19                   | 132         | 0      | 0       |
+
+What the numbers say, and why:
+
+- **Triton costs nothing at one stream.** 149 ms to the first token against vLLM's 148,
+  and 11.8 against 12.0 ms per token. It is the same engine and the same weights, and
+  one request does not notice the two extra hops.
+- **Short prompts scale to 16 streams, then stop.** On vLLM total throughput goes 75,
+  221, 374, 516 tok/s at 1, 4, 8 and 16 streams, while each stream slows from 12.0 to
+  23.7 ms per token. At 32 it is 522. The engine runs 16 sequences at once
+  (`max_num_seqs`), so the other 16 wait, and median TTFT goes from 515 to 3,595 ms:
+  that is the wait for a slot.
+- **Triton is a little behind at 16 short streams**: 471 tok/s against 516, and 712
+  against 515 ms median TTFT. The KV cache is nowhere near full on short prompts, so the
+  likely cost is each token crossing from the engine's process into Triton and out
+  through its frontend. That was not measured separately.
+- **Long prompts hit a ceiling near 143 tok/s** whatever the stream count: 106, 131,
+  141, 143 tok/s at 4, 8, 16 and 32 on vLLM, and 132 on Triton from 8 up. The profile
+  below shows why. The GPU is evaluating prompts, at about 4,000 prompt tokens a second,
+  and each request brings about 4,000.
+- **On long prompts Triton trades first-token time for token rate.** At 16 streams its
+  median TTFT is 11.5 s against vLLM's 3.2 s, its TPOT is 51 against 91 ms, and
+  end-to-end time and throughput are close (19.8 s and 18.8 s; 132 and 141 tok/s). The
+  engines log the cause at startup. With the same `gpu_memory_utilization`, the engine
+  inside Triton counts 19.72 GiB as consumed by weights and non-torch memory, against
+  17.79 GiB natively, and the difference comes out of the KV cache: 2.77 GiB (73,400
+  tokens) against 4.76 GiB (127,139 tokens). Triton therefore holds fewer long sequences
+  at once. The rest wait longer for a slot and then decode with less company. Where the
+  extra 1.9 GiB goes inside the container was not traced.
+- **Ollama answers one request at a time, so streams only queue.** Its token rate does
+  not change with load: 7.1 ms per token at 1 stream and 7.1 at 32, and total throughput
+  stays at 96 to 97 tok/s. What grows is the wait. Median TTFT on the short prompt is
+  416 ms alone, 4,349 ms at 4 streams and 41.4 s at 32: each request waits for the ones
+  ahead of it to finish. Alone, it is the fastest of the three per token (7.1 ms against
+  vLLM's 12.0), on different weights and with speculative decoding on, which is measured
+  on vLLM further down, and from 4 streams up vLLM delivers more: 221 tok/s against 100
+  at 4, 516 against 98 at 16. This is why the gate runs one generation at a time on
+  Ollama and four on the others.
+- **Ollama is slower to a first token even alone**, 416 against 148 ms on the short
+  prompt and 1,832 against 1,052 ms on the long one, although it is the only runtime
+  that read anything from a cache here: the system message every request shares, which
+  is 41% of the short prompt's tokens and 4% of the long one's. vLLM logged a prefix
+  cache hit rate of 0.0% through its run, because it caches this model in 800-token
+  blocks and the shared part is shorter than one. The long prompt puts Ollama's prompt
+  evaluation at roughly half vLLM's rate.
+- **Against MLPerf's interactive limits** (p99 TTFT at or under 500 ms and p99 TPOT at
+  or under 30 ms, from its Llama 3.1 8B interactive scenario; a yardstick, not a
+  submission), the highest stream count inside both is: Ollama none on the short prompt
+  and none on the long one; vLLM 4 on the short prompt and none on the long one; Triton
+  4 on the short prompt and none on the long one. No runtime meets the TTFT limit on a
+  4,000-token prompt without a cache hit.
+
+### Where the time goes on the slowest level
+
+Long prompts at 16 streams on vLLM, measured three ways over the same 48-request level.
+The instrumented runs stayed close to the plain one: median TTFT 3.3 to 3.9 s against
+3.2 s, TPOT 84 to 91 ms against 91, and 134 to 137 tok/s against 141. The instruments cost a few percent and did not change the picture.
+
+| Source                                                               | What it showed                                                                                                                                                                                                                                                |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| vLLM's own request timers, mean per request                          | 3.68 s waiting in the engine's queue, 1.30 s of prefill, 13.05 s decoding 167 tokens, 5.33 s to the first token. The engine evaluated 195,161 prompt tokens and generated 8,201.                                                                              |
+| NVIDIA Nsight Systems 2026.1.3, CUDA trace of the engine under WSL2  | GPU kernels ran for 50.2 s of the 60.3 s window. 87.3% of that was the Marlin 4-bit matmul, 4.2% the model's linear-attention kernels, 2.7% dense GEMM, 2.6% FlashInfer paged-KV attention, 2.3% compiled elementwise kernels. Memory copies took 0.09 s.     |
+| PyTorch profiler, through vLLM's `--profiler-config`, engine process | 59.5 s of CPU time, 33.7 s of it in "Command Buffer Full", which CUPTI documents as overhead due to lack of command buffer space, and 4.1 s of self time in the linear-attention op. Its trace held no GPU kernel events, so the GPU split above is Nsight's. |
+
+Together: this level is bound by prompt evaluation in the quantized matmul. Twenty-four
+prompt tokens are evaluated for every token generated, the GPU is busy with kernels for
+five sixths of the window, and nearly all of that is one kernel. The engine thread
+spends more than half its time in an overhead that means the driver had no room for
+more commands, which reads as the CPU waiting on the GPU and not the other way round.
+First-token time is mostly the wait for a slot, 3.7 s of 5.3 s, because the KV cache is
+full: during this level vLLM reported 15 sequences running with its cache 94% used.
+More streams, more CPU or a different frontend would not move these numbers. A prefix
+cache hit does, and in the app most of a turn's prompt is the event digest it shares
+with the last turn:
 
 Long prompt first answer token, one stream, p50, with the share of prompt tokens read
-from the prefix cache:
+from the prefix cache. Measured at v0.8.1 with `vllm bench serve`, 128 output tokens,
+on vLLM 0.33.0 and Ollama 0.40.13:
 
 | Runtime | Miss    | Same prompt repeated | Same document, new question |
 | ------- | ------- | -------------------- | --------------------------- |
@@ -137,15 +305,167 @@ from the prefix cache:
 vLLM caches this hybrid model in 800-token blocks, so a repeat still evaluates the
 last partial block.
 
-### Live gates
+Profiling Triton's engine the same way needs Nsight inside the container, which was
+not set up, so the Triton engine was not profiled.
 
-| Runtime         | Live cases | First pass | Judge scores  | Median model time | `checks quality`                     |
-| --------------- | ---------- | ---------- | ------------- | ----------------- | ------------------------------------ |
-| Ollama baseline | 15/15      | 15/15      | 1.0, 1.0, 1.0 | 1252 ms           | pass                                 |
-| vLLM            | 15/15      | 14/15      | 1.0, 1.0, 1.0 | 1419 ms           | fail: first-pass rate 93%, needs 95% |
+### Against the model's own recommendations
 
-On vLLM, `empty-retrieval` needed three attempts where Ollama's baseline needed one, so
-vLLM does not pass this gate yet. The gate is unchanged, and Ollama's baseline still applies.
+Checked on 2026-11-18 against the Qwen3.8-27B model card and the card of the
+`RedHatAI/Qwen3.8-27B-INT4` checkpoint. Where this deployment departs from them, the
+departure is listed, not hidden.
+
+| Topic                  | The cards say                                                                                        | This deployment                                                                                                                                                 |
+| ---------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Thinking off           | `chat_template_kwargs: {"enable_thinking": false}`                                                   | The same, per request, on vLLM. The same switch set in the chat template on Triton. `think: false` on Ollama.                                                   |
+| vLLM parsers           | `--reasoning-parser qwen3 --enable-auto-tool-choice --tool-call-parser qwen3_xml`                    | The same.                                                                                                                                                       |
+| Sampling, thinking off | temperature 0.7, top_p 0.8, top_k 20, presence_penalty 1.5                                           | Temperature 0 and seed 42, so that the gates can compare one run with another. Chat therefore does not sample the way the authors tuned for. Not measured here. |
+| Speculative decoding   | The checkpoint card serves with `--speculative-config '{"method":"mtp","num_speculative_tokens":3}'` | Off on vLLM and Triton in the table above. On in Ollama: its log shows MTP drafts of up to four tokens with 71% of drafted tokens accepted.                     |
+| Context length         | 262,144 tokens natively                                                                              | 65,536 served on vLLM and Triton, and 16,384 per request from the gate.                                                                                         |
+| Quantization           | W4A16: AWQ smoothing, then GPTQ, with an FP8 KV cache. 98.5% to 101.1% of BF16 on six benchmarks     | As pinned. Those recovery figures are the card's, with its own sampling settings, and were not reproduced here.                                                 |
+
+The speculative decoding row matters for reading the table. Ollama's lead per token, 7.1
+ms against vLLM's 12.0, is a runtime, a quantization and speculative decoding together,
+not a runtime alone.
+
+Measured here in a short run that is kept apart from the gated results:
+[bench/experiments/vllm-mtp.json](bench/experiments/vllm-mtp.json), with the serve
+command and the engine's own readings in
+[bench/experiments/README.md](bench/experiments/README.md). vLLM would not start with
+that flag at the documented 65,536-token context. With it the engine reports 0.8 GiB
+more in weights and other fixed memory and 1.7 GiB more in peak activations, which
+leaves 2.2 GiB for the KV cache where the committed flags leave 4.76, and that context
+needs 3.06. At 32,768 tokens it starts, with a KV cache of 35,288 tokens against
+127,139, and the engine accepted 74% to 82% of the tokens it drafted. "Without" is the
+committed vLLM result at 65,536 tokens. No request failed or returned an invalid object
+in either:
+
+| Level      | Requests, without / with | TTFT p50 ms, without / with | TPOT p50 ms, without / with | tok/s total, without / with |
+| ---------- | ------------------------ | --------------------------- | --------------------------- | --------------------------- |
+| short x 1  | 48 / 24                  | 148 / 162                   | 12.0 / 6.4                  | 75 / 128                    |
+| short x 4  | 48 / 24                  | 178 / 374                   | 16.4 / 7.9                  | 221 / 311                   |
+| short x 16 | 48 / 48                  | 515 / 4,766                 | 23.7 / 8.1                  | 516 / 308                   |
+| long x 1   | 48 / 24                  | 1,052 / 1,074               | 12.0 / 6.3                  | 55 / 80                     |
+| long x 4   | 48 / 24                  | 1,293 / 4,156               | 30.0 / 12.1                 | 106 / 105                   |
+| long x 16  | 48 / 48                  | 3,167 / 22,843              | 91.1 / 12.0                 | 141 / 107                   |
+
+Speculative decoding nearly halves the time per token, to 6.4 ms against 12.0, which is
+under Ollama's 7.1, and one stream gets 128 tok/s against 75. At four short streams it
+still delivers more, 311 tok/s against 221, though the first token takes 2.1 times as
+long. Past that the cache decides. The engine's log shows one request filling about a
+third of the smaller cache whatever its length (31.7% for the 436-token prompt, 36.6%
+for the 4,058-token one), so it ran three short requests or two long ones at a time and
+deferred the rest. At 16 short streams throughput is 40% lower and the first token takes
+9 times as long. Why one request takes that much of the cache was not traced. vLLM also
+capped the tokens it schedules per step at 2,048 under speculative decoding and
+suggested raising `max_num_batched_tokens`. That was left alone, so this is the card's
+flag as given and not a tuned configuration.
+
+On this card, with the desktop on it, the two settings suit different loads: speculative
+decoding for one person at a time, and the committed flags for the concurrent serving
+this release adds. The committed flags and baselines are unchanged. Choosing per load is
+the kind of decision a per-model profile should hold.
+
+### The regression gate
+
+`python -m grapevine_llm.bench check` holds every result in `bench/results` to the file
+of the same name in `bench/baseline`, and the `contracts` job runs it on every pull
+request, also against the base branch's baseline so a change cannot slow a runtime and
+replace its baseline together. A level fails when a median is more than 15% slower, a
+p95 more than 30% slower (p99 too, once both runs have 100 samples), total throughput
+more than 15% lower, or any request fails or returns an invalid answer that the
+baseline did not. A latency change also has to exceed an absolute floor (25 ms of TTFT,
+1.5 ms of TPOT, 100 ms end to end) before it counts. Runs of a different runtime
+version, model, quantization, weight source, container or GPU are refused, not
+compared, and so is a run from a runtime that did not match its pinned record.
+
+Hosted CI has no GPU, so it gates the committed numbers. Measuring is a separate,
+manual step: the `Serving benchmark` workflow runs the harness on the GPU runner against
+whichever runtime is up and fails on the same comparison. To measure by hand and adopt
+a result:
+
+```sh
+GRAPEVINE_LLM_RUNTIME=vllm uv run --directory llm --no-sync python -m grapevine_llm.bench run --output bench/results/vllm.json
+uv run --directory llm --no-sync python -m grapevine_llm.bench check
+# After reading the numbers, make the result the new baseline.
+uv run --directory llm --no-sync python -m grapevine_llm.bench accept bench/results/vllm.json --reviewed
+```
+
+The bands are set above measured repeat error. Two back-to-back runs of the vLLM matrix
+on this machine, same flags and same harness, differed by at most 5% in TPOT, 6% in
+median end-to-end time, 15% in p95 end-to-end time and 2.4% in throughput. Median TTFT
+with more than one stream did not repeat: it moved by up to 26% (277 to 348 ms at 8
+streams), which fits a closed loop where a request's wait depends on where in the
+engine's batch it lands. So TTFT at
+more than one stream gets a wider band, 40% at the median and 50% at p95, and the tight
+bands apply to everything else. Two runs is a small sample; a band that proves wrong
+should be changed with the evidence in the commit.
+
+## Sharing the GPU
+
+One card serves every chat turn, every inbox extraction, discovery and the eval
+judges. Four mechanisms decide who gets it. Each is small, and each has a test that
+fails if it stops working.
+
+**Two priority classes.** The gate (`server/src/llm/gateway.ts`) keeps a pool of
+Python workers, one per generation in flight: 1 on Ollama, which answers one request at
+a time, and 4 on vLLM and Triton, which batch (`GRAPEVINE_LLM_CONCURRENCY`). A chat turn
+is interactive. Extraction, discovery and eval judging are background. Interactive work
+always starts first. Background work may hold all but one slot, so a person never
+arrives behind a full set of extractions. When every slot is busy anyway, the newest
+background job is stopped and the chat turn takes its worker; the stopped job goes back
+to the head of its queue and runs again from the start. A job is stopped at most twice,
+then it is left to finish. Each queue has a length limit (16 interactive, 64
+background) and a wait limit (30 s and 10 min), and past either the caller gets a typed
+`busy` error instead of an unbounded wait. Stopping one request kills only its own
+worker. The policy is a pure function in
+[scheduler.ts](../server/src/llm/scheduler.ts), tested in
+[scheduler.test.ts](../server/test/scheduler.test.ts) and, with stand-in worker
+processes, in [gate-pool.test.ts](../server/test/gate-pool.test.ts).
+[gate-worker.test.ts](../server/test/gate-worker.test.ts) runs two real workers at once
+in CI.
+
+**Admission from what the runtime reports.** Before background work starts, the gate
+asks the runtime how loaded it is ([admission.ts](../server/src/llm/admission.ts)) and
+holds the job while any of these is true:
+
+| Reading                             | Source                                                                        | Holds background work when                                           |
+| ----------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Requests waiting in the engine      | vLLM `vllm:num_requests_waiting`; Triton `nv_inference_pending_request_count` | more than 0                                                          |
+| KV cache in use                     | vLLM `vllm:kv_cache_usage_perc`                                               | 85% or more                                                          |
+| Free GPU memory against a cold load | Ollama `/api/ps` and `/api/tags`, with `nvidia-smi`                           | the model is not loaded and free memory is under its size plus 1 GiB |
+
+A reading the runtime does not give is unknown, and unknown admits: a missing metric
+must not stop extraction forever. Interactive work is never held by a reading. The
+thresholds are `GRAPEVINE_LLM_ADMIT_*`, and `GRAPEVINE_LLM_ADMISSION=off` skips the
+check. Run against vLLM during the benchmark's 32-stream long-prompt level, the probe
+read 15 requests running, 17 waiting and a KV cache 94% full, and the decision was to
+hold background work.
+
+**Limits per person.** A chat request passes three, each counted per account, or per
+address when nobody is signed in ([chat.ts](../server/src/agent/chat.ts)): 20 turns a
+minute, one stream at a time, and a daily token budget
+([quota.ts](../server/src/quota.ts)). The budget is 500,000 tokens a UTC day for an
+account and 100,000 for a signed-out address (`CHAT_DAILY_TOKENS`,
+`CHAT_DAILY_TOKENS_ANON`; 0 removes the limit). What is charged is what the runtime
+reported for the turn: prompt tokens it evaluated, so not the ones read back from its
+prefix cache, plus output tokens, over every model call in the turn. A turn is charged
+after it runs, so the budget can be overshot by one turn. Accounts are counted in
+Postgres (`llm_usage`, one row per account per day, written by one atomic function), so
+a restart does not hand out a fresh day. If that table cannot be reached, the count
+continues in the server process and chat carries on. A refused request gets HTTP 429
+with `Retry-After`.
+
+**Limits per container.** The Triton service in
+[docker-compose.yml](../docker-compose.yml) is capped at 8 CPUs and 12 GB of host
+memory, runs with every Linux capability dropped, and is the only compose service given
+a GPU. Through the whole benchmark it used at most 8.8 GiB of that memory and was never
+restarted. Docker has no limit for GPU memory, so that one is the engine's own:
+`gpu_memory_utilization` 0.78 in the model repository, which the pin check fingerprints.
+
+`GET /readyz` reports the pool under `gate`: slots, workers, what is running and queued
+in each class, how many times a person pushed background work aside, how many requests
+were refused as busy, how many times background work was held, and the runtime's last
+reading.
 
 ## Agent turn latency
 
@@ -208,9 +528,10 @@ constructs instead of silently dropping them.
 
 ## Cases, scores, and baselines
 
-[evals/golden.jsonl](evals/golden.jsonl) contains 30 synthetic, locally stored cases:
+[evals/golden.jsonl](evals/golden.jsonl) contains 33 synthetic, locally stored cases:
 normal extraction/ratings/tools, malformed output, coercion, invalid IDs, repair
-exhaustion, injection, and empty evidence. Fifteen also run on the real model.
+exhaustion, injection, empty evidence, and evidence sets with distractors, two
+relevant listings, and a retriever miss. Eighteen also run on the real model.
 Copy a case, give it a unique matching request ID, and add exact field checks.
 `responses` drives deterministic replay, not the live run. Set `live: true` for
 model cases and add an explicit `rubric` only for subjective criteria.
@@ -224,10 +545,70 @@ prompt that answers "I'm Grapevine" in place of the answer fails the gate.
 
 Deterministic failures stop the run before judging. DeepEval applies local typed
 judges with explicit score anchors. RAG answers additionally receive groundedness
-and relevance rubrics. Ragas computes ID precision/recall over the versioned
-retrieval snapshots. These snapshots do **not** benchmark the live Supabase
-retriever. The starter judge shares the generation model; it is not an independent
-measure of correctness. Follow [calibration.md](calibration.md) for human review.
+and relevance rubrics. The starter judge shares the generation model; it is not an
+independent measure of correctness. Follow [calibration.md](calibration.md) for
+human review.
+
+### Ragas
+
+Ragas 0.4.4 scores every agent case of a live run three ways, and the artifact keeps
+each number per case with a macro average in `retrieval`:
+
+- **Retrieval precision and recall**, from IDs alone: of the evidence the case put in
+  front of the model, how much was relevant, and was everything relevant there. This
+  scores the reviewed snapshot in the golden case. It does **not** benchmark the live
+  Supabase retriever, and it does not move unless a case is edited.
+- **Citation precision and recall**, from IDs alone: of the evidence the answer cited,
+  how much was relevant, and did it cite everything relevant. This is the model's
+  output, so it moves when grounding gets better or worse. A case built with
+  distractors measures precision, one with two relevant listings measures recall, and
+  `retriever-miss` shows the two apart: its retrieval recall is 0.5 by construction,
+  which caps citation recall at 0.5 however good the answer is.
+- **Faithfulness**, judged: Ragas splits the answer into atomic statements and checks
+  each against the evidence text, and the score is the share that are supported. It
+  runs on the pinned local model through `grapevine_llm/ragas_local.py`, with the
+  gate's seed, temperature and schema-constrained decoding, and a reply that does not
+  validate is retried and then refused. It is asked only of an answer that makes
+  claims and had evidence to check them against.
+
+The checked-in baseline, from a live run on the pinned Ollama model:
+
+| Case                   | Evidence in the case                                             | Retrieval precision / recall | Citation precision / recall | Faithfulness |
+| ---------------------- | ---------------------------------------------------------------- | ---------------------------- | --------------------------- | ------------ |
+| `grounded-jazz`        | one relevant listing and nothing else                            | 1.00 / 1.00                  | 1.00 / 1.00                 | 0.67         |
+| `empty-retrieval`      | no evidence at all                                               | 1.00 / 1.00                  | 1.00 / 1.00                 | n/a          |
+| `injected-evidence`    | one relevant listing, with injected text beside it               | 1.00 / 1.00                  | 1.00 / 1.00                 | 1.00         |
+| `grounded-distractors` | one relevant listing among three that match part of the question | 0.25 / 1.00                  | 0.50 / 1.00                 | 1.00         |
+| `grounded-two-events`  | two relevant listings and one distractor                         | 0.67 / 1.00                  | 1.00 / 1.00                 | 1.00         |
+| `retriever-miss`       | one of the two relevant listings was retrieved                   | 0.50 / 0.50                  | 1.00 / 0.50                 | 1.00         |
+| `known-id-tool`        | a tool turn, with no evidence                                    | 1.00 / 1.00                  | 1.00 / 1.00                 | n/a          |
+| **Average**            | 7 agent cases, 5 judged                                          | 0.77 / 0.93                  | 0.93 / 0.93                 | 0.93         |
+
+The gate requires both ID pairs on every agent case and refuses a per-case drop in any
+of the four against the baseline. They are set arithmetic over IDs, with no judge, and
+five live runs gave the same four scores for every case, and the same rubric scores.
+The words are less fixed than the scores. At temperature 0 with a fixed seed, one of
+those runs worded the `injected-evidence` answer differently, with the same citation,
+and the rubric judge's reason for one case varied in its quotation marks. The table is
+the model's real behavior, not a row of ones. In `grounded-distractors` it answered correctly and also
+cited the ticketed jazz show it was ruling out, which halves citation precision.
+
+Faithfulness is gated on the suite average, which must be at least 0.75 and no more
+than 0.15 below the baseline's, because the judge is not repeatable case by case. Over
+the same five runs four of the five judged answers scored 1.0 every time, and
+`grounded-jazz` scored 0.67, 1.0, 0.67, 1.0, 0.67 on an identical answer: "You can
+attend Shoreline Jazz at Waterfront Park on Friday, November 6, 2026, from 7 PM to 9 PM.
+Admission is free." The first three were taken apart. For both low scores the judge had
+split the answer into three claims and refused the first, that the user can attend,
+because the evidence says nothing about the user. For the high one it had split it into
+two and accepted both. One such flip moves the average of five cases by 0.07, and the
+checked-in baseline is a run where it fell the low way.
+Read a faithfulness number as a reason to look at the answer, not as a verdict on it.
+It shares the generation model, like the DeepEval judge, and the same caution applies.
+
+Ragas 0.4 deprecates the ID metrics' import path and names no replacement before 1.0,
+so the dependency is held below 0.5 and `tests/test_ragas.py` keeps the set arithmetic
+on record.
 
 ```sh
 # Check the current run against both the checked-in and PR-base baselines.
@@ -241,8 +622,9 @@ Run the live suite again after changing source, locks, or model pins. The baseli
 command rejects stale fingerprints. Commit the reviewed baseline with the change;
 editing it cannot hide a regression against the PR base. Gates require all cases,
 all required judges ≥0.75, first-pass schema success ≥95%, no hard failures, and no
-per-case score or first-pass regression. Timing is recorded, not used as a flaky
-hardware-dependent merge threshold. Artifacts include per-case outputs, attempts,
+per-case score or first-pass regression. Timing in this artifact is recorded, not
+gated; serving latency has its own gate, under [Serving numbers](#serving-numbers).
+Artifacts include per-case outputs, attempts,
 scores, timings, source/lock/model fingerprints, runtime, seed, and revision.
 
 ## Offline operation, tracing, and CI
@@ -282,8 +664,9 @@ to synthetic `GoldenCase` JSON, then use `maintenance promote candidate.json --r
 and refresh the live baseline. Traces and review queues are never CI uploads.
 
 Library choices: Instructor supplies typed parsing; Ollama's native schema mode
-supplies constrained decoding, and vLLM uses its `guidance` backend when selected.
-The existing DeepEval harness is retained with Ragas ID metrics. Hosted strict
+supplies constrained decoding, and vLLM uses its `guidance` backend when selected,
+directly or inside Triton. The existing DeepEval harness is retained with Ragas ID
+metrics and Ragas faithfulness. Hosted strict
 APIs are deliberately unsupported by this air-gapped profile. uv/package locks
 pin dependencies, including the compatible Ragas/LangChain pair and the existing
 local DeepEval telemetry packaging patch.

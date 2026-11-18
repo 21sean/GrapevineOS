@@ -26,21 +26,22 @@ daily. It does not claim zero Python advisories or zero application vulnerabilit
 pytest is upgraded to at least 9.0.3 to address
 [CVE-2025-71176](https://github.com/advisories/GHSA-6w46-j5rx-g56g).
 
-Two advisories remain in the optional `eval` dependency group. Neither has an
-upstream patched version listed at review time; they are not suppressed or
-represented as fixed:
+One advisory remains in the optional `eval` dependency group. It has no upstream
+patched version listed at review time; it is not suppressed or represented as fixed:
 
 - [DiskCache unsafe pickle deserialization](https://github.com/advisories/GHSA-w8v5-vhqr-4h9v)
   affects diskcache 5.6.3, pulled in by Ragas. Exploitation requires writing to a
   cache directory that a victim subsequently reads. Grapevine does not instantiate
   a disk cache or use Ragas's `DiskCacheBackend`.
-- [Ragas multimodal SSRF](https://github.com/advisories/GHSA-95ww-475f-pr4f)
-  affects the installed Ragas 0.3.9. Grapevine uses only `SingleTurnSample`,
-  `IDBasedContextPrecision`, and `IDBasedContextRecall` over reviewed string IDs.
-  It does not pass context content to multimodal metrics or load context files or
-  URLs. The Python runtime also denies non-loopback sockets before importing
-  evaluator dependencies. That network restriction alone does not protect local
-  files or loopback services; keeping multimodal evaluation unused is essential.
+
+The [Ragas multimodal SSRF](https://github.com/advisories/GHSA-95ww-475f-pr4f)
+advisory that applied to Ragas 0.3.9 is fixed in 0.4.4, which the lock now holds
+(`ragas>=0.4.4,<0.5`). The code path stays unused all the same. Grapevine scores
+reviewed string IDs with `IDBasedContextPrecision` and `IDBasedContextRecall`, and
+scores `Faithfulness` over evidence text with a judge that only ever calls the
+loopback runtime (`llm/grapevine_llm/ragas_local.py`). It passes no context files or
+URLs to any metric and uses no multimodal metric. The Python runtime also denies
+non-loopback sockets before importing evaluator dependencies.
 
 The retrieval regression test denies all socket connections and disk-cache
 construction while scoring IDs, including URL-shaped strings. Enabling disk

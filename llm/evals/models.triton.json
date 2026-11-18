@@ -1,0 +1,24 @@
+{
+  "runtime": "triton",
+  "runtime_version": "2.75.0",
+  "container": "nvcr.io/nvidia/tritonserver:26.11-vllm-python-py3@sha256:6e33b9d1956c2e2ce89db49b7f2f6d870c2a9274562a735932908ec2251ce057",
+  "backend": "vllm",
+  "backend_version": "0.33.0+908da4f6.nv26.11.80607662",
+  "repository_sha256": "f9aed6169491d95c49d7a941925bdfbb2174289caaf29a9fe34b287bb6d10c52",
+  "generation": {
+    "name": "qwen3.8-27b-int4",
+    "repository": "RedHatAI/Qwen3.8-27B-INT4",
+    "revision": "91bd022d5b49442a868bc35008f6c21e1860edfa",
+    "sha256": "fd5c287e3a03f30b0e53fd5fe66ec90ab5fdd94807f7f8df699cca3ae9534910",
+    "quantization": "W4A16 INT4 safetensors (AWQ + GPTQ), FP8 KV cache"
+  },
+  "judge": {
+    "name": "qwen3.8-27b-int4",
+    "repository": "RedHatAI/Qwen3.8-27B-INT4",
+    "revision": "91bd022d5b49442a868bc35008f6c21e1860edfa",
+    "sha256": "fd5c287e3a03f30b0e53fd5fe66ec90ab5fdd94807f7f8df699cca3ae9534910",
+    "quantization": "W4A16 INT4 safetensors (AWQ + GPTQ), FP8 KV cache"
+  },
+  "temperature": 0,
+  "seed": 42
+}

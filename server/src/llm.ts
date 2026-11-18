@@ -1,6 +1,6 @@
 import { store } from "./store.js";
 import type { LlmProviderId } from "./types.js";
-import { generateTyped, LlmGateError } from "./llm/gateway.js";
+import { generateTyped, LlmGateError, type Priority } from "./llm/gateway.js";
 import { llmBase, llmModel } from "./llm/runtime.js";
 import type { Output, Task, ValidationContext } from "./llm/generated.js";
 
@@ -14,6 +14,8 @@ export async function generateJSON<T extends Task>(opts: {
   user: string;
   model?: string;
   context?: ValidationContext;
+  /** Set to "interactive" when a person is waiting on this call, as with a paste preview. */
+  priority?: Priority;
 }): Promise<Output<T>> {
   if ((await activeProvider(opts.model)) !== "ollama") {
     throw new LlmGateError("unsupported_provider", "Structured inference requires a local runtime");
@@ -23,6 +25,8 @@ export async function generateJSON<T extends Task>(opts: {
     context: opts.context,
     model: llmModel(opts.model || (await store.settings()).model),
     baseUrl: await llmBase(),
+    // Extraction, rating and discovery can wait for a person: see llm/scheduler.ts.
+    priority: opts.priority ?? "background",
     messages: [
       { role: "system", content: opts.system },
       { role: "user", content: opts.user },

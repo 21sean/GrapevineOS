@@ -99,6 +99,28 @@ describe("rate limits", () => {
     expect(other).toBe(1);
   });
 
+  it("counts per account instead of per address when a key names one", async () => {
+    const who = new Map([
+      ["1.1.1.1", "ann"],
+      ["2.2.2.2", "ann"],
+      ["3.3.3.3", "bob"],
+    ]);
+    const limit = rateLimit({
+      name: "test",
+      windowMs: 60_000,
+      max: 1,
+      key: async (r) => who.get(r.ip!)!,
+    });
+    let passed = 0;
+    await limit(req("1.1.1.1"), res(), () => passed++);
+    // The same person from another address is still the same person.
+    const again = res();
+    await limit(req("2.2.2.2"), again, () => passed++);
+    expect(again.statusCode).toBe(429);
+    await limit(req("3.3.3.3"), res(), () => passed++);
+    expect(passed).toBe(2);
+  });
+
   it("allows one in-flight request per key until it closes", async () => {
     const flight = singleFlight({ name: "test", key: () => "same" });
     const first = res();

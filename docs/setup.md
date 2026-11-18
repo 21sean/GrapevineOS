@@ -71,6 +71,12 @@ Full feature configuration:
   and extraction from vLLM 0.33.0 instead of Ollama. It needs Linux or WSL2 and about
   25 GB of free VRAM, and it holds that memory while it runs. See
   [the vLLM runtime guide](../llm/README.md#vllm-runtime).
+- **NVIDIA Triton, optional**: `docker compose --profile triton up -d` serves the
+  same checkpoint through Triton Inference Server 2.75.0 and its vLLM backend, and
+  `GRAPEVINE_LLM_RUNTIME=triton` routes the gate to it. It needs Linux Docker with
+  the NVIDIA Container Toolkit (Docker inside WSL2 works), the same 25 GB of VRAM,
+  and `TRITON_MODELS` set to the directory that holds the weights. See
+  [the Triton runtime guide](../llm/README.md#triton-runtime).
 - **Python 3.12 and uv 0.6.9**: run `uv sync --directory llm --frozen --group eval`
   before starting the server. The Node gateway launches this local environment.
 - **Supabase**: copy `server/.env.example` to `server/.env` and set

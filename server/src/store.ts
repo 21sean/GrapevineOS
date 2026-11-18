@@ -1002,6 +1002,32 @@ export const store = {
     return true;
   },
 
+  // ---------- chat token budget (see quota.ts) ----------
+
+  /** Tokens an account has been charged on one UTC day (YYYY-MM-DD). */
+  async llmUsage(userId: string, day: string): Promise<number> {
+    const { data } = await db
+      .from("llm_usage")
+      .select("tokens")
+      .eq("user_id", userId)
+      .eq("day", day)
+      .maybeSingle()
+      .throwOnError();
+    return Number(data?.tokens ?? 0);
+  },
+
+  /**
+   * Add one turn's tokens and return the day's new total. A Postgres function
+   * so the add is one statement: two turns finishing together cannot both read
+   * the old total and lose a write.
+   */
+  async recordLlmUsage(userId: string, day: string, tokens: number): Promise<number> {
+    const { data } = await db
+      .rpc("record_llm_usage", { p_user_id: userId, p_day: day, p_tokens: tokens })
+      .throwOnError();
+    return Number(data ?? 0);
+  },
+
   // ---------- reactions (per-user event feedback) ----------
 
   async userReactions(userId: string): Promise<ReactionEntry[]> {
