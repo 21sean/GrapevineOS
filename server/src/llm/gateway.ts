@@ -333,7 +333,7 @@ function backgroundAdmitted(): "yes" | "no" | "asking" {
 function pump(): void {
   clearTimeout(recheck);
   recheck = undefined;
-  let admitted: ReturnType<typeof backgroundAdmitted> = "yes";
+  let admitted: ReturnType<typeof backgroundAdmitted>;
   for (;;) {
     const waiting = scheduler.queued();
     admitted = waiting.background > 0 && waiting.interactive === 0 ? backgroundAdmitted() : "yes";
