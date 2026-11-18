@@ -13,6 +13,7 @@ type GateOptions = {
   signal?: AbortSignal;
   onDelta?: (text: string) => void;
   onReset?: () => void;
+  onStats?: (stats: Record<string, number>) => void;
 };
 const gate = vi.hoisted(() => ({
   generateTyped: vi.fn<(opts: GateOptions) => Promise<unknown>>(),
@@ -21,7 +22,11 @@ vi.mock("../src/llm/gateway.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/llm/gateway.js")>()),
   generateTyped: gate.generateTyped,
 }));
-const seen = vi.hoisted(() => ({ appended: [] as unknown[][] }));
+const seen = vi.hoisted(() => ({
+  appended: [] as unknown[][],
+  charged: [] as unknown[][],
+  usedToday: 0,
+}));
 vi.mock("../src/auth.js", () => ({
   sessionUser: async () => ({
     id: "user-1",
@@ -52,6 +57,11 @@ vi.mock("../src/store.js", () => {
       appendChatTurn: async (...args: unknown[]) => {
         seen.appended.push(args);
       },
+      llmUsage: async () => seen.usedToday,
+      recordLlmUsage: async (...args: unknown[]) => {
+        seen.charged.push(args);
+        return 0;
+      },
     },
   };
 });
@@ -79,6 +89,8 @@ const realFetch = globalThis.fetch;
 beforeEach(async () => {
   gate.generateTyped.mockReset();
   seen.appended.length = 0;
+  seen.charged.length = 0;
+  seen.usedToday = 0;
   // The route checks the daemon is up before it builds the graph.
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) =>
     String(input).includes("/api/version")
@@ -140,6 +152,36 @@ async function untilDelta(reader: ReadableStreamDefaultReader<Uint8Array>): Prom
 
 const LONG =
   "The jazz set at the shell starts at six and the market on Newport runs until eight tonight.";
+
+describe("the daily token budget", () => {
+  it("charges the account what the runtime reported, less the prompt it read from cache", async () => {
+    gate.generateTyped.mockImplementationOnce(async (opts) => {
+      opts.onDelta?.(LONG);
+      opts.onStats?.({ prompt_tokens: 4_000, output_tokens: 200, cached_prompt_tokens: 3_500 });
+      return answer(LONG);
+    });
+    expect(shownText(await turn("what is on?"))).toBe(LONG);
+    await vi.waitFor(() =>
+      expect(seen.charged).toEqual([["user-1", expect.stringMatching(/^\d{4}-\d\d-\d\d$/), 700]]),
+    );
+  });
+
+  it("refuses a turn before anything generates once the day is spent", async () => {
+    seen.usedToday = 500_000;
+    const res = await realFetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message: "what is on?" }),
+    });
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toMatch(/^\d+$/);
+    expect(await res.json()).toEqual({
+      error: "You've used today's chat allowance. It resets at midnight UTC.",
+    });
+    expect(gate.generateTyped).not.toHaveBeenCalled();
+    expect(seen.charged).toEqual([]);
+  });
+});
 
 describe("the answer as it generates", () => {
   it("reaches the client before the gate has finished, and matches the record", async () => {

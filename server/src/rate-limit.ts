@@ -16,17 +16,26 @@ interface Bucket {
   resetAt: number;
 }
 
-/** Fixed-window count per client address. Standard RateLimit-* headers on every reply. */
-export function rateLimit(opts: { name: string; windowMs: number; max: number }) {
+/**
+ * Fixed-window count per client. The client is the address unless `key` names
+ * someone more specific: chat counts per account when a person is signed in, so
+ * a household behind one address does not spend one shared budget. Standard
+ * RateLimit-* headers on every reply.
+ */
+export function rateLimit(opts: {
+  name: string;
+  windowMs: number;
+  max: number;
+  key?: (req: Request) => Promise<string> | string;
+}) {
   const buckets = new Map<string, Bucket>();
   let sweepAt = Date.now() + opts.windowMs;
-  return (req: Request, res: Response, next: NextFunction): void => {
+  const admit = (key: string, res: Response, next: NextFunction): void => {
     const now = Date.now();
     if (now >= sweepAt) {
-      for (const [key, bucket] of buckets) if (bucket.resetAt <= now) buckets.delete(key);
+      for (const [stale, bucket] of buckets) if (bucket.resetAt <= now) buckets.delete(stale);
       sweepAt = now + opts.windowMs;
     }
-    const key = req.ip ?? "unknown";
     let bucket = buckets.get(key);
     if (!bucket || bucket.resetAt <= now) {
       bucket = { count: 0, resetAt: now + opts.windowMs };
@@ -41,6 +50,10 @@ export function rateLimit(opts: { name: string; windowMs: number; max: number })
       return;
     }
     next();
+  };
+  return (req: Request, res: Response, next: NextFunction): void | Promise<void> => {
+    if (!opts.key) return admit(req.ip ?? "unknown", res, next);
+    return Promise.resolve(opts.key(req)).then((key) => admit(key, res, next));
   };
 }
 

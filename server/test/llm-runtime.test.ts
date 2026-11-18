@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { llmModel, llmRuntime, runtimeLabel, VLLM_MODEL } from "../src/llm/runtime.js";
+import {
+  llmModel,
+  llmRuntime,
+  runtimeLabel,
+  servesPinnedModel,
+  TRITON_MODEL,
+  VLLM_MODEL,
+} from "../src/llm/runtime.js";
 
 const saved = { ...process.env };
 
@@ -7,6 +14,7 @@ beforeEach(() => {
   delete process.env.GRAPEVINE_LLM_RUNTIME;
   delete process.env.GRAPEVINE_LLM_MODEL;
   delete process.env.GRAPEVINE_LLM_BASE_URL;
+  delete process.env.GRAPEVINE_TRITON_KSERVE_URL;
 });
 afterEach(() => {
   process.env = { ...saved };
@@ -29,7 +37,40 @@ it("uses the pinned served name under vLLM, whatever Admin selected", () => {
 
 it("refuses an unknown runtime instead of guessing", () => {
   process.env.GRAPEVINE_LLM_RUNTIME = "openai";
-  expect(() => llmRuntime()).toThrow(/ollama or vllm/);
+  expect(() => llmRuntime()).toThrow(/ollama, vllm or triton/);
+});
+
+it("serves the same pinned checkpoint under Triton, at Triton's own address", async () => {
+  process.env.GRAPEVINE_LLM_RUNTIME = "triton";
+  expect(runtimeLabel()).toBe("Triton");
+  expect(servesPinnedModel()).toBe(true);
+  expect(llmModel("qwen3.8:27b")).toBe(TRITON_MODEL);
+  expect(TRITON_MODEL).toBe(VLLM_MODEL);
+  const { llmBase } = await import("../src/llm/runtime.js");
+  expect(await llmBase()).toBe("http://127.0.0.1:9000");
+});
+
+it("reads Triton's readiness from the OpenAI frontend and its version from KServe", async () => {
+  process.env.GRAPEVINE_LLM_RUNTIME = "triton";
+  const seen: string[] = [];
+  let kserve = true;
+  vi.stubGlobal("fetch", async (url: string) => {
+    seen.push(url);
+    if (url.endsWith("/health/ready")) return new Response("", { status: 200 });
+    if (url.endsWith("/v2"))
+      return kserve
+        ? new Response(JSON.stringify({ name: "triton", version: "2.75.0" }))
+        : new Response("", { status: 404 });
+    return new Response(JSON.stringify({ data: [{ id: TRITON_MODEL }] }));
+  });
+  const { runtimeSupportsTools, runtimeVersion } = await import("../src/llm/runtime.js");
+  expect(await runtimeVersion("http://127.0.0.1:9000")).toBe("2.75.0");
+  expect(seen).toEqual(["http://127.0.0.1:9000/health/ready", "http://127.0.0.1:9001/v2"]);
+  // Without the KServe endpoint the runtime is still up; only its version is unknown.
+  kserve = false;
+  expect(await runtimeVersion("http://127.0.0.1:9000")).toBe("unknown");
+  expect(await runtimeSupportsTools(TRITON_MODEL)).toBe(true);
+  expect(seen.at(-1)).toBe("http://127.0.0.1:9000/v1/models");
 });
 
 it("reads the vLLM version, health and served model from its own endpoints", async () => {

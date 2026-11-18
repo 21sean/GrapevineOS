@@ -6,6 +6,7 @@
 #   docker compose --profile search up -d           # SearXNG on localhost:8888
 #   docker compose --profile observability --profile search up -d
 #   docker compose --profile observability --profile search down
+#   TRITON_MODELS=/path/to/models docker compose --profile triton up -d   # Triton on localhost:9000
 #
 # Langfuse's own compose file is vendored unchanged under docker/observability/langfuse
 # together with the Grapevine override (alert bridge, code evaluators) and a
@@ -23,6 +24,53 @@ include:
     project_directory: docker/observability/langfuse
 
 services:
+  # NVIDIA Triton Inference Server with its vLLM backend, as a third local runtime
+  # beside Ollama and plain vLLM (llm/README.md has the comparison). Set
+  # GRAPEVINE_LLM_RUNTIME=triton in server/.env to route the gate through it.
+  #
+  # Linux Docker with the NVIDIA Container Toolkit, including Docker inside WSL2.
+  # TRITON_MODELS is the directory that holds RedHatAI/Qwen3.8-27B-INT4, mounted
+  # read-only. The image is named by tag and digest; llm/evals/models.triton.json
+  # pins the same digest and fingerprints docker/triton, and the pin check refuses
+  # a server started from anything else.
+  #
+  # Limits: the container may use 8 CPUs and 12 GB of host memory, and it is the
+  # only compose service given a GPU. How much of that GPU's memory the engine
+  # takes is gpu_memory_utilization in docker/triton/model_repository (0.78 of the
+  # card); Docker has no knob for GPU memory, so that file is the limit.
+  triton:
+    image: nvcr.io/nvidia/tritonserver:26.11-vllm-python-py3@sha256:6e33b9d1956c2e2ce89db49b7f2f6d870c2a9274562a735932908ec2251ce057
+    profiles: [triton]
+    restart: unless-stopped
+    command: ["bash", "/triton/start.sh"]
+    ports:
+      # OpenAI-compatible frontend, then KServe HTTP for the pin check. Loopback only.
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - ${TRITON_MODELS:?set TRITON_MODELS to the directory holding RedHatAI/Qwen3.8-27B-INT4}:/models:ro
+      - ./docker/triton:/triton:ro
+    # PyTorch shares tensors between the engine's processes through /dev/shm.
+    shm_size: 8gb
+    deploy:
+      resources:
+        limits:
+          cpus: "8"
+          memory: 12g
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:9000/health/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 300s
+
   # search_web prefers a SearXNG instance when SEARXNG_URL is set in server/.env
   # (http://localhost:8888 for this one) and scrapes DuckDuckGo otherwise. The
   # settings file under docker/observability/searxng turns on the JSON format the

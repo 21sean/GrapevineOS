@@ -33,6 +33,8 @@ export class GatedMetric extends BaseMetric {
         task: "judge",
         model: this.options.model.name,
         baseUrl: this.options.model.baseUrl,
+        // Grading waits for people: a chat turn goes ahead of it and may stop it.
+        priority: "background",
         messages: [
           {
             role: "system",

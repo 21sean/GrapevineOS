@@ -3,11 +3,13 @@
   "runtime_version": "0.40.8",
   "generation": {
     "name": "qwen3.8:27b",
-    "digest": "4610da9d4ad7afb2acc2beb91fcd0b2235ec149e7be0a83139cb93dfc63d5a80"
+    "digest": "4610da9d4ad7afb2acc2beb91fcd0b2235ec149e7be0a83139cb93dfc63d5a80",
+    "quantization": "Q4_K_M GGUF"
   },
   "judge": {
     "name": "qwen3.8:27b",
-    "digest": "4610da9d4ad7afb2acc2beb91fcd0b2235ec149e7be0a83139cb93dfc63d5a80"
+    "digest": "4610da9d4ad7afb2acc2beb91fcd0b2235ec149e7be0a83139cb93dfc63d5a80",
+    "quantization": "Q4_K_M GGUF"
   },
   "temperature": 0,
   "seed": 42

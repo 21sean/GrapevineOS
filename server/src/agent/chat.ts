@@ -26,7 +26,7 @@
  *   usage      token and timing telemetry, when the runtime reports it
  *   done       the thread id to continue with, and this request's id
  */
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { sessionUser } from "../auth.js";
 import { langfuseHandler, recordLatencyScores } from "../langfuse.js";
 import { trackChat } from "../lifecycle.js";
@@ -39,10 +39,11 @@ import {
   runtimeSupportsTools,
   runtimeVersion,
 } from "../llm/runtime.js";
+import { chargeable, record, tokenQuota, type Subject } from "../quota.js";
 import { rateLimit, singleFlight } from "../rate-limit.js";
 import { currentRequestId } from "../request-id.js";
 import { store } from "../store.js";
-import { type AgentFrame, type ChatUsage } from "../types.js";
+import { type AgentFrame, type ChatUsage, type User } from "../types.js";
 import { buildCtx, coercePos, type ChatContext } from "./context.js";
 import { buildAgentGraph, forgetThread, turnInput } from "./graph.js";
 import { turnFailureText } from "./refusals.js";
@@ -54,18 +55,35 @@ export const chat = Router();
 const CHAT_DEADLINE_MS = 120_000;
 const MAX_MESSAGE_CHARS = 2_000;
 
-// A chat turn is the most expensive request the server takes: one turn holds
-// the local GPU for its whole duration. So two limits, not one: a per-address
-// budget over a minute, and one stream at a time per account (per address when
-// signed out). The second is what stops a stuck tab from queueing a second job
-// behind its own.
-const chatLimit = rateLimit({ name: "chat", windowMs: 60_000, max: 20 });
-const chatFlight = singleFlight({
-  name: "conversation",
-  key: async (req) => (await sessionUser(req).catch(() => null))?.id ?? `ip:${req.ip}`,
-});
+/** The signed-in caller, looked up once per request: three limits and the handler all ask. */
+const callers = new WeakMap<Request, Promise<User | null>>();
+function caller(req: Request): Promise<User | null> {
+  let found = callers.get(req);
+  if (!found) {
+    found = sessionUser(req).catch(() => null);
+    callers.set(req, found);
+  }
+  return found;
+}
+/** Whose limits a request counts against: the account, or the address when signed out. */
+async function subjectOf(req: Request): Promise<Subject> {
+  const user = await caller(req);
+  return user ? { key: user.id, userId: user.id } : { key: `ip:${req.ip}` };
+}
+const subjectKey = async (req: Request) => (await subjectOf(req)).key;
 
-chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
+// A chat turn is the most expensive request the server takes: one turn holds a
+// share of the local GPU for its whole duration. So three limits, each for a
+// different way of taking too much, all counted per account (per address when
+// signed out): how often (turns a minute), how much (tokens a day, quota.ts),
+// and how many at once (one stream). The last is what stops a stuck tab from
+// queueing a second job behind its own. What the GPU does with the turns that
+// get through is the gate's business (llm/gateway.ts).
+const chatLimit = rateLimit({ name: "chat", windowMs: 60_000, max: 20, key: subjectKey });
+const chatQuota = tokenQuota({ subject: subjectOf });
+const chatFlight = singleFlight({ name: "conversation", key: subjectKey });
+
+chat.post("/api/agent/chat", chatLimit, chatQuota, chatFlight, async (req, res) => {
   const startedAt = performance.now();
   res.setHeader("Content-Type", "application/x-ndjson");
   res.setHeader("Cache-Control", "no-cache");
@@ -100,6 +118,8 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
     send({ type: "done", threadId, requestId });
     res.end();
   };
+  // Tokens the runtime reported for this turn, across every model call in it.
+  let charged = 0;
 
   try {
     const settings = await store.settings();
@@ -107,7 +127,7 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
     // History is per-account: a threadId that already belongs to a different
     // user (or to anyone, for a signed-out caller) is re-minted, so nobody can
     // resume, or write into, someone else's conversation by guessing an id.
-    const user = await sessionUser(req).catch(() => null);
+    const user = await caller(req);
     const threadOwner = await store.chatThreadOwner(threadId).catch(() => null);
     const ownsThread = !!user && threadOwner === user.id;
     if (threadOwner && !ownsThread) threadId = crypto.randomUUID();
@@ -231,7 +251,10 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
       if ((frame.type === "delta" || frame.type === "replace") && visibleTtftMs === undefined) {
         visibleTtftMs = performance.now() - startedAt;
       }
-      if (frame.type === "usage") usage = frame.usage;
+      if (frame.type === "usage") {
+        usage = frame.usage;
+        charged += chargeable(frame.usage);
+      }
       send(frame);
     }
     // The client hung up, or the server is stopping, mid-answer: nothing to
@@ -265,6 +288,9 @@ chat.post("/api/agent/chat", chatLimit, chatFlight, async (req, res) => {
     res.end();
   } finally {
     untrack();
+    // Charged however the turn ended: the GPU did this work even if the tab
+    // closed before the answer was read.
+    void subjectOf(req).then((subject) => record(subject, charged));
   }
 });
 

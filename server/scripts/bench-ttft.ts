@@ -1,7 +1,7 @@
 /**
  * Time to first token, measured the way a person meets it.
  *
- *   npm run bench:ttft -w server -- [--base-url URL] [--runtime ollama|vllm]
+ *   npm run bench:ttft -w server -- [--base-url URL] [--runtime ollama|vllm|triton]
  *     [--model NAME] [--samples 100] [--tool-samples 30] [--miss-samples 30] [--cold 3]
  *     [--gap-ms 2000]
  *     [--scenario short,long,long-miss] [--out report.json]
@@ -34,8 +34,8 @@
  * and a deployment's Supabase round trips are not in the visible numbers. Run it
  * with nothing else on the GPU; a bench under contention measures the contention.
  *
- * --runtime vllm drives the same stack through the gate's vLLM transport. vLLM holds
- * its model loaded, so it has no cold samples here. The
+ * --runtime vllm or triton drives the same stack through that runtime's transport.
+ * Both hold the model loaded, so neither has cold samples here. The
  * targets printed are MLPerf's Llama 3.1 8B interactive latency limits, used as a
  * yardstick; this is not an MLPerf submission or a certified result.
  */
@@ -53,11 +53,15 @@ const arg = (name: string, fallback: string) => {
 };
 
 const runtime = arg("runtime", "ollama");
+const DEFAULT_BASE: Record<string, string> = {
+  vllm: "http://127.0.0.1:8000",
+  triton: "http://127.0.0.1:9000",
+};
 const baseUrl = arg(
   "base-url",
-  runtime === "vllm" ? "http://127.0.0.1:8000" : process.env.OLLAMA_URL || "http://127.0.0.1:11434",
+  DEFAULT_BASE[runtime] ?? (process.env.OLLAMA_URL || "http://127.0.0.1:11434"),
 ).replace(/\/$/, "");
-const model = arg("model", runtime === "vllm" ? "qwen3.8-27b-int4" : "qwen3.8:27b");
+const model = arg("model", runtime === "ollama" ? "qwen3.8:27b" : "qwen3.8-27b-int4");
 const samples = Number(arg("samples", "100"));
 const toolSamples = Number(arg("tool-samples", "30"));
 const missSamples = Number(arg("miss-samples", "30"));
@@ -176,8 +180,11 @@ function machine() {
 async function runtimeFacts() {
   const facts: Record<string, unknown> = { runtime, base_url: baseUrl, model };
   try {
-    if (runtime === "vllm") {
-      const version = (await (await fetch(`${baseUrl}/version`)).json()) as { version?: string };
+    if (runtime === "vllm" || runtime === "triton") {
+      // Triton reports its version on the KServe endpoint, not the OpenAI one.
+      const kserve = process.env.GRAPEVINE_TRITON_KSERVE_URL || "http://127.0.0.1:9001";
+      const url = runtime === "vllm" ? `${baseUrl}/version` : `${kserve}/v2`;
+      const version = (await (await fetch(url)).json()) as { version?: string };
       facts.runtime_version = version.version;
       return facts;
     }

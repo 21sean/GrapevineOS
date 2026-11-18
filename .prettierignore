@@ -15,6 +15,7 @@ server/scripts/seed-data/
 supabase/
 llm/.venv/
 llm/artifacts/
+llm/bench/
 llm/uv.lock
 contracts/llm/
 server/src/llm/generated.ts

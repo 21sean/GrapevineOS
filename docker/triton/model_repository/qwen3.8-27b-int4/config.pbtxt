@@ -1,0 +1,14 @@
+# Triton serves this model through its vLLM backend. The engine arguments live in
+# 1/model.json and mirror the `vllm serve` command in llm/README.md, so both runtimes
+# load the same checkpoint the same way.
+backend: "vllm"
+instance_group [
+  {
+    count: 1
+    kind: KIND_MODEL
+  }
+]
+parameters: {
+  key: "REPORT_CUSTOM_METRICS"
+  value: { string_value: "true" }
+}

@@ -1,13 +1,20 @@
 import "./deepeval-env.js";
 import { readFile } from "node:fs/promises";
-import { model_manifestSchema, vllm_manifestSchema } from "../llm/generated.js";
-import { llmRuntime, runtimeVersion, VLLM_BASE_URL } from "../llm/runtime.js";
+import {
+  model_manifestSchema,
+  triton_manifestSchema,
+  vllm_manifestSchema,
+} from "../llm/generated.js";
+import { llmBase, llmRuntime, runtimeVersion, TRITON_MODEL, VLLM_MODEL } from "../llm/runtime.js";
 import { localTraceEndpoint } from "../offline.js";
 
 const pinsPath = new URL("../../../llm/evals/models.json", import.meta.url);
 const vllmPinsPath = new URL("../../../llm/evals/models.vllm.json", import.meta.url);
+const tritonPinsPath = new URL("../../../llm/evals/models.triton.json", import.meta.url);
 export function judgeModelName(): string {
-  return llmRuntime() === "vllm" ? "qwen3.8-27b-int4" : "qwen3.8:27b";
+  const runtime = llmRuntime();
+  if (runtime === "triton") return TRITON_MODEL;
+  return runtime === "vllm" ? VLLM_MODEL : "qwen3.8:27b";
 }
 export interface Judge {
   model: { name: string; baseUrl: string };
@@ -17,7 +24,7 @@ export interface Judge {
 /** vLLM holds the GPU, so its judge is the same served model, checked against its own record. */
 async function vllmJudge(): Promise<Judge> {
   const pins = vllm_manifestSchema.parse(JSON.parse(await readFile(vllmPinsPath, "utf8")));
-  const baseUrl = process.env.GRAPEVINE_LLM_BASE_URL || VLLM_BASE_URL;
+  const baseUrl = await llmBase();
   if (!localTraceEndpoint(baseUrl)) throw new Error("Judge requires a loopback endpoint");
   const response = await fetch(`${baseUrl}/v1/models`, {
     redirect: "error",
@@ -33,7 +40,30 @@ async function vllmJudge(): Promise<Judge> {
   }
   return { name: pins.judge.name, baseUrl, model: { name: pins.judge.name, baseUrl } };
 }
+/**
+ * Triton holds the GPU the same way. It reports the server version and the served name,
+ * not where the weights came from, so that is what is checked.
+ */
+async function tritonJudge(): Promise<Judge> {
+  const pins = triton_manifestSchema.parse(JSON.parse(await readFile(tritonPinsPath, "utf8")));
+  const baseUrl = await llmBase();
+  if (!localTraceEndpoint(baseUrl)) throw new Error("Judge requires a loopback endpoint");
+  const response = await fetch(`${baseUrl}/v1/models`, {
+    redirect: "error",
+    signal: AbortSignal.timeout(5000),
+  });
+  const served = (await response.json()) as { data?: { id: string }[] };
+  if (
+    (await runtimeVersion(baseUrl, 5000)) !== pins.runtime_version ||
+    !response.ok ||
+    !served.data?.some((m) => m.id === pins.judge.name)
+  ) {
+    throw new Error("Judge runtime or model differs from the reviewed manifest");
+  }
+  return { name: pins.judge.name, baseUrl, model: { name: pins.judge.name, baseUrl } };
+}
 export async function judge(): Promise<Judge> {
+  if (llmRuntime() === "triton") return tritonJudge();
   if (llmRuntime() === "vllm") return vllmJudge();
   const pins = model_manifestSchema.parse(JSON.parse(await readFile(pinsPath, "utf8")));
   const baseUrl = process.env.GRAPEVINE_LLM_BASE_URL || "http://127.0.0.1:11434";

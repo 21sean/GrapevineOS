@@ -5,7 +5,7 @@ import json
 import subprocess
 from pathlib import Path
 
-from .evals import DATA, ROOT, Report, load_cases
+from .evals import DATA, ROOT, Report, expects_faithfulness, load_cases
 from .export import artifacts
 from .provenance import capture
 
@@ -50,6 +50,12 @@ def complete(report: Report):
                 raise ValueError(f"missing or failing judge: {c.id}")
             if c.request.task == "agent" and (r.retrieval_precision is None or r.retrieval_recall is None):
                 raise ValueError(f"missing retrieval metrics: {c.id}")
+            if c.request.task == "agent" and (r.citation_precision is None or r.citation_recall is None):
+                raise ValueError(f"missing citation metrics: {c.id}")
+            if expects_faithfulness(c, json.loads(r.output_json)) and (r.faithfulness is None or r.faithfulness < 0.75):
+                raise ValueError(f"missing or failing faithfulness: {c.id}")
+        if report.retrieval is None:
+            raise ValueError("missing retrieval summary")
         if sum(r.stats.first_pass for r in report.results) / len(report.results) < 0.95:
             raise ValueError("schema first-pass rate below 95%")
 
@@ -64,7 +70,8 @@ def no_regression(current: Report, baseline: Report):
         after = by_id.get(before.id)
         if after is None or not after.passed:
             raise ValueError(f"missing or regressed case: {before.id}")
-        for metric in ("judge_score", "retrieval_precision", "retrieval_recall"):
+        for metric in ("judge_score", "retrieval_precision", "retrieval_recall",
+                       "citation_precision", "citation_recall", "faithfulness"):
             old, new = getattr(before, metric), getattr(after, metric)
             if old is not None and (new is None or new < old):
                 raise ValueError(f"regression: {before.id}/{metric}")

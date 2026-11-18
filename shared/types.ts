@@ -767,8 +767,8 @@ export interface InboxEmail {
 
 /** GET /api/runtime: the local runtime chat and extraction generate on. */
 export interface LocalRuntimeStatus {
-  id: "ollama" | "vllm";
-  /** "Ollama" or "vLLM". */
+  id: "ollama" | "vllm" | "triton";
+  /** "Ollama", "vLLM" or "Triton". */
   name: string;
   url: string;
   /** Null when the runtime does not answer. */

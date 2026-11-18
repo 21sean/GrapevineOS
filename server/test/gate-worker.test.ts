@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { afterEach, expect, it } from "vitest";
-import { generateTyped, stopGate } from "../src/llm/gateway.js";
+import { gateSnapshot, generateTyped, stopGate } from "../src/llm/gateway.js";
 
 afterEach(() => stopGate());
 
@@ -241,4 +241,121 @@ it.skipIf(process.env.GRAPEVINE_LLM_INTEGRATION !== "1")(
     }
   },
   20_000,
+);
+
+it.skipIf(process.env.GRAPEVINE_LLM_INTEGRATION !== "1")(
+  "runs the real Python worker against Triton's OpenAI frontend when selected",
+  async () => {
+    const seen: { url?: string; body?: any } = {};
+    const server = createServer((req, res) => {
+      let body = "";
+      req.on("data", (chunk) => {
+        body += chunk;
+      });
+      req.on("end", () => {
+        seen.url = req.url;
+        seen.body = JSON.parse(body);
+        // Triton hands the schema to the engine only as a named tool's parameters, so
+        // the constrained document comes back as that tool's arguments.
+        const args = JSON.stringify({ rating: 4, rationale: "Local jazz", promoted: false });
+        const call = (piece: string) => ({
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  { index: 0, function: { name: "grapevine_contract", arguments: piece } },
+                ],
+              },
+            },
+          ],
+        });
+        res.writeHead(200, { "content-type": "text/event-stream" });
+        for (const piece of [args.slice(0, 5), args.slice(5)])
+          res.write(`data: ${JSON.stringify(call(piece))}\n\n`);
+        res.write(
+          `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "tool_calls" }] })}\n\n`,
+        );
+        res.end("data: [DONE]\n\n");
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    process.env.GRAPEVINE_LLM_RUNTIME = "triton";
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("No test listener");
+      const output = await generateTyped({
+        task: "rating",
+        messages: [{ role: "user", content: "Rate jazz" }],
+        baseUrl: `http://127.0.0.1:${address.port}`,
+        model: "qwen3.8-27b-int4",
+      });
+      expect(output).toEqual({ rating: 4, rationale: "Local jazz", promoted: false });
+      expect(seen.url).toBe("/v1/chat/completions");
+      const [tool] = seen.body.tools;
+      expect(tool.function.parameters.additionalProperties).toBe(false);
+      expect(seen.body.tool_choice).toEqual({
+        type: "function",
+        function: { name: tool.function.name },
+      });
+      // The frontend drops response_format and refuses fields it does not know.
+      expect(seen.body.response_format).toBeUndefined();
+      expect(seen.body.chat_template_kwargs).toBeUndefined();
+    } finally {
+      delete process.env.GRAPEVINE_LLM_RUNTIME;
+      await new Promise<void>((resolve, reject) =>
+        server.close((err) => (err ? reject(err) : resolve())),
+      );
+    }
+  },
+  20_000,
+);
+
+it.skipIf(process.env.GRAPEVINE_LLM_INTEGRATION !== "1")(
+  "runs two generations at once, each in its own worker process",
+  async () => {
+    // This runtime answers nobody until two requests are in its hands at the same
+    // time. With one worker the second request would never be sent and this would
+    // time out.
+    const held: (() => void)[] = [];
+    const server = createServer((req, res) => {
+      req.resume();
+      req.on("end", () => {
+        held.push(() => {
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(
+            JSON.stringify({
+              message: {
+                content: JSON.stringify({ rating: 4, rationale: "Local jazz", promoted: false }),
+              },
+            }),
+          );
+        });
+        if (held.length === 2) for (const answer of held) answer();
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    process.env.GRAPEVINE_LLM_CONCURRENCY = "2";
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("No test listener");
+      const rate = () =>
+        generateTyped({
+          task: "rating",
+          messages: [{ role: "user", content: "Rate jazz" }],
+          baseUrl: `http://127.0.0.1:${address.port}`,
+        });
+      const outputs = await Promise.all([rate(), rate()]);
+      expect(outputs).toEqual([
+        { rating: 4, rationale: "Local jazz", promoted: false },
+        { rating: 4, rationale: "Local jazz", promoted: false },
+      ]);
+      expect(gateSnapshot().workers).toBeGreaterThanOrEqual(2);
+    } finally {
+      delete process.env.GRAPEVINE_LLM_CONCURRENCY;
+      await new Promise<void>((resolve, reject) =>
+        server.close((err) => (err ? reject(err) : resolve())),
+      );
+    }
+  },
+  30_000,
 );

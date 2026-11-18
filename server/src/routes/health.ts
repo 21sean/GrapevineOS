@@ -7,6 +7,7 @@ import { Router } from "express";
 import { classifierReady, guardConfig } from "../agent/guardrails.js";
 import { db } from "../db.js";
 import { shuttingDown } from "../lifecycle.js";
+import { gateSnapshot } from "../llm/gateway.js";
 import { llmBase, llmRuntime, runtimeVersion } from "../llm/runtime.js";
 import { store } from "../store.js";
 import { VERSION } from "../version.js";
@@ -50,7 +51,10 @@ health.get("/healthz", (_req, res) => {
  * turn cannot read settings or remember anything. The classifier is reported
  * but does not gate readiness (the rails fail open by design, and the panel
  * says so), and the local runtime is informational: the map and the rest of the
- * app work without it, and chat says so itself when it is down.
+ * app work without it, and chat says so itself when it is down. `gate` is the
+ * scheduler's view of the GPU right now: what is running and queued in each
+ * priority class, how often a person pushed background work aside, and the
+ * runtime's last reported load. Counts only.
  */
 health.get("/readyz", async (_req, res) => {
   const [database, checkpointer, local, guard] = await Promise.all([
@@ -77,6 +81,7 @@ health.get("/readyz", async (_req, res) => {
     checkpointer,
     classifier: { state: classifier, mode: guard.mode, threshold: guard.threshold },
     [llmRuntime()]: { ...local, informational: true },
+    gate: gateSnapshot(),
   });
 });
 

@@ -700,6 +700,38 @@ export type Database = {
         }
         Relationships: []
       }
+      llm_usage: {
+        Row: {
+          day: string
+          tokens: number
+          turns: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          day: string
+          tokens?: number
+          turns?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          day?: string
+          tokens?: number
+          turns?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "llm_usage_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       place_lookups: {
         Row: {
           created_at: string
@@ -1107,6 +1139,10 @@ export type Database = {
       guardrail_stats: {
         Args: { p_buckets?: number; p_window_days?: number }
         Returns: Json
+      }
+      record_llm_usage: {
+        Args: { p_day: string; p_tokens: number; p_user_id: string }
+        Returns: number
       }
       venue_cache: {
         Args: { p_query: string }

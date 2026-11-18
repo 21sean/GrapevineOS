@@ -162,16 +162,21 @@ if (serverEnv && isSet(serverEnv.SUPABASE_URL) && isSet(serverEnv.SUPABASE_SECRE
   }
 }
 
-// --- The local runtime: Ollama, or vLLM -------------------------------------
-const onVllm = (serverEnv?.GRAPEVINE_LLM_RUNTIME || process.env.GRAPEVINE_LLM_RUNTIME) === "vllm";
+// --- The local runtime: Ollama, vLLM, or Triton -----------------------------
+const runtime = serverEnv?.GRAPEVINE_LLM_RUNTIME || process.env.GRAPEVINE_LLM_RUNTIME;
+const onVllm = runtime === "vllm" || runtime === "triton";
 if (onVllm) {
-  const vllmUrl = (serverEnv?.GRAPEVINE_LLM_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+  const label = runtime === "triton" ? "Triton" : "vLLM";
+  const fallback = runtime === "triton" ? "http://127.0.0.1:9000" : "http://127.0.0.1:8000";
+  const vllmUrl = (serverEnv?.GRAPEVINE_LLM_BASE_URL || fallback).replace(/\/$/, "");
   try {
     const res = await get(`${vllmUrl}/v1/models`);
     const body = await res.json();
-    ok(`vLLM at ${vllmUrl} serving ${(body.data ?? []).map((m) => m.id).join(", ") || "nothing"}`);
+    ok(
+      `${label} at ${vllmUrl} serving ${(body.data ?? []).map((m) => m.id).join(", ") || "nothing"}`,
+    );
   } catch {
-    warn(`vLLM not reachable at ${vllmUrl}`, "start it; see llm/README.md");
+    warn(`${label} not reachable at ${vllmUrl}`, "start it; see llm/README.md");
   }
 }
 const ollamaUrl = (serverEnv?.OLLAMA_URL || "http://localhost:11434").replace(/\/$/, "");

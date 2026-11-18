@@ -10,6 +10,7 @@ import { chat } from "./agent/chat.js";
 import { ext } from "./agent/ext.js";
 import { warmupGuardrails } from "./agent/guardrails.js";
 import { warmGate } from "./llm/gateway.js";
+import { servesPinnedModel } from "./llm/runtime.js";
 import { flush as flushGuardrailTelemetry } from "./agent/telemetry.js";
 import { auth, requireAdmin } from "./auth.js";
 import { calendar } from "./calendar.js";
@@ -126,7 +127,7 @@ const server = app.listen({ port, ...(process.env.HOST ? { host: process.env.HOS
   void store
     .settings()
     .then((settings) => {
-      if (!settings.model && process.env.GRAPEVINE_LLM_RUNTIME !== "vllm") return;
+      if (!settings.model && !servesPinnedModel()) return;
       warmupGuardrails();
       warmGate();
     })
