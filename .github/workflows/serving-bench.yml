@@ -2,7 +2,7 @@ name: Serving benchmark
 
 # Measures one local runtime on the GPU runner and fails when a number is past
 # its stored baseline (llm/bench/baseline). Manual only: the run needs the GPU to
-# itself for about ten minutes, and vLLM and Triton are not kept running on the
+# itself for ten to thirty minutes, and vLLM and Triton are not kept running on the
 # runner, so whoever starts this starts the runtime first (llm/README.md).
 #
 # The pull-request gate is separate and needs no GPU: the `contracts` job holds
@@ -44,9 +44,7 @@ jobs:
         run: |
           # The pinned Ollama on this runner listens beside the everyday one.
           if ($env:GRAPEVINE_LLM_RUNTIME -eq 'ollama') { $env:GRAPEVINE_LLM_BASE_URL = 'http://127.0.0.1:11435' }
-          # Ollama answers one generation at a time, so only its first two levels say anything.
-          $streams = if ($env:GRAPEVINE_LLM_RUNTIME -eq 'ollama') { '1,4' } else { '1,4,8,16,32' }
-          uv run --directory llm --no-sync python -m grapevine_llm.bench run --streams $streams --output "artifacts/bench-$($env:GRAPEVINE_LLM_RUNTIME).json"
+          uv run --directory llm --no-sync python -m grapevine_llm.bench run --output "artifacts/bench-$($env:GRAPEVINE_LLM_RUNTIME).json"
       - name: Compare with the stored baseline
         shell: pwsh
         run: uv run --directory llm --no-sync python -m grapevine_llm.bench compare --baseline "bench/baseline/$($env:GRAPEVINE_LLM_RUNTIME).json" --result "artifacts/bench-$($env:GRAPEVINE_LLM_RUNTIME).json"
