@@ -379,9 +379,15 @@ class Incomparable(ValueError):
     """The two runs are not of the same thing, so no verdict would mean anything."""
 
 
-# How far a number may move before it counts. Medians of this workload repeat within a
-# few percent on an idle GPU; tails move more, so they get more room.
+# How far a number may move before it counts, set above what two back-to-back identical
+# runs of the vLLM matrix showed on 2026-11-18 (llm/README.md has the figures). Token
+# time repeated within 5%, median end-to-end time within 6%, its p95 within 15%, and
+# throughput within 3%.
 TOLERANCE = {"p50": 0.15, "p95": 0.30}
+# First-token time with more than one stream did not repeat: it depends on where in the
+# engine's batch a request lands, and its median moved 26% between the two runs. It
+# gets a wider band, which still catches a request that starts queueing.
+TTFT_CONCURRENT_TOLERANCE = {"p50": 0.40, "p95": 0.50}
 # Below these absolute differences a change is timer and scheduler noise.
 FLOOR_MS = {"ttft_ms": 25.0, "tpot_ms": 1.5, "e2e_ms": 100.0}
 # p99 is only gated with enough samples to mean something.
@@ -422,9 +428,9 @@ def compare(baseline: BenchReport, result: BenchReport) -> tuple[list[str], list
                                f"against {old.errors} and {old.invalid}")
         for metric, floor in FLOOR_MS.items():
             was, now = getattr(old, metric), getattr(new, metric)
-            quantiles = dict(TOLERANCE)
+            quantiles = dict(TTFT_CONCURRENT_TOLERANCE if metric == "ttft_ms" and old.streams > 1 else TOLERANCE)
             if min(was.n, now.n) >= P99_MIN_SAMPLES:
-                quantiles["p99"] = TOLERANCE["p95"]
+                quantiles["p99"] = quantiles["p95"]
             for q, tolerance in quantiles.items():
                 a, b = getattr(was, q), getattr(now, q)
                 if a is None or b is None:

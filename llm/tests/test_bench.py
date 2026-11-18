@@ -97,7 +97,7 @@ def test_the_same_numbers_and_better_numbers_pass():
 
 
 @pytest.mark.parametrize("change,expected", [
-    ({"ttft": 190.0}, "ttft_ms p50 150.0 -> 190.0 ms"),
+    ({"ttft": 230.0}, "ttft_ms p50 150.0 -> 230.0 ms"),
     ({"tpot": 15.0}, "tpot_ms p50 12.0 -> 15.0 ms"),
     ({"e2e": 3600.0}, "e2e_ms p50 3000.0 -> 3600.0 ms"),
     ({"tps": 160.0}, "throughput 200 -> 160 tok/s"),
@@ -116,6 +116,14 @@ def test_noise_under_the_floor_and_inside_the_band_is_not_a_regression():
     assert compare(report([level(e2e=10_000.0)]), report([level(e2e=11_000.0)]))[0] == []
     # Throughput may fall 15% before it counts.
     assert compare(report(), report([level(tps=171.0)]))[0] == []
+
+
+def test_first_token_time_gets_a_wide_band_only_where_it_does_not_repeat():
+    # +27% is inside the band at 4 streams, where identical runs differ that much...
+    assert compare(report(), report([level(ttft=190.0)]))[0] == []
+    # ...and outside it at one stream, where they do not.
+    regressions, _ = compare(report([level(streams=1)]), report([level(streams=1, ttft=190.0)]))
+    assert any("short x1: ttft_ms p50 150.0 -> 190.0 ms (+27%, limit 15%)" in r for r in regressions)
 
 
 def test_the_tail_is_gated_only_with_enough_samples_to_mean_something():
