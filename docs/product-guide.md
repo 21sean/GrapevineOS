@@ -133,8 +133,8 @@ from your own Claude account.
 ### Agent architecture
 
 The agent is a LangGraph `StateGraph` with the classifier rails as nodes.
-Every model call goes through the Python contract gate to the local runtime,
-Ollama by default or vLLM. [docs/agent-architecture.md](agent-architecture.md)
+Every model call goes through the Python contract gate to the local runtime:
+Ollama by default, or vLLM or NVIDIA Triton. [docs/agent-architecture.md](agent-architecture.md)
 has the full walkthrough and the steps for adding a tool.
 
 <p align="center">
@@ -160,8 +160,8 @@ has the full walkthrough and the steps for adding a tool.
   sends the new message and threads survive restarts. The user's turn only
   enters the checkpointer after the input rail passes it. A `recall` node
   folds turns beyond the history window into a running summary.
-- **One validated path for every model call.** Generation runs on Ollama or
-  vLLM through the Python contract gate, which validates the whole reply
+- **One validated path for every model call.** Generation runs on Ollama,
+  vLLM or NVIDIA Triton through the Python contract gate, which validates the whole reply
   against a strict contract and either repairs it or fails closed. Hosted CLI
   generation is disabled.
 - **Tools from one contract table**, in two kinds: data tools run on the
