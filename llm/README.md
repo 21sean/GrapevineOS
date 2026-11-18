@@ -180,7 +180,7 @@ Every file under [bench/results](bench/results) records what ran and on what:
 | Triton  | 2.75.0 (vllm 0.33.0+908da4f6.nv26.11.80607662) | `qwen3.8-27b-int4` | W4A16 INT4 safetensors (AWQ + GPTQ), FP8 KV cache | `RedHatAI/Qwen3.8-27` | NVIDIA GeForce RTX 5090 (32607 MiB) | 621.14 | 13.5 | `0b8dd5f` |
 
 The machine is an i7-14700KF with one RTX 5090 that also drives the desktop, which held
-about 4.7 GB of the card's memory during these runs. vLLM and Triton ran in WSL2
+about 4.6 GiB of the card's memory (4,705 MiB before the vLLM and Triton runs). vLLM and Triton ran in WSL2
 (Ubuntu 24.04), Triton through the compose service with its limits, and Ollama on
 Windows. Each runtime had the GPU to itself. The two quantizations are different
 weights of the same base model, so Ollama's rows compare a runtime and a quantization
@@ -249,13 +249,13 @@ What the numbers say, and why:
   extra 1.9 GiB goes inside the container was not traced.
 - **Ollama answers one request at a time, so streams only queue.** Its token rate does
   not change with load: 7.1 ms per token at 1 stream and 7.1 at 32, and total throughput
-  stays at 96 to 97 tok/s. What grows is the wait. Median TTFT on the short prompt is
-  416 ms alone, 4,349 ms at 4 streams and 41.4 s at 32: each request waits for the ones
-  ahead of it to finish. Alone, it is the fastest of the three per token (7.1 ms against
-  vLLM's 12.0), on different weights and with speculative decoding on, which is measured
-  on vLLM further down, and from 4 streams up vLLM delivers more: 221 tok/s against 100
-  at 4, 516 against 98 at 16. This is why the gate runs one generation at a time on
-  Ollama and four on the others.
+  stays between 96 and 100 tok/s at every level. What grows is the wait. Median TTFT on
+  the short prompt is 416 ms alone, 4,349 ms at 4 streams and 41.4 s at 32: each request
+  waits for the ones ahead of it to finish. Alone, it is the fastest of the three per
+  token (7.1 ms against vLLM's 12.0), on different weights and with speculative decoding
+  on, which is measured on vLLM further down, and from 4 streams up vLLM delivers more:
+  221 tok/s against 100 at 4, 516 against 98 at 16. This is why the gate runs one
+  generation at a time on Ollama and four on the others.
 - **Ollama is slower to a first token even alone**, 416 against 148 ms on the short
   prompt and 1,832 against 1,052 ms on the long one, although it is the only runtime
   that read anything from a cache here: the system message every request shares, which
