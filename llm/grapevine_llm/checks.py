@@ -33,6 +33,16 @@ def schemas(base_ref: str | None):
                 raise ValueError(f"published schema is immutable; bump VERSION and preserve {name}")
 
 
+# Faithfulness is judged, and the judge is not repeatable case by case. Over three live
+# runs that produced identical answers, four of five cases scored 1.0 every time and one
+# scored 0.67, 1.0, 0.67: the same two-sentence answer became two claims or three, and
+# the third, "the user can attend", was refused as not in the evidence. One such flip
+# moves the average of five cases by 0.07. So faithfulness is gated on the suite average,
+# with a floor and room for two flips, and never case by case.
+FAITHFULNESS_FLOOR = 0.75
+FAITHFULNESS_DROP = 0.15
+
+
 def complete(report: Report):
     cases = [c for c in load_cases() if report.mode == "replay" or c.live]
     expected_ids = {c.id for c in cases}
@@ -52,10 +62,12 @@ def complete(report: Report):
                 raise ValueError(f"missing retrieval metrics: {c.id}")
             if c.request.task == "agent" and (r.citation_precision is None or r.citation_recall is None):
                 raise ValueError(f"missing citation metrics: {c.id}")
-            if expects_faithfulness(c, json.loads(r.output_json)) and (r.faithfulness is None or r.faithfulness < 0.75):
-                raise ValueError(f"missing or failing faithfulness: {c.id}")
+            if expects_faithfulness(c, json.loads(r.output_json)) and r.faithfulness is None:
+                raise ValueError(f"missing faithfulness: {c.id}")
         if report.retrieval is None:
             raise ValueError("missing retrieval summary")
+        if report.retrieval.faithfulness is not None and report.retrieval.faithfulness < FAITHFULNESS_FLOOR:
+            raise ValueError(f"average faithfulness below {FAITHFULNESS_FLOOR}")
         if sum(r.stats.first_pass for r in report.results) / len(report.results) < 0.95:
             raise ValueError("schema first-pass rate below 95%")
 
@@ -70,13 +82,19 @@ def no_regression(current: Report, baseline: Report):
         after = by_id.get(before.id)
         if after is None or not after.passed:
             raise ValueError(f"missing or regressed case: {before.id}")
+        # These repeat exactly when the answers do: the rubric judge's scores and the ID
+        # metrics were identical across three live runs.
         for metric in ("judge_score", "retrieval_precision", "retrieval_recall",
-                       "citation_precision", "citation_recall", "faithfulness"):
+                       "citation_precision", "citation_recall"):
             old, new = getattr(before, metric), getattr(after, metric)
             if old is not None and (new is None or new < old):
                 raise ValueError(f"regression: {before.id}/{metric}")
         if before.stats.first_pass and not after.stats.first_pass:
             raise ValueError(f"first-pass regression: {before.id}")
+    was = baseline.retrieval.faithfulness if baseline.retrieval else None
+    now = current.retrieval.faithfulness if current.retrieval else None
+    if was is not None and (now is None or now < was - FAITHFULNESS_DROP):
+        raise ValueError("regression: average faithfulness")
 
 
 def quality(path: Path, base_ref: str | None):
