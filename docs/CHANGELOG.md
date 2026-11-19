@@ -3,6 +3,27 @@
 Release notes and earlier development history, newest first. Tagged releases
 are listed on [GitHub](https://github.com/21sean/GrapevineOS/releases).
 
+## v0.10.0: model profiles (2026-11-18)
+
+- Add a profile for each model family, in `llm/evals/profiles`. A reviewed profile names
+  the models it governs and holds the request settings the gate sends and the thresholds
+  its evals must clear, and the request builder, the quality gates and the DeepEval
+  runner now read them from it. The Qwen3.8 profile carries the settings and thresholds
+  that were constants before, so no request and no gate result changes. It also records
+  the model cards' recommendations with links and dates, and each place the deployment
+  departs from them, with the committed result that measured it.
+- Refuse an eval run for a model without a reviewed profile, a judge governed by a
+  different profile than the model it judges, a profile that disagrees with its manifest
+  on temperature, or a departure whose result file is gone. A model with no profile
+  still gets requests, with the settings the gate has always sent.
+- Add `npm run profiles:import`, which seeds or refreshes a profile from models.dev.
+  The committed Claude Fable 5.2 profile is such an import: facts only, served by no
+  runtime here, and refused by the gates.
+- Include the profile in the model fingerprint of every eval artifact. The baseline is
+  re-promoted from a live run on this tree.
+- Publish contracts 1.4.0 with the model profile schema. 1.3.0 stays published
+  unchanged.
+
 ## v0.9.0: Triton runtime, GPU scheduling, and serving benchmarks (2026-11-18)
 
 - Add NVIDIA Triton Inference Server 2.75.0 as a third local runtime beside Ollama and
