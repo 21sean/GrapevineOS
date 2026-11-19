@@ -1,0 +1,378 @@
+{
+  "$defs": {
+    "Departure": {
+      "additionalProperties": false,
+      "description": "Where this deployment does something other than what the publisher says.",
+      "properties": {
+        "evidence": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_./-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evidence"
+        },
+        "here": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Here",
+          "type": "string"
+        },
+        "publisher": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Publisher",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "setting": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Setting",
+          "type": "string"
+        },
+        "source": {
+          "maxLength": 200,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_.:-]+$",
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "setting",
+        "publisher",
+        "here",
+        "reason",
+        "source"
+      ],
+      "title": "Departure",
+      "type": "object"
+    },
+    "Fact": {
+      "additionalProperties": false,
+      "description": "Something a source states about the family. Recorded, never enforced.",
+      "properties": {
+        "name": {
+          "maxLength": 200,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_.:-]+$",
+          "title": "Name",
+          "type": "string"
+        },
+        "source": {
+          "maxLength": 200,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_.:-]+$",
+          "title": "Source",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "items": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "name",
+        "value",
+        "source"
+      ],
+      "title": "Fact",
+      "type": "object"
+    },
+    "Gates": {
+      "additionalProperties": false,
+      "description": "Thresholds measured with this family as both the generator and the judge.",
+      "properties": {
+        "calibration": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Calibration",
+          "type": "string"
+        },
+        "faithfulness_drop": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Faithfulness Drop",
+          "type": "number"
+        },
+        "faithfulness_floor": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Faithfulness Floor",
+          "type": "number"
+        },
+        "first_pass_rate_min": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "First Pass Rate Min",
+          "type": "number"
+        },
+        "judge_score_min": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Judge Score Min",
+          "type": "number"
+        }
+      },
+      "required": [
+        "judge_score_min",
+        "faithfulness_floor",
+        "faithfulness_drop",
+        "first_pass_rate_min",
+        "calibration"
+      ],
+      "title": "Gates",
+      "type": "object"
+    },
+    "RequestSettings": {
+      "additionalProperties": false,
+      "description": "What the gate sends for this family. client.py builds every request from these.",
+      "properties": {
+        "single_system_message": {
+          "title": "Single System Message",
+          "type": "boolean"
+        },
+        "temperature": {
+          "maximum": 2,
+          "minimum": 0,
+          "title": "Temperature",
+          "type": "number"
+        },
+        "thinking": {
+          "title": "Thinking",
+          "type": "boolean"
+        },
+        "thinking_template_kwarg": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Thinking Template Kwarg"
+        }
+      },
+      "required": [
+        "temperature",
+        "thinking",
+        "thinking_template_kwarg",
+        "single_system_message"
+      ],
+      "title": "RequestSettings",
+      "type": "object"
+    },
+    "Served": {
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "maxLength": 150,
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "runtime": {
+          "enum": [
+            "ollama",
+            "vllm",
+            "triton"
+          ],
+          "title": "Runtime",
+          "type": "string"
+        }
+      },
+      "required": [
+        "runtime",
+        "model"
+      ],
+      "title": "Served",
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "properties": {
+        "credit": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credit"
+        },
+        "id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_.:-]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "retrieved": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "title": "Retrieved",
+          "type": "string"
+        },
+        "url": {
+          "maxLength": 300,
+          "pattern": "^https://[^\\s]+$",
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "url",
+        "retrieved"
+      ],
+      "title": "Source",
+      "type": "object"
+    }
+  },
+  "$id": "urn:grapevine:llm:1.4.0:model_profile",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "departures": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Departure"
+      },
+      "maxItems": 20,
+      "title": "Departures",
+      "type": "array"
+    },
+    "facts": {
+      "items": {
+        "$ref": "#/$defs/Fact"
+      },
+      "maxItems": 60,
+      "title": "Facts",
+      "type": "array"
+    },
+    "family": {
+      "maxLength": 200,
+      "minLength": 1,
+      "pattern": "^[a-zA-Z0-9_.:-]+$",
+      "title": "Family",
+      "type": "string"
+    },
+    "gates": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Gates"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "name": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "publisher": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Publisher",
+      "type": "string"
+    },
+    "request": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RequestSettings"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "served": {
+      "items": {
+        "$ref": "#/$defs/Served"
+      },
+      "maxItems": 20,
+      "title": "Served",
+      "type": "array"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/Source"
+      },
+      "maxItems": 20,
+      "minItems": 1,
+      "title": "Sources",
+      "type": "array"
+    },
+    "status": {
+      "enum": [
+        "reviewed",
+        "imported"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "family",
+    "name",
+    "publisher",
+    "status",
+    "served",
+    "sources",
+    "facts"
+  ],
+  "title": "ModelProfile",
+  "type": "object"
+}

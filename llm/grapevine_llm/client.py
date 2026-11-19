@@ -13,6 +13,7 @@ from openai.types.chat import ChatCompletion
 from pydantic import Field, RootModel, ValidationError
 
 from .contracts import OUTPUTS, VERSION, Context, Contract, RuleError, request_schema, validate_output
+from .profiles import RequestSettings, request_for
 from .settings import Settings, local_endpoint
 from .streaming import AnswerStream, GenerationLog
 from .telemetry import sample, tracer
@@ -30,7 +31,7 @@ class Message(Contract):
 
 class Request(Contract):
     id: Annotated[str, Field(min_length=1, max_length=100)]
-    version: Literal["1.3.0"] = VERSION
+    version: Literal["1.4.0"] = VERSION
     task: Literal["extraction", "rating", "enrichment", "verification", "summary", "judge", "agent"]
     messages: Annotated[list[Message], Field(min_length=1, max_length=100)]
     context: Context = Field(default_factory=Context)
@@ -80,7 +81,7 @@ class StreamFrame(Contract):
 class Success(Contract):
     ok: Literal[True]
     id: str
-    version: Literal["1.3.0"] = VERSION
+    version: Literal["1.4.0"] = VERSION
     output: Union[tuple(OUTPUTS.values())]
     stats: Stats
 
@@ -88,7 +89,7 @@ class Success(Contract):
 class Failure(Contract):
     ok: Literal[False]
     id: str
-    version: Literal["1.3.0"] = VERSION
+    version: Literal["1.4.0"] = VERSION
     code: Literal["validation_exhausted", "transport", "timeout", "configuration", "invalid_request"]
     message: str
     stats: Stats
@@ -157,10 +158,14 @@ def ollama_transport(base: str, max_bytes: int,
 
 
 def one_system_message(messages: list[dict]) -> list[dict]:
-    """The model's chat template rejects a system message that is not first."""
+    """For a family whose chat template rejects a system message that is not first."""
     system = [m["content"] for m in messages if m["role"] == "system"]
     rest = [m for m in messages if m["role"] != "system"]
     return [{"role": "system", "content": "\n\n".join(system)}, *rest] if system else rest
+
+
+def _system_first(family: RequestSettings, messages: list[dict]) -> list[dict]:
+    return one_system_message(messages) if family.single_system_message else messages
 
 
 def _openai_stream(base: str, body: dict, remaining: float, max_bytes: int,
@@ -217,9 +222,10 @@ def vllm_transport(base: str, max_bytes: int,
 
     def call(payload: dict, remaining: float) -> str:
         options = payload["options"]
+        family = request_for("vllm", payload["model"])
         body = {
             "model": payload["model"],
-            "messages": one_system_message(payload["messages"]),
+            "messages": _system_first(family, payload["messages"]),
             "stream": True,
             "stream_options": {"include_usage": True},
             "temperature": options["temperature"],
@@ -227,8 +233,10 @@ def vllm_transport(base: str, max_bytes: int,
             "max_tokens": options["num_predict"],
             "response_format": {"type": "json_schema", "json_schema": {
                 "name": "grapevine_contract", "schema": payload["format"], "strict": True}},
-            "chat_template_kwargs": {"enable_thinking": bool(payload.get("think"))},
         }
+        if family.thinking_template_kwarg:
+            # The switch is a keyword of the family's chat template, so its name is the family's.
+            body["chat_template_kwargs"] = {family.thinking_template_kwarg: bool(payload.get("think"))}
         return _openai_stream(base, body, remaining, max_bytes, log(), lambda delta: delta.get("content"))
     return call
 
@@ -271,7 +279,7 @@ def triton_transport(base: str, max_bytes: int,
         options = payload["options"]
         body = {
             "model": payload["model"],
-            "messages": one_system_message(payload["messages"]),
+            "messages": _system_first(request_for("triton", payload["model"]), payload["messages"]),
             "stream": True,
             "stream_options": {"include_usage": True},
             "temperature": options["temperature"],
@@ -314,12 +322,14 @@ def build_payload(settings: Settings, schema: dict, messages: list[dict], *, num
     """
     The one request shape every transport receives, in Ollama's vocabulary. The gate,
     the Ragas judge and the serving benchmark all build it here, so a benchmark number
-    describes the request the application actually sends.
+    describes the request the application actually sends. Sampling and thinking come
+    from the model's profile: see profiles.py.
     """
-    return {"model": settings.model, "stream": False, "think": False,
+    family = request_for(settings.runtime, settings.model)
+    return {"model": settings.model, "stream": False, "think": family.thinking,
             "keep_alive": settings.keep_alive,
             "format": schema,
-            "options": {"temperature": 0, "seed": settings.seed, "num_ctx": settings.num_ctx,
+            "options": {"temperature": family.temperature, "seed": settings.seed, "num_ctx": settings.num_ctx,
                         "num_batch": settings.num_batch, "num_predict": num_predict},
             "messages": plain_messages(messages)}
 
@@ -363,6 +373,8 @@ def _generate(request: Request, settings: Settings, *, transport: Transport | No
             "model": request.model or settings.model, "base_url": request.base_url or settings.base_url})
         send = transport or TRANSPORTS[effective.runtime](effective.base_url, effective.max_bytes,
                                                           lambda: generation)
+        # A profile that does not load is a fault in the configuration, not in the model.
+        request_for(effective.runtime, effective.model)
     except ValueError:
         return fail("configuration", "Local model configuration rejected")
 

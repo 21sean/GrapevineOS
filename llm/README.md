@@ -8,7 +8,8 @@ complete response before it reaches application code. Generated Zod schemas chec
 Node boundary again.
 
 Defaults are three total attempts, one 120-second deadline, temperature 0, seed
-42, and 16,384 context tokens. Repairs receive bounded validation errors. Failure
+42, and 16,384 context tokens. Temperature and the thinking switch come from the
+model's [profile](#model-profiles). Repairs receive bounded validation errors. Failure
 returns a typed error with no partial output. One thing leaves the gate early: the
 agent's answer text streams to the person as it generates, as `StreamFrame` display
 text, and the complete document still validates at the end. If an attempt fails, the
@@ -362,8 +363,8 @@ flag as given and not a tuned configuration.
 
 On this card, with the desktop on it, the two settings suit different loads: speculative
 decoding for one person at a time, and the committed flags for the concurrent serving
-this release adds. The committed flags and baselines are unchanged. Choosing per load is
-the kind of decision a per-model profile should hold.
+this release adds. The committed flags and baselines are unchanged. The choice is
+recorded in the model's [profile](#model-profiles), next to the run that measured it.
 
 ### The regression gate
 
@@ -526,6 +527,71 @@ consumers can use these language-independent contracts; contextual business
 validators still run in Python. The small Zod exporter rejects unsupported schema
 constructs instead of silently dropping them.
 
+## Model profiles
+
+A profile is one reviewed record per model family, in [evals/profiles](evals/profiles).
+It holds what differs from one family to the next: how the gate asks the model, what its
+evals have to clear, and what its publisher recommends. Code reads the first two, so they
+are enforced and not only written down.
+
+| Part         | What it holds                                                                                                              | Read by                                                                         |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `served`     | The exact model names it governs, per runtime                                                                              | Matching. A profile applies to those names and to no others.                    |
+| `request`    | Temperature, thinking on or off, the chat-template keyword vLLM takes for thinking, and whether system messages are merged | `client.py`, for every request from the gate, the Ragas judge and the benchmark |
+| `gates`      | The judge pass mark, the faithfulness floor and allowed drop, the first-pass rate, and what they were set from             | `checks.py` and `server/scripts/llm-quality.ts`                                 |
+| `facts`      | What a source states about the family, each with the source and the date it was read                                       | Nothing. They are the record the departures are written against.                |
+| `departures` | Where this deployment does something other than what the publisher says, why, and the committed result that measured it    | The gate, which fails if a named result file is missing.                        |
+
+Two are committed:
+
+- [qwen3.8](evals/profiles/qwen3.8.json) is reviewed. It governs `qwen3.8:27b` on Ollama
+  and `qwen3.8-27b-int4` on vLLM and Triton. Its request settings are the ones the gate
+  already sent, so adopting it changed no request. Its departures are the table under
+  [Against the model's own recommendations](#against-the-models-own-recommendations) as
+  data: sampling, speculative decoding and context length, the last two with the result
+  files that measured them. Its thresholds are the ones described under [Ragas](#ragas).
+- [claude-fable-5.2](evals/profiles/claude-fable-5.2.json) is imported: twelve facts from
+  models.dev and nothing measured here. No runtime in this repository serves it and the
+  gates refuse it. It is kept because one of its facts shows why thresholds cannot be
+  carried from one family to the next. models.dev lists it as not accepting a
+  temperature, and every gate above rests on temperature 0, so two runs of it could not
+  be compared the way two runs of Qwen are.
+
+The rules the code holds:
+
+- A model with no profile still gets requests, with the settings the gate sent before
+  profiles existed (temperature 0, thinking off). Any model picked in Admin works as it
+  did. The eval gates stop with "no reviewed profile".
+- The judge has to be governed by the same profile as the model it judges. The
+  thresholds were measured with one family doing both jobs.
+- A profile and the manifest of each runtime it names must agree on temperature.
+- The profile is part of the model fingerprint in every eval artifact. Editing it makes
+  the baseline stale, the same as changing a model pin.
+
+To add a family, import its catalog facts, then measure:
+
+```sh
+npm run profiles:import -- --provider anthropic --model claude-fable-5-2 --family claude-fable-5.2
+```
+
+That writes an imported profile from [models.dev](https://models.dev), the open catalog
+the server's model picker already reads. Running it again refreshes those facts and their
+date and leaves everything a person wrote. Prices are not imported, because they belong
+to a host and not to the model. To make the profile reviewed:
+
+1. Record what the model card recommends as `facts`, each with a link and a date.
+2. Serve the model, pin it in a manifest, and fill in `served` and `request`.
+3. Run the live suite several times. Hold case by case what repeats exactly and on the
+   suite average what does not, and write what you saw in `gates.calibration`.
+4. List each place the deployment departs from the card under `departures`. Name the
+   committed result for anything measured.
+5. Set `status` to `reviewed` and promote a baseline.
+
+The hosted speed, price and index figures in the Qwen profile are from
+[Artificial Analysis](https://artificialanalysis.ai/), read on 2026-11-18 through its free
+Data API. They describe hosted endpoints, not this deployment, and are there for
+comparison only.
+
 ## Cases, scores, and baselines
 
 [evals/golden.jsonl](evals/golden.jsonl) contains 33 synthetic, locally stored cases:
@@ -594,7 +660,8 @@ the model's real behavior, not a row of ones. In `grounded-distractors` it answe
 cited the ticketed jazz show it was ruling out, which halves citation precision.
 
 Faithfulness is gated on the suite average, which must be at least 0.75 and no more
-than 0.15 below the baseline's, because the judge is not repeatable case by case. Over
+than 0.15 below the baseline's, because the judge is not repeatable case by case. Both
+numbers are the Qwen [profile](#model-profiles)'s, set from the runs described here. Over
 the same five runs four of the five judged answers scored 1.0 every time, and
 `grounded-jazz` scored 0.67, 1.0, 0.67, 1.0, 0.67 on an identical answer: "You can
 attend Shoreline Jazz at Waterfront Park on Friday, November 6, 2026, from 7 PM to 9 PM.
@@ -622,7 +689,8 @@ Run the live suite again after changing source, locks, or model pins. The baseli
 command rejects stale fingerprints. Commit the reviewed baseline with the change;
 editing it cannot hide a regression against the PR base. Gates require all cases,
 all required judges ≥0.75, first-pass schema success ≥95%, no hard failures, and no
-per-case score or first-pass regression. Timing in this artifact is recorded, not
+per-case score or first-pass regression. The two thresholds are read from the pinned
+model's [profile](#model-profiles), and a model without a reviewed one fails the gate. Timing in this artifact is recorded, not
 gated; serving latency has its own gate, under [Serving numbers](#serving-numbers).
 Artifacts include per-case outputs, attempts,
 scores, timings, source/lock/model fingerprints, runtime, seed, and revision.

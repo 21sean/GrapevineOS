@@ -6,7 +6,9 @@ import { LLMTestCase } from "deepeval/test-case";
 import { eval_reportSchema, goldenSchema } from "../src/llm/generated.js";
 import { GatedMetric } from "../src/evals/gated-metric.js";
 import { judge } from "../src/evals/judge.js";
+import { reviewedGates } from "../src/evals/profile.js";
 import { stopGate } from "../src/llm/gateway.js";
+import { llmRuntime } from "../src/llm/runtime.js";
 
 /**
  * Whole turns through the real graph, gate and model. The web and the writes are fixtures,
@@ -70,6 +72,8 @@ let turns = { ok: true, why: "" };
 try {
   if (mode === "live") {
     const j = await judge();
+    // The pass mark was measured with this model family as the judge: see its profile.
+    const passMark = (await reviewedGates(llmRuntime(), j.name)).judge_score_min;
     for (const result of report.results) {
       const c = cases.find((c) => c.id === result.id);
       if (!c) throw new Error(`Unrecognized case: ${result.id}`);
@@ -87,7 +91,7 @@ try {
           name: "Golden quality",
           criteria,
           model: j.model,
-          threshold: 0.75,
+          threshold: passMark,
         });
         scores.push(
           await metric.measure(
@@ -105,7 +109,7 @@ try {
       }
       result.judge_score = Math.min(...scores);
       result.judge_reason = reasons.join("\n");
-      result.passed = result.judge_score >= 0.75;
+      result.passed = result.judge_score >= passMark;
       if (!result.passed) result.reason = "subjective quality below threshold";
     }
     turns = await liveTurns(j);

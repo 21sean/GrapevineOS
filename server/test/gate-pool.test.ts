@@ -36,7 +36,7 @@ class FakeWorker extends EventEmitter {
   reply(output: unknown = RATING) {
     const { id } = this.requests.at(-1)!;
     this.stdout.write(
-      JSON.stringify({ ok: true, id, version: "1.3.0", output, stats: STATS }) + "\n",
+      JSON.stringify({ ok: true, id, version: "1.4.0", output, stats: STATS }) + "\n",
     );
   }
 }
