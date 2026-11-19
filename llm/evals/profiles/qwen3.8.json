@@ -1,0 +1,140 @@
+{
+  "family": "qwen3.8",
+  "name": "Qwen3.8 27B",
+  "publisher": "Alibaba (Qwen)",
+  "status": "reviewed",
+  "served": [
+    { "runtime": "ollama", "model": "qwen3.8:27b" },
+    { "runtime": "vllm", "model": "qwen3.8-27b-int4" },
+    { "runtime": "triton", "model": "qwen3.8-27b-int4" }
+  ],
+  "request": {
+    "temperature": 0,
+    "thinking": false,
+    "thinking_template_kwarg": "enable_thinking",
+    "single_system_message": true
+  },
+  "gates": {
+    "judge_score_min": 0.75,
+    "faithfulness_floor": 0.75,
+    "faithfulness_drop": 0.15,
+    "first_pass_rate_min": 0.95,
+    "calibration": "Set on 2026-11-18 from five live runs with this model as generator and judge. The rubric scores and the ID metrics repeated exactly, so they are held case by case. Faithfulness did not: four of five cases scored 1.0 every run and grounded-jazz scored 0.67, 1.0, 0.67, 1.0, 0.67 on an identical answer. One such flip moves the average of five cases by 0.07, so faithfulness is held on the suite average, with a floor and a drop that leave room for two flips."
+  },
+  "sources": [
+    {
+      "id": "card",
+      "name": "Qwen3.8-27B model card",
+      "url": "https://huggingface.co/Qwen/Qwen3.8-27B",
+      "retrieved": "2026-11-18"
+    },
+    {
+      "id": "checkpoint",
+      "name": "RedHatAI/Qwen3.8-27B-INT4 model card",
+      "url": "https://huggingface.co/RedHatAI/Qwen3.8-27B-INT4",
+      "retrieved": "2026-11-18"
+    },
+    {
+      "id": "artificial-analysis",
+      "name": "Artificial Analysis Data API, free tier",
+      "url": "https://artificialanalysis.ai/",
+      "retrieved": "2026-11-18",
+      "credit": "Artificial Analysis"
+    },
+    {
+      "id": "models-dev",
+      "name": "models.dev",
+      "url": "https://models.dev/api.json",
+      "retrieved": "2026-11-18"
+    }
+  ],
+  "facts": [
+    { "name": "catalog_id", "value": "huggingface/Qwen/Qwen3.8-27B", "source": "models-dev" },
+    { "name": "release_date", "value": "2026-08-14", "source": "models-dev" },
+    { "name": "open_weights", "value": true, "source": "models-dev" },
+    { "name": "context_tokens", "value": 262144, "source": "models-dev" },
+    { "name": "output_tokens", "value": 32768, "source": "models-dev" },
+    { "name": "accepts_temperature", "value": true, "source": "models-dev" },
+    { "name": "reasoning", "value": true, "source": "models-dev" },
+    { "name": "reasoning_levels", "value": ["low", "medium", "xhigh"], "source": "models-dev" },
+    { "name": "tool_calls", "value": true, "source": "models-dev" },
+    { "name": "structured_output", "value": true, "source": "models-dev" },
+    { "name": "input_modalities", "value": ["text", "image"], "source": "models-dev" },
+    {
+      "name": "thinking_switch",
+      "value": "chat_template_kwargs: {\"enable_thinking\": false}",
+      "source": "card"
+    },
+    { "name": "thinking_off_temperature", "value": 0.7, "source": "card" },
+    { "name": "thinking_off_top_p", "value": 0.8, "source": "card" },
+    { "name": "thinking_off_top_k", "value": 20, "source": "card" },
+    { "name": "thinking_off_presence_penalty", "value": 1.5, "source": "card" },
+    { "name": "thinking_on_temperature", "value": 1, "source": "card" },
+    { "name": "thinking_on_top_p", "value": 0.95, "source": "card" },
+    { "name": "thinking_on_top_k", "value": 20, "source": "card" },
+    { "name": "thinking_on_presence_penalty", "value": 0, "source": "card" },
+    {
+      "name": "vllm_serve_flags",
+      "value": "--reasoning-parser qwen3 --enable-auto-tool-choice --tool-call-parser qwen3_xml",
+      "source": "checkpoint"
+    },
+    {
+      "name": "speculative_decoding_flag",
+      "value": "--speculative-config '{\"method\":\"mtp\",\"num_speculative_tokens\":3}'",
+      "source": "checkpoint"
+    },
+    {
+      "name": "checkpoint_quantization",
+      "value": "W4A16: AWQ smoothing, then GPTQ, with an FP8 KV cache",
+      "source": "checkpoint"
+    },
+    {
+      "name": "checkpoint_recovery_claimed",
+      "value": "98.5% to 101.1% of the unquantized model on six benchmarks. The card's figures, not reproduced here.",
+      "source": "checkpoint"
+    },
+    {
+      "name": "hosted_reference",
+      "value": "Qwen3.8 27B (Non-reasoning) on hosted endpoints, intelligence index version 5. Not this deployment.",
+      "source": "artificial-analysis"
+    },
+    { "name": "hosted_intelligence_index", "value": 10, "source": "artificial-analysis" },
+    {
+      "name": "hosted_output_tokens_per_second_median",
+      "value": 50.35,
+      "source": "artificial-analysis"
+    },
+    { "name": "hosted_first_token_seconds_median", "value": 3.85, "source": "artificial-analysis" },
+    {
+      "name": "hosted_input_usd_per_million_tokens",
+      "value": 0.5,
+      "source": "artificial-analysis"
+    },
+    { "name": "hosted_output_usd_per_million_tokens", "value": 3, "source": "artificial-analysis" }
+  ],
+  "departures": [
+    {
+      "setting": "Sampling",
+      "publisher": "With thinking off: temperature 0.7, top_p 0.8, top_k 20, presence_penalty 1.5.",
+      "here": "Temperature 0 and seed 42 on every request, chat included.",
+      "reason": "The gates compare one run with another, which needs repeatable output. Chat therefore does not sample the way the authors tuned for, and what that does to answers was not measured.",
+      "source": "card"
+    },
+    {
+      "setting": "Speculative decoding",
+      "publisher": "The checkpoint card serves with --speculative-config '{\"method\":\"mtp\",\"num_speculative_tokens\":3}'.",
+      "here": "Off on vLLM and Triton. On in Ollama, whose runner drafts with MTP.",
+      "reason": "Measured on vLLM. It nearly halves the time per token, but vLLM does not start with it at the 65,536-token context on this card, and at 16 streams it delivers less. It suits one stream at a time, and the committed flags suit concurrent serving.",
+      "source": "checkpoint",
+      "evidence": "llm/bench/experiments/vllm-mtp.json"
+    },
+    {
+      "setting": "Context length",
+      "publisher": "262,144 tokens natively.",
+      "here": "65,536 served on vLLM and Triton, and 16,384 per request from the gate.",
+      "reason": "Every running request shares one KV cache, and at the committed flags the card has room for 4.76 GiB of it, or 127,139 tokens.",
+      "source": "card",
+      "evidence": "llm/bench/experiments/README.md"
+    }
+  ]
+}

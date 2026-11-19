@@ -7,7 +7,9 @@ from pathlib import Path
 
 from .evals import DATA, ROOT, Report, expects_faithfulness, load_cases
 from .export import artifacts
+from .profiles import Gates, gates
 from .provenance import capture
+from .settings import Settings
 
 BASELINE = ROOT / "llm/evals/baseline.json"
 
@@ -33,14 +35,13 @@ def schemas(base_ref: str | None):
                 raise ValueError(f"published schema is immutable; bump VERSION and preserve {name}")
 
 
-# Faithfulness is judged, and the judge is not repeatable case by case. Over three live
-# runs that produced identical answers, four of five cases scored 1.0 every time and one
-# scored 0.67, 1.0, 0.67: the same two-sentence answer became two claims or three, and
-# the third, "the user can attend", was refused as not in the evidence. One such flip
-# moves the average of five cases by 0.07. So faithfulness is gated on the suite average,
-# with a floor and room for two flips, and never case by case.
-FAITHFULNESS_FLOOR = 0.75
-FAITHFULNESS_DROP = 0.15
+def limits() -> Gates:
+    """
+    The thresholds for the runtime under test, from the reviewed profile of the model it
+    pins. They were measured on that family as generator and judge, so a model without
+    a reviewed profile has none, and that is a failure.
+    """
+    return gates(Settings().runtime)
 
 
 def complete(report: Report):
@@ -52,11 +53,12 @@ def complete(report: Report):
         raise ValueError("eval artifact does not match the current golden dataset")
     if not report.passed or not all(r.passed for r in report.results):
         raise ValueError("eval contains failures")
+    limit = limits()
     if report.mode == "live":
         for c, r in ((c, next(r for r in report.results if r.id == c.id)) for c in cases):
             if r.output_json is None:
                 raise ValueError(f"hard failure: {c.id}")
-            if c.rubric and (r.judge_score is None or r.judge_score < 0.75):
+            if c.rubric and (r.judge_score is None or r.judge_score < limit.judge_score_min):
                 raise ValueError(f"missing or failing judge: {c.id}")
             if c.request.task == "agent" and (r.retrieval_precision is None or r.retrieval_recall is None):
                 raise ValueError(f"missing retrieval metrics: {c.id}")
@@ -66,10 +68,10 @@ def complete(report: Report):
                 raise ValueError(f"missing faithfulness: {c.id}")
         if report.retrieval is None:
             raise ValueError("missing retrieval summary")
-        if report.retrieval.faithfulness is not None and report.retrieval.faithfulness < FAITHFULNESS_FLOOR:
-            raise ValueError(f"average faithfulness below {FAITHFULNESS_FLOOR}")
-        if sum(r.stats.first_pass for r in report.results) / len(report.results) < 0.95:
-            raise ValueError("schema first-pass rate below 95%")
+        if report.retrieval.faithfulness is not None and report.retrieval.faithfulness < limit.faithfulness_floor:
+            raise ValueError(f"average faithfulness below {limit.faithfulness_floor}")
+        if sum(r.stats.first_pass for r in report.results) / len(report.results) < limit.first_pass_rate_min:
+            raise ValueError(f"schema first-pass rate below {limit.first_pass_rate_min:.0%}")
 
 
 def no_regression(current: Report, baseline: Report):
@@ -93,7 +95,9 @@ def no_regression(current: Report, baseline: Report):
             raise ValueError(f"first-pass regression: {before.id}")
     was = baseline.retrieval.faithfulness if baseline.retrieval else None
     now = current.retrieval.faithfulness if current.retrieval else None
-    if was is not None and (now is None or now < was - FAITHFULNESS_DROP):
+    # Faithfulness is judged, and the judge does not repeat case by case, so it is held
+    # on the suite average with room for flips. The profile records what that was set from.
+    if was is not None and (now is None or now < was - limits().faithfulness_drop):
         raise ValueError("regression: average faithfulness")
 
 

@@ -1,0 +1,357 @@
+{
+  "$defs": {
+    "Hardware": {
+      "additionalProperties": false,
+      "properties": {
+        "cpu": {
+          "title": "Cpu",
+          "type": "string"
+        },
+        "cuda": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cuda"
+        },
+        "driver": {
+          "title": "Driver",
+          "type": "string"
+        },
+        "gpu": {
+          "title": "Gpu",
+          "type": "string"
+        },
+        "gpu_memory_mib": {
+          "minimum": 0,
+          "title": "Gpu Memory Mib",
+          "type": "integer"
+        },
+        "os": {
+          "title": "Os",
+          "type": "string"
+        }
+      },
+      "required": [
+        "gpu",
+        "gpu_memory_mib",
+        "driver",
+        "cuda",
+        "cpu",
+        "os"
+      ],
+      "title": "Hardware",
+      "type": "object"
+    },
+    "Level": {
+      "additionalProperties": false,
+      "properties": {
+        "cached_prompt_share": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cached Prompt Share"
+        },
+        "e2e_ms": {
+          "$ref": "#/$defs/Percentiles"
+        },
+        "errors": {
+          "minimum": 0,
+          "title": "Errors",
+          "type": "integer"
+        },
+        "invalid": {
+          "minimum": 0,
+          "title": "Invalid",
+          "type": "integer"
+        },
+        "output_tokens": {
+          "$ref": "#/$defs/Percentiles"
+        },
+        "prompt": {
+          "enum": [
+            "short",
+            "long"
+          ],
+          "title": "Prompt",
+          "type": "string"
+        },
+        "prompt_tokens": {
+          "$ref": "#/$defs/Percentiles"
+        },
+        "requests": {
+          "minimum": 1,
+          "title": "Requests",
+          "type": "integer"
+        },
+        "stream_tokens_per_s": {
+          "$ref": "#/$defs/Percentiles"
+        },
+        "streams": {
+          "maximum": 256,
+          "minimum": 1,
+          "title": "Streams",
+          "type": "integer"
+        },
+        "total_tokens_per_s": {
+          "title": "Total Tokens Per S",
+          "type": "number"
+        },
+        "tpot_ms": {
+          "$ref": "#/$defs/Percentiles"
+        },
+        "ttft_ms": {
+          "$ref": "#/$defs/Percentiles"
+        },
+        "wall_s": {
+          "minimum": 0,
+          "title": "Wall S",
+          "type": "number"
+        }
+      },
+      "required": [
+        "prompt",
+        "streams",
+        "requests",
+        "errors",
+        "invalid",
+        "ttft_ms",
+        "tpot_ms",
+        "e2e_ms",
+        "stream_tokens_per_s",
+        "total_tokens_per_s",
+        "prompt_tokens",
+        "output_tokens",
+        "cached_prompt_share",
+        "wall_s"
+      ],
+      "title": "Level",
+      "type": "object"
+    },
+    "Percentiles": {
+      "additionalProperties": false,
+      "properties": {
+        "n": {
+          "minimum": 0,
+          "title": "N",
+          "type": "integer"
+        },
+        "p50": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "P50"
+        },
+        "p95": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "P95"
+        },
+        "p99": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "P99"
+        }
+      },
+      "required": [
+        "n",
+        "p50",
+        "p95",
+        "p99"
+      ],
+      "title": "Percentiles",
+      "type": "object"
+    },
+    "ServedModel": {
+      "additionalProperties": false,
+      "properties": {
+        "backend": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backend"
+        },
+        "container": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Container"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "pinned": {
+          "title": "Pinned",
+          "type": "boolean"
+        },
+        "quantization": {
+          "title": "Quantization",
+          "type": "string"
+        },
+        "runtime": {
+          "enum": [
+            "ollama",
+            "vllm",
+            "triton"
+          ],
+          "title": "Runtime",
+          "type": "string"
+        },
+        "runtime_version": {
+          "title": "Runtime Version",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "runtime",
+        "runtime_version",
+        "name",
+        "quantization",
+        "source",
+        "pinned"
+      ],
+      "title": "ServedModel",
+      "type": "object"
+    },
+    "Workload": {
+      "additionalProperties": false,
+      "properties": {
+        "max_tokens": {
+          "maximum": 4096,
+          "minimum": 16,
+          "title": "Max Tokens",
+          "type": "integer"
+        },
+        "num_ctx": {
+          "minimum": 2048,
+          "title": "Num Ctx",
+          "type": "integer"
+        },
+        "requests": {
+          "minimum": 1,
+          "title": "Requests",
+          "type": "integer"
+        },
+        "seed": {
+          "title": "Seed",
+          "type": "integer"
+        },
+        "task": {
+          "const": "agent",
+          "default": "agent",
+          "title": "Task",
+          "type": "string"
+        },
+        "temperature": {
+          "const": 0,
+          "default": 0,
+          "title": "Temperature",
+          "type": "integer"
+        },
+        "warmup": {
+          "minimum": 0,
+          "title": "Warmup",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_tokens",
+        "num_ctx",
+        "seed",
+        "requests",
+        "warmup"
+      ],
+      "title": "Workload",
+      "type": "object"
+    }
+  },
+  "$id": "urn:grapevine:llm:1.4.0:bench_report",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "created": {
+      "title": "Created",
+      "type": "string"
+    },
+    "hardware": {
+      "$ref": "#/$defs/Hardware"
+    },
+    "levels": {
+      "items": {
+        "$ref": "#/$defs/Level"
+      },
+      "minItems": 1,
+      "title": "Levels",
+      "type": "array"
+    },
+    "model": {
+      "$ref": "#/$defs/ServedModel"
+    },
+    "revision": {
+      "title": "Revision",
+      "type": "string"
+    },
+    "version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Version",
+      "type": "string"
+    },
+    "workload": {
+      "$ref": "#/$defs/Workload"
+    }
+  },
+  "required": [
+    "created",
+    "revision",
+    "hardware",
+    "model",
+    "workload",
+    "levels"
+  ],
+  "title": "BenchReport",
+  "type": "object"
+}

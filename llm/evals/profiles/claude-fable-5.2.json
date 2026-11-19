@@ -1,0 +1,33 @@
+{
+  "family": "claude-fable-5.2",
+  "name": "Claude Fable 5.2",
+  "publisher": "Anthropic",
+  "status": "imported",
+  "served": [],
+  "sources": [
+    {
+      "id": "models-dev",
+      "name": "models.dev",
+      "url": "https://models.dev/api.json",
+      "retrieved": "2026-11-18"
+    }
+  ],
+  "facts": [
+    { "name": "catalog_id", "value": "anthropic/claude-fable-5-2", "source": "models-dev" },
+    { "name": "release_date", "value": "2026-11-09", "source": "models-dev" },
+    { "name": "knowledge_cutoff", "value": "2026-06", "source": "models-dev" },
+    { "name": "open_weights", "value": false, "source": "models-dev" },
+    { "name": "context_tokens", "value": 1000000, "source": "models-dev" },
+    { "name": "output_tokens", "value": 128000, "source": "models-dev" },
+    { "name": "accepts_temperature", "value": false, "source": "models-dev" },
+    { "name": "reasoning", "value": true, "source": "models-dev" },
+    {
+      "name": "reasoning_levels",
+      "value": ["low", "medium", "high", "xhigh", "max"],
+      "source": "models-dev"
+    },
+    { "name": "tool_calls", "value": true, "source": "models-dev" },
+    { "name": "structured_output", "value": true, "source": "models-dev" },
+    { "name": "input_modalities", "value": ["text", "image", "pdf"], "source": "models-dev" }
+  ]
+}
